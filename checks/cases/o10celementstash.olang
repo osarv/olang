@@ -7,7 +7,7 @@ import "std/io"
 type Elem struct() { n I64 = 0 }
 type G struct() { arr mut Array<Elem>& = Array<Elem>(3) }
 type Keeper struct() { e Elem?& = null }
-fn stash(g G&, h mut Keeper&) { h.e = g.arr[0] }
+fn stash(g G&, h mut Keeper&) { h.e ~ g.arr[0] }
 fn churn() I64 {
     t := 0
     for i in range 300 {

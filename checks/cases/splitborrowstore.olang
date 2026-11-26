@@ -15,8 +15,8 @@ type W struct(b Box) { b }
 fn readOnly(src mut W&) {
     b := src.b
     br Box& = b
-    n := br.head
-    n.next = Node()
+    n :~ br.head
+    n.next ~ Node()
 }
 fn main() ? {
     w := W(Box())

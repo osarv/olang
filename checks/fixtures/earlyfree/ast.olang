@@ -38,7 +38,7 @@ fn count(e Expr&) I64 {
 
 fn main() {
     p := Program()
-    p.root = Expr.build(10)
-    for _ in range N: p.root = simplify(p.root)
+    p.root ~ Expr.build(10)
+    for _ in range N: p.root ~ simplify(p.root)
     io.PutLn($count(p.root))!
 }

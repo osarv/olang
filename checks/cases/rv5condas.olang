@@ -20,16 +20,16 @@ fn churn() I64 {
     }
     return t
 }
-fn grow(b mut Box&) { b.head.next = Node(43) }
-fn growv(b Box) { b.head.next = Node(44) }
+fn grow(b mut Box&) { b.head.next ~ Node(43) }
+fn growv(b Box) { b.head.next ~ Node(44) }
 fn rd(n Node&) I64 {
-    if n.next == null: return 0
+    if n.next is null: return 0
     return n.next!.v
 }
 fn main() ? {
     c := churn() < 0
     e1 := E.A(Box())
-    k1 := (e1 as E.A)!.head
+    k1 :~ (e1 as E.A)!.head
     {
         e2 := E.A(Box())
         y := ((e1 if c else e2) as E.A)!

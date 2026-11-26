@@ -15,11 +15,11 @@ type Bag struct(head Node&) {
     head
 }
 fn find(n Node&, k I64) Node& ? {
-    for c Node?& = n, c != null, c = c.next { if c.v == k { return c } }
+    for c Node?& = n, c is not null, c ~ c.next { if c.v == k { return c } }
     error Stop.Here
 }
 fn (b Bag&) Str() String {
-    x := try find(b.head, 9) catch default Node(0, null)
+    x :~ try find(b.head, 9) catch default Node(0, null)
     return $x.v
 }
 fn main() ? {

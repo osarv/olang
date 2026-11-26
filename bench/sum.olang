@@ -11,9 +11,9 @@ type Usage error {
 }
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     if args.Len() < 4: error Usage.Args
-    mode := args[1]
+    mode :~ args[1]
     n := try args[2].ParseInt()
     passes := try args[3].ParseInt()
     l := list.List<I64>()
@@ -34,12 +34,12 @@ fn main() ? {
             total += l.Iter().Fold(I64(0), fn(acc, x) { return acc + (x ^ p) })
         }
     } else if mode == "array" {
-        a := l.ToArray()
+        a :~ l.ToArray()
         for p in range passes {
             for x in a: total += x ^ p
         }
     } else if mode == "arrayfold" {
-        a := l.ToArray()
+        a :~ l.ToArray()
         for p in range passes {
             total += a.Iter().Fold(I64(0), fn(acc, x) { return acc + (x ^ p) })
         }

@@ -17,16 +17,16 @@ fn mk(n I64) String& { return $n + "-new-text" }
 fn main() ? {
     c := CB()
     d String& = $5 + "-built-in-the-live-region"
-    e := mk(6)
+    e :~ mk(6)
     churn()
     assert d == "5-built-in-the-live-region"
     assert e == "6-new-text"
-    c.text = $2 + "-replaced"
+    c.text ~ $2 + "-replaced"
     for i in range 3 {
         f String& = $i + "-each-turn"
         churn()
         assert f == $i + "-each-turn"
-        c.text = $i + "-replaced"
+        c.text ~ $i + "-replaced"
     }
     assert c.text == "2-replaced"
     try io.PutLn("ok")

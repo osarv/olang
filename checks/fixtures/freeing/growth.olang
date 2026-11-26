@@ -25,7 +25,7 @@ fn mk(i I64) Vec<I64> {
 
 # the peak address space, in KB (VmPeak)
 fn peak() I64 {
-    st := try os.ReadFile("/proc/self/status") catch default ""
+    st :~ try os.ReadFile("/proc/self/status") catch default ""
     for line in st.Lines() {
         if line.StartsWith("VmPeak:"): return try line[7:line.Len() - 3].Trim().ParseInt(10) catch default 0
     }

@@ -261,7 +261,7 @@ fn (e mut Emitter&) spilled(identity String&, kind ObjectKind, ir String&) Objec
     try os.WriteFile(path, ir) catch os.Error { return Object($identity, kind, $ir) }
     e.nspill++
     o := Object($identity, kind, "")
-    o.Spill = path
+    o.Spill ~ path
     o.Size = ir.Len()
     o.Dyncall = ir.Contains("@__olang_dyncall")
     return o
@@ -379,8 +379,8 @@ fn (e mut Emitter&) groupReached(m I64, work mut Vec<I64>&) {
     for w < work.Len() {
         i := work[w]
         w++
-        text := e.itemText[i]
-        rs := e.refs(i)
+        text :~ e.itemText[i]
+        rs :~ e.refs(i)
         for r in range 0, rs.Len(), 3 {
             if rs[r] != 0: continue
             j := e.itemNamed(text[rs[r + 1]:rs[r + 2]])
@@ -463,16 +463,16 @@ fn (e Emitter&) aliased(i I64) Bool {
 # a merged instance in another group than the one it stands for (aliased): its own definition, calling that one in its
 # place - its signature that one's, which merging made the same, so the call is a tail call
 fn (e Emitter&) wrapper(i I64, into I64) String {
-    text := e.itemText[into]
+    text :~ e.itemText[into]
     nl := try text.Find("\n") catch default text.Len()
-    line := text[:nl]
+    line :~ text[:nl]
     at := $"@" + $e.itemSym[into] + "("
     p := try line.Find(at) catch default -1
     q := try line.FindLast(") #0 {") catch default -1
     if p < 0 or q < p: return ""
-    head := line[:p]          # "define dso_local RET "
-    params := line[p + at.Len():q]
-    ret := head["define dso_local ".Len():head.Len() - 1]
+    head :~ line[:p]          # "define dso_local RET "
+    params :~ line[p + at.Len():q]
+    ret :~ head["define dso_local ".Len():head.Len() - 1]
     b := StringBuilder()
     b.Push($head + "@" + $e.itemSym[i] + "(" + $params + ") #0 {\nentry:\n")
     if ret == "void" {
@@ -535,7 +535,7 @@ fn (e mut Emitter&) locations(locs Map<I64, Bool>&) String {
     its Vec<I64>
     for l in locs: its.Push(l.Key)
     syms Vec<String&>& = e.itemSym
-    sorted := its.ToArray()
+    sorted :~ its.ToArray()
     sorted.Sort(fn(a I64, b I64) Bool { return syms[a] < syms[b] })
     b := StringBuilder()
     b.Push(e.head())
@@ -546,7 +546,7 @@ fn (e mut Emitter&) locations(locs Map<I64, Bool>&) String {
 # which of an object's groups item i is in (parts): 1 a test or the harness (of a test build's root), 2 a bulky function
 # where cut by classes (weigh), 0 anything else
 fn (e Emitter&) groupOf(i I64) I64 {
-    sym := e.itemSym[i]
+    sym :~ e.itemSym[i]
     if e.Tests and (sym.StartsWith("olang_test_") or sym == "main"): return 1
     if not e.Classes: return 0
     j := (try e.merged.Get(i) catch default i) if e.aliased(i) else i
@@ -570,8 +570,8 @@ fn (e mut Emitter&) weigh() {
     # the one item naming each, -2 where more than one does
     by := Array<I64>(n, -1)
     for k in range n {
-        text := e.itemText[k]
-        rs := e.refs(k)
+        text :~ e.itemText[k]
+        rs :~ e.refs(k)
         for r in range 0, rs.Len(), 3 {
             if rs[r] != 0: continue
             j := e.itemNamed(text[rs[r + 1]:rs[r + 2]])
@@ -604,7 +604,7 @@ fn codeSize(text String&, limit I64) I64 {
     for line in text.Lines() {
         if n > limit: return n
         if line.Len() < 3 or line[0] != ' ' or line.EndsWith(":"): continue
-        s := line.TrimStart()
+        s :~ line.TrimStart()
         if s.StartsWith("store ") or s.StartsWith("br ") or s.StartsWith(";"): continue
         if s.Contains("= alloca ") or s.Contains("= load ") or s.Contains("= getelementptr "): continue
         if s.Contains("= icmp ") and s.EndsWith(", null"): continue
@@ -626,7 +626,7 @@ PartSizeDev I64 = 512 << 10
 fn (e Emitter&) partOf(i I64, n I64) I64 {
     if n <= 1: return 0
     j := (try e.merged.Get(i) catch default i) if e.aliased(i) else i  # an alias beside what it stands for, which it names
-    sym := e.itemSym[e.keyOf[j] if e.Classes else j]
+    sym :~ e.itemSym[e.keyOf[j] if e.Classes else j]
     h := (I64(0) if sym.StartsWith("G_2e") else sym.Hash()) % n
     return h + n if h < 0 else h
 }
@@ -650,7 +650,7 @@ fn (e mut Emitter&) emitAll() {
     e.emitted = true
     e.runtimeItems()
     e.index()
-    p := e.P
+    p :~ e.P
     instKeys := e.reusing()
     rootCalled := e.othersReachRoot()
     inits := e.initOrder()
@@ -659,7 +659,7 @@ fn (e mut Emitter&) emitAll() {
     for i in range e.Lw.Bodies.Len() {
         match e.Lw.Bodies[i].Of {
             case typed.BodyOf.Test(_) {
-                if e.Tests and e.Lw.Bodies[i].Root != null: tests.Push(i)
+                if e.Tests and e.Lw.Bodies[i].Root is not null: tests.Push(i)
             }
             case typed.BodyOf.Fn(inst) {
                 f := p.InstanceFn(inst)
@@ -676,7 +676,7 @@ fn (e mut Emitter&) emitAll() {
         k := mir.FnKey.Body(typed.BodyId(I32(i)))
         match e.Lw.Bodies[i].Of {
             case typed.BodyOf.Fn(_), typed.BodyOf.Ctor(_, _), typed.BodyOf.Dtor(_), typed.BodyOf.Global(_, _) {
-                if e.Lw.Bodies[i].Root == null: continue
+                if e.Lw.Bodies[i].Root is null: continue
                 # K2: a baked global's initializer is never run - its value is its storage's - so it is not written;
                 # its storage is, in its module's object, whatever reads it (an importer's code, or nothing here)
                 if e.Baked.Has(i) {
@@ -737,8 +737,8 @@ fn (e mut Emitter&) emitAll() {
         j++
         body := e.T.StructBody(nt)
         for x in e.T.Embedded(nt): e.need(x)
-        name := e.T.Llvm(nt)
-        key := name[2:name.Len() - 1]
+        name :~ e.T.Llvm(nt)
+        key :~ name[2:name.Len() - 1]
         if e.tyAt.Has(key) { continue }   # another instance laid out alike: the same LLVM type (types.structName)
         e.tyAt.Put($key, e.tyDef.Len())
         e.tyDef.Push($name + " = type " + $body + "\n")
@@ -782,7 +782,7 @@ fn (e mut Emitter&) reusing() Vec<mir.FnKey> {
             keys.Push(k)
         }
         for sym in r.Inst {
-            line := try twinNow.Get(sym) catch { continue }
+            line :~ try twinNow.Get(sym) catch { continue }
             if line == "" or line not in r.Twins: whole = false
         }
         if not whole: continue
@@ -873,8 +873,8 @@ fn (e mut Emitter&) mergeSame() {
     for w < work.Len() {
         i := work[w]
         w++
-        text := e.itemText[i]
-        rs := e.refs(i)
+        text :~ e.itemText[i]
+        rs :~ e.refs(i)
         for r in range 0, rs.Len(), 3 {
             if rs[r] != 0: continue
             j := e.itemNamed(text[rs[r + 1]:rs[r + 2]])
@@ -887,7 +887,7 @@ fn (e mut Emitter&) mergeSame() {
     at Map<I64, I64>
     for i in range e.itemSym.Len() {
         h := e.itemHome[i]
-        t := e.itemText[i]
+        t :~ e.itemText[i]
         if not reach.Has(i): continue
         if (h == HomeInst and t.StartsWith("define dso_local ")) or (h == HomeShared and t.StartsWith("define linkonce_odr ")) {
             at.Put(i, cand.Len())
@@ -901,8 +901,8 @@ fn (e mut Emitter&) mergeSame() {
     shapes Map<String&, I64>
     for c in range n {
         i := cand[c]
-        text := e.itemText[i]
-        rs := e.refs(i)
+        text :~ e.itemText[i]
+        rs :~ e.refs(i)
         b := StringBuilder()
         cs Vec<I64>
         from I64 = 0
@@ -912,7 +912,7 @@ fn (e mut Emitter&) mergeSame() {
             if j >= 0 and e.itemHome[j] == HomeLoc {
                 # a place (B3l) by its text: named after the function naming it, the same place in two instances
                 b.Push(text[from:rs[r + 1]])
-                lt := e.itemText[j]
+                lt :~ e.itemText[j]
                 q := try lt.Find(" = ") catch default 0
                 b.Push(lt[q:])
                 from = rs[r + 2]
@@ -1046,7 +1046,7 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
         }
     }
     syms Vec<String&>& = e.itemSym
-    sorted := mine.ToArray()
+    sorted :~ mine.ToArray()
     sorted.Sort(fn(a I64, b I64) Bool { return syms[a] < syms[b] })
     order Vec<I64>
     have Map<I64, Bool>
@@ -1085,10 +1085,10 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
             }
             continue
         }
-        text := e.itemText[it]
-        rs := e.refs(it)
+        text :~ e.itemText[it]
+        rs :~ e.refs(it)
         for r in range 0, rs.Len(), 3 {
-            name := text[rs[r + 1]:rs[r + 2]]
+            name :~ text[rs[r + 1]:rs[r + 2]]
             if rs[r] == 1 {
                 t := try e.tyAt.Get(name) catch default -1
                 if t >= 0 and not tyHave.Has(t): e.wantType(t, tys, tyHave)
@@ -1110,8 +1110,8 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
             declared.Put(j, true)
             decls.Push(e.itemDecl[j])
             e.declTypes(e.itemDecl[j], tys, tyHave)
-            if h == HomeInst and inst != null: inst.Push($e.itemSym[j])
-            if h == HomeLoc and locs != null: locs.Put(j, true)
+            if h == HomeInst and inst is not null: inst.Push($e.itemSym[j])
+            if h == HomeLoc and locs is not null: locs.Put(j, true)
         }
     }
     out := StringBuilder()
@@ -1127,17 +1127,17 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
                 out.Push(try wrapped.Get(it) catch default "")
                 continue
             }
-            fty := try e.itemFnTy.Get(it) catch default "void ()"
+            fty :~ try e.itemFnTy.Get(it) catch default "void ()"
             out.Push($"@" + $e.itemSym[it] + " = dso_local alias " + $fty + ", ptr @" + $e.itemSym[into] + "\n")
             continue
         }
-        text := e.itemText[it]
+        text :~ e.itemText[it]
         if rename.Len() == 0 and not e.dbg() {
             out.Push(text)
             continue
         }
         at I64 = 0
-        rs := e.refs(it)
+        rs :~ e.refs(it)
         for r in range 0, rs.Len(), 3 {
             if rs[r] == 2 {
                 old := try text[rs[r + 1] + 1:rs[r + 2]].ParseInt() catch default 0
@@ -1148,7 +1148,7 @@ fn (e mut Emitter&) assemble(home I64, alsoInst Bool, part I64 = 0, parts I64 = 
                 continue
             }
             if rs[r] != 0: continue
-            name := text[rs[r + 1]:rs[r + 2]]
+            name :~ text[rs[r + 1]:rs[r + 2]]
             j := e.itemNamed(name)
             if j < 0 or not rename.Has(j): continue
             out.Push(text[at:rs[r + 1]])
@@ -1190,7 +1190,7 @@ fn dbgTail(cu I64) String {
 fn (e mut Emitter&) wantType(t I64, tys mut Vec<I64>&, tyHave mut Map<I64, Bool>&) {
     tyHave.Put(t, true)
     tys.Push(t)
-    def := e.tyDef[t]
+    def :~ e.tyDef[t]
     rs := refsIn(def)
     for r in range 0, rs.Len(), 3 {
         if rs[r] != 1: continue
@@ -1284,10 +1284,10 @@ fn (e mut Emitter&) clones() {
         again.Push(e.siteKey[i])
     }
     for k in again {
-        e.replaceSym = e.sym(k)
+        e.replaceSym ~ e.sym(k)
         e.function(k)
     }
-    e.replaceSym = ""
+    e.replaceSym ~ ""
     for i in range e.Lw.Clones.Len(): e.cloneFn(i)
     e.drain()
 }
@@ -1371,7 +1371,7 @@ fn (e mut Emitter&) globalIn(i I64, m I64) Bool {
 
 # baked global i's storage defined (K2), at the type its initializer stores
 fn (e mut Emitter&) bakedStorage(i I64) {
-    b := e.Lw.Bodies[i]
+    b :~ e.Lw.Bodies[i]
     match b.Of {
         case typed.BodyOf.Global(m, n) { e.global(m, n, storedType(b, m, n)) }
         case _ { }
@@ -1380,7 +1380,7 @@ fn (e mut Emitter&) bakedStorage(i I64) {
 
 # the type a global's initializer stores into it (check writes one Assign to the global), unknown where none
 fn storedType(b typed.Body&, m I64, n source.NameId) types.TypeId {
-    if b.Root == null: return types.UnknownT
+    if b.Root is null: return types.UnknownT
     for s in b.Root!.Stmts {
         match s {
             case typed.Stmt.Assign(_, typed.Lvalue.Global(_, ty, gm, gn), _) {
@@ -1412,7 +1412,7 @@ fn (e mut Emitter&) globalBody(m I64, n source.NameId) I64 {
 # a function's symbol: a typed body by what it is (an instance by its name, G16a), a helper, an adapter or a module's
 # initialization by the key - letters, digits and "_" only (types.Symbol)
 fn (e mut Emitter&) sym(k mir.FnKey) String {
-    t := e.T
+    t :~ e.T
     return match k {
         case mir.FnKey.Body(id): e.bodySym(I64(id))
         case mir.FnKey.Helper(kind, ty): types.Symbol("olang." + $kind + "." + $(t.Canon(ty) if t.Unnamed(ty) == ty else t.CanonNamed(ty)))
@@ -1425,8 +1425,8 @@ fn (e mut Emitter&) sym(k mir.FnKey) String {
 }
 
 fn (e mut Emitter&) bodySym(id I64) String {
-    t := e.T
-    b := e.Lw.Bodies[id]
+    t :~ e.T
+    b :~ e.Lw.Bodies[id]
     return match b.Of {
         case typed.BodyOf.Fn(inst): $e.P.InstanceName(inst)
         case typed.BodyOf.Ctor(ty, twin): types.Symbol($t.Canon(ty) + ".ctor" + $("" if twin == types.ListId(0) else $"<" + $t.CanonList(twin) + ">"))
@@ -1445,13 +1445,13 @@ fn (e mut Emitter&) bodySym(id I64) String {
 
 # a type spelled for a symbol: by its structure, a declared one with its module (as a helper's)
 fn (e mut Emitter&) canonOf(ty types.TypeId) String {
-    t := e.T
+    t :~ e.T
     return t.Canon(ty) if t.Unnamed(ty) == ty else t.CanonNamed(ty)
 }
 
 # table ti's name: its instance's type and its trait - the same in every object, so that the linker keeps one
 fn (e mut Emitter&) tableName(ti I64) String {
-    tab := e.P.AnyTables.Ref(ti)
+    tab :~ e.P.AnyTables.Ref(ti)
     return $e.canonOf(tab.Concrete) + "|" + $e.canonOf(tab.Trait)
 }
 
@@ -1467,7 +1467,7 @@ fn (e mut Emitter&) typeid(ty types.TypeId) String {
 fn (e mut Emitter&) anyTable(ti I64) String {
     s := types.Symbol($"olang.table." + $e.tableName(ti))
     if e.has(s): return s
-    tab := e.P.AnyTables.Ref(ti)
+    tab :~ e.P.AnyTables.Ref(ti)
     words := StringBuilder()
     words.Push("ptr @" + $e.typeid(tab.Concrete))
     for top in Array<Bool>[false, true] {
@@ -1516,7 +1516,7 @@ fn (e mut Emitter&) capVars(k mir.FnKey) I64 {
             }
         }
         case mir.FnKey.Adapter(call) {
-            ps := e.T.Items(e.T.Params(e.Lw.Bodies[I64(call)].Ty))
+            ps :~ e.T.Items(e.T.Params(e.Lw.Bodies[I64(call)].Ty))
             if ps.Len() > 0 and e.T.HoldsRefs(ps[0]): n = 1
         }
         case _ { }
@@ -1577,12 +1577,12 @@ fn (e mut Emitter&) locBase(k mir.FnKey) String {
 # a line added above the function changes - and its text is defined in its home's Locations object: so such an edit
 # leaves the code as it was, and only the Locations object is compiled again
 fn (fe mut fnEm&) located(sp source.Span, rest String&, column Bool = false) String {
-    e := fe.E
+    e :~ fe.E
     text := $(e.D.Locate(fe.F.File, I64(sp.Start)) if column else e.where(fe.F.File, sp)) + $rest
     if not e.LocApart: return e.cstr(text)
     # one symbol for one text in a function, as cstr gives: the code failing alike at two sites of one line is one
     # block (the backend merging the two), and whether two sites share a line no edit outside the function changes
-    seen := try fe.locSeen.Get(text) catch default ""
+    seen :~ try fe.locSeen.Get(text) catch default ""
     if seen != "": return $seen
     key := $e.locBase(fe.Key) + "|" + $fe.nloc + "|" + $rest
     fe.nloc++
@@ -1615,7 +1615,7 @@ fn (e mut Emitter&) dbgCu() I64 {
     e.dbgCuN = e.dbgNew()
     f := e.dbgFile(e.P.L.Mods[e.P.L.Root].File)
     # B20: a profile build's is its lines alone, of optimized code
-    kind := "isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug" if e.Debug else "isOptimized: true, runtimeVersion: 0, emissionKind: LineTablesOnly"
+    kind :~ "isOptimized: false, runtimeVersion: 0, emissionKind: FullDebug" if e.Debug else "isOptimized: true, runtimeVersion: 0, emissionKind: LineTablesOnly"
     e.dbgShared(e.dbgCuN, $"distinct !DICompileUnit(language: DW_LANG_C, file: !" + $f + ", producer: \"olang\", " + $kind + ")")
     return e.dbgCuN
 }
@@ -1626,7 +1626,7 @@ fn (e mut Emitter&) dbgFile(file I64) I64 {
     n := e.dbgNew()
     e.dbgFiles.Put(file, n)
     path := e.D.PathOf(file)
-    dir := try os.Cwd() catch os.Error default "."
+    dir :~ try os.Cwd() catch os.Error default "."
     e.dbgShared(n, $"!DIFile(filename: \"" + $escape(path) + "\", directory: \"" + $escape(dir) + "\")")
     return n
 }
@@ -1655,7 +1655,7 @@ fn (e mut Emitter&) dbgSubTy() I64 {
 # payload's words where one carries a payload), a function value its code and environment - -1 for what has no
 # layout. Each is made once, before its parts, so a type that holds itself through a reference is described once
 fn (e mut Emitter&) dbgType(ty types.TypeId) I64 {
-    t := e.T
+    t :~ e.T
     r := t.Repr(ty)
     # T29: a declared type over another is its base's description under its own name (String, Char, Meters)
     if ty != r and t.KindOf(ty) == types.Kind.Named: return e.dbgTypedef(ty, t.Base(ty))
@@ -1667,9 +1667,9 @@ fn (e mut Emitter&) dbgType(ty types.TypeId) I64 {
         n := e.dbgNew()
         e.dbgBasics.Put(I64(r), n)
         e.dbgShared(n, $"!DIDerivedType(tag: DW_TAG_typedef, name: \"" + $t.Canon(r) + "\", baseType: !" + $b + ")")
-        enc := "DW_ATE_boolean" if r == types.BoolT else "DW_ATE_float" if t.IsFloat(r) else "DW_ATE_unsigned" if t.IsUnsigned(r) else "DW_ATE_signed"
+        enc :~ "DW_ATE_boolean" if r == types.BoolT else "DW_ATE_float" if t.IsFloat(r) else "DW_ATE_unsigned" if t.IsUnsigned(r) else "DW_ATE_signed"
         # a byte as a character, as C's unsigned char, so that text's elements print as text
-        if t.Bits(r) == 8 and t.IsUnsigned(r): enc = "DW_ATE_unsigned_char"
+        if t.Bits(r) == 8 and t.IsUnsigned(r): enc ~ "DW_ATE_unsigned_char"
         bits := 8 if r == types.BoolT else (t.Bits(r) + 7) / 8 * 8     # T4a: an odd width the bytes its store writes
         e.dbgShared(b, $"!DIBasicType(name: \"" + $t.Canon(r) + "\", size: " + $bits + ", encoding: " + $enc + ")")
         return n
@@ -1707,7 +1707,7 @@ fn (e mut Emitter&) dbgType(ty types.TypeId) I64 {
     if isStruct {
         n := e.dbgNew()
         e.dbgTypes.Put(I64(r), n)
-        fs := t.Items(t.Parts(r) if k != types.Kind.Named else t.Fields(r))
+        fs :~ t.Items(t.Parts(r) if k != types.Kind.Named else t.Fields(r))
         names := e.fieldNames(r, fs.Len())
         offs := t.Offsets(r)
         ms StringBuilder
@@ -1731,12 +1731,12 @@ fn (e mut Emitter&) dbgType(ty types.TypeId) I64 {
     if isEnum {
         n := e.dbgNew()
         e.dbgTypes.Put(I64(r), n)
-        cn := t.CaseNames(r) if k == types.Kind.Named else t.ShapeNames(r)
-        cs := t.Items(t.ShapeCases(r) if k == types.Kind.AnonEnum else t.Cases(r))
+        cn :~ t.CaseNames(r) if k == types.Kind.Named else t.ShapeNames(r)
+        cs :~ t.Items(t.ShapeCases(r) if k == types.Kind.AnonEnum else t.Cases(r))
         es StringBuilder
         for i in range cs.Len() {
             m := e.dbgNew()
-            name := e.text(cn[i]) if cn.Len() > 0 and i < cn.Len() else $i
+            name :~ e.text(cn[i]) if cn.Len() > 0 and i < cn.Len() else $i
             e.dbgShared(m, $"!DIEnumerator(name: \"" + $escape(name) + "\", value: " + $i + ")")
             if i > 0: es.Push(", ")
             es.Push($"!" + $m)
@@ -1770,12 +1770,12 @@ fn (e mut Emitter&) dbgBasic(ty types.TypeId) I64 { return e.dbgType(ty) - 1 }
 # an enum's payload (T17): a union with a member per case carrying one, named as the case - its fields by name at their
 # offsets in the payload, or the one type a case carries whole
 fn (e mut Emitter&) dbgPayload(r types.TypeId, cs Array<types.TypeId>&, cn Array<source.NameId>&) I64 {
-    t := e.T
+    t :~ e.T
     ms StringBuilder
     for i in range cs.Len() {
         if cs[i] == types.TypeId(0): continue
         e.P.Layout(cs[i])
-        name := e.text(cn[i]) if i < cn.Len() else $i
+        name :~ e.text(cn[i]) if i < cn.Len() else $i
         ct := e.dbgType(cs[i]) if t.KindOf(cs[i]) != types.Kind.Record else e.dbgCase(r, i, cs[i], name)
         if ct < 0: continue
         m := e.dbgNew()
@@ -1793,8 +1793,8 @@ fn (e mut Emitter&) dbgPayload(r types.TypeId, cs Array<types.TypeId>&, cn Array
 
 # one case's payload fields as a struct named "Enum.Case": by the names its case declares, else by position
 fn (e mut Emitter&) dbgCase(r types.TypeId, k I64, ct types.TypeId, name String&) I64 {
-    t := e.T
-    fs := t.Items(t.Parts(ct))
+    t :~ e.T
+    fs :~ t.Items(t.Parts(ct))
     names := e.P.CaseFieldNames(r, k) if t.KindOf(r) == types.Kind.Named else Array<source.NameId>(0)
     offs := t.Offsets(ct)
     ms StringBuilder
@@ -1803,7 +1803,7 @@ fn (e mut Emitter&) dbgCase(r types.TypeId, k I64, ct types.TypeId, name String&
         mt := e.dbgType(fs[i])
         if mt < 0: mt = e.dbgBytes()
         m := e.dbgNew()
-        fname := e.text(names[i]) if i < names.Len() else $i
+        fname :~ e.text(names[i]) if i < names.Len() else $i
         e.dbgShared(m, $"!DIDerivedType(tag: DW_TAG_member, name: \"" + $escape(fname) + "\", baseType: !" + $mt + ", size: " + $
                     (t.Size(fs[i]) * 8) + ", offset: " + $(offs[i] * 8) + ")")
         if i > 0: ms.Push(", ")
@@ -1820,17 +1820,17 @@ fn (e mut Emitter&) dbgCase(r types.TypeId, k I64, ct types.TypeId, name String&
 # an error value (T20) as an enumeration of its code: null, and each word of its set as "Type.Word"
 fn (e mut Emitter&) dbgErrVal(ty types.TypeId) I64 {
     if e.dbgTypes.Has(I64(ty)) { return try e.dbgTypes.Get(I64(ty)) catch default -1 }
-    t := e.T
+    t :~ e.T
     n := e.dbgNew()
     e.dbgTypes.Put(I64(ty), n)
     es StringBuilder
     z := e.dbgNew()
     e.dbgShared(z, "!DIEnumerator(name: \"null\", value: 0)")
     es.Push($"!" + $z)
-    items := t.Items(t.ErrValItems(ty))
+    items :~ t.Items(t.ErrValItems(ty))
     for i in range items.Len() {
         et := t.ErrOf(items[i])
-        ws := e.P.ErrorWords(t.DeclOf(et))
+        ws :~ e.P.ErrorWords(t.DeclOf(et))
         for j in range ws.Len() {
             if ((t.ErrMask(items[i]) >> U64(j)) & U64(1)) == U64(0): continue
             m := e.dbgNew()
@@ -1896,17 +1896,17 @@ fn (e mut Emitter&) dbgTypeName(r types.TypeId) String { return e.readableTypes(
 # a struct's field names in order, from its constructor's field declarations (C2); a tuple's or a record's by position
 fn (e mut Emitter&) fieldNames(r types.TypeId, n I64) Array<String&> {
     out := Array<String&>(n, "")
-    for i in range n: out[i] = $i
+    for i in range n: out[i] ~ $i
     if e.T.KindOf(r) != types.Kind.Named: return out
-    td := e.P.TypeDecl(e.T.DeclOf(r))
-    if td == null or td.Body == null: return out
-    tb := td.Body
+    td :~ e.P.TypeDecl(e.T.DeclOf(r))
+    if td is null or td.Body is null: return out
+    tb :~ td.Body
     if tb != ast.TypeBody.Struct: return out
     k I64 = 0
     for st in tb.s.Body {
         if st != ast.Stmt.Var or not st.v.Field: continue
         for vn in st.v.Names {
-            if k < n: out[k] = $e.text(vn)
+            if k < n: out[k] ~ $e.text(vn)
             k++
         }
     }
@@ -1916,7 +1916,7 @@ fn (e mut Emitter&) fieldNames(r types.TypeId, n I64) Array<String&> {
 # the name a debugger knows a function by: a function's or a method's own (no linkage name - with a C compile unit
 # gdb would take it for the name, and "break f" would find nothing), a type's constructor and destructor by the type
 fn (e mut Emitter&) dbgName(k mir.FnKey) String {
-    t := e.T
+    t :~ e.T
     match k {
         case mir.FnKey.Body(id) {
             return match e.Lw.Bodies[I64(id)].Of {
@@ -1937,7 +1937,7 @@ fn (e mut Emitter&) dbgName(k mir.FnKey) String {
 # "Vec<I64>.Push", "parse.Parser.Expr" - the program's own and the prelude's bare, as errors print (load.ErrQualifier);
 # a lambda by the function it is written in, a constructor by its type
 fn (e mut Emitter&) ProfName(k mir.FnKey) String {
-    t := e.T
+    t :~ e.T
     match k {
         case mir.FnKey.Body(id) {
             return match e.Lw.Bodies[I64(id)].Of {
@@ -1960,14 +1960,14 @@ fn (e mut Emitter&) ProfName(k mir.FnKey) String {
 fn (e mut Emitter&) instanceProfName(inst I64) String {
     f := e.P.InstanceFn(inst)
     m := e.P.FnModule(f)
-    id := e.P.L.Mods[m].Identity
-    text := e.P.InstanceText(inst)
-    rest := text[id.Len() + 1:] if text.StartsWith(id) and text.Len() > id.Len() else $text
-    d := e.P.FnDecl(f)
-    if d.Recv == null: return $load.ErrQualifier(id, m == e.P.L.Root) + $e.readableTypes(rest)
+    id :~ e.P.L.Mods[m].Identity
+    text :~ e.P.InstanceText(inst)
+    rest :~ text[id.Len() + 1:] if text.StartsWith(id) and text.Len() > id.Len() else $text
+    d :~ e.P.FnDecl(f)
+    if d.Recv is null: return $load.ErrQualifier(id, m == e.P.L.Root) + $e.readableTypes(rest)
     # a method is named by its receiver's type, which names its module; its type arguments are its receiver's unless it
     # has a list of its own
-    name := e.text(d.Name)
+    name :~ e.text(d.Name)
     cut := try rest.FindLast($"." + $name + "<") catch default -1
     if d.TypeParams.Len() == 0 and cut >= 0 and rest.EndsWith(">"): return e.readableTypes(rest[:cut + 1 + name.Len()])
     return e.readableTypes(rest)
@@ -1984,7 +1984,7 @@ fn (e mut Emitter&) readableTypes(text String&) String {
         best I64 = -1
         q := ""
         for m in range e.P.L.Mods.Len() {
-            id := e.P.L.Mods[m].Identity
+            id :~ e.P.L.Mods[m].Identity
             s := i - id.Len()
             if id.Len() <= best or s < at or text[s:i] != id: continue
             if s > 0 and not typeDelim(text[s - 1]): continue
@@ -2005,9 +2005,9 @@ fn typeDelim(ch Char) Bool { return ch == '<' or ch == '{' or ch == ',' or ch ==
 
 # the function's subprogram, where it has source to point at
 fn (fe mut fnEm&) subprogram() {
-    f := fe.F
+    f :~ fe.F
     if f.File < 0 or (f.Sp.Start == I32(0) and f.Sp.End == I32(0)): return
-    e := fe.E
+    e :~ fe.E
     file := e.dbgFile(f.File)
     line := e.D.LineAt(f.File, I64(f.Sp.Start))
     fe.dbgSp = e.dbgNew()
@@ -2088,13 +2088,13 @@ fn (fe mut fnEm&) locate(sp source.Span) {
     # a span outside the function's is no line of it: a default argument written where its function is declared (D8a),
     # perhaps in another file, keeps the call's line
     if fe.F.Sp.End > fe.F.Sp.Start and (sp.Start < fe.F.Sp.Start or sp.Start >= fe.F.Sp.End): return
-    fe.dbgLoc = fe.dbgLine(fe.E.D.LineAt(fe.F.File, I64(sp.Start)), fe.scopeAt(sp.Start))
+    fe.dbgLoc ~ fe.dbgLine(fe.E.D.LineAt(fe.F.File, I64(sp.Start)), fe.scopeAt(sp.Start))
 }
 
 # each named parameter and local in a frame slot, described where the debugger can show it (info args, info locals)
 fn (fe mut fnEm&) declareVars(b mut StringBuilder&) {
-    e := fe.E
-    f := fe.F
+    e :~ fe.E
+    f :~ fe.F
     file := e.dbgFile(f.File)
     arg I64 = 0
     for i in range f.Locals.Len() {
@@ -2102,14 +2102,14 @@ fn (fe mut fnEm&) declareVars(b mut StringBuilder&) {
         if l.Kind == mir.LocalKind.Param: arg++
         if l.Kind != mir.LocalKind.Param and l.Kind != mir.LocalKind.Var: continue
         if l.Name == source.NameId(0): continue
-        name := e.text(l.Name)
+        name :~ e.text(l.Name)
         if name == "" or name.StartsWith("$"): continue
         if fe.size(l.Ty) > 65536: continue
         dt := e.dbgType(l.Ty)
         if dt < 0: continue
         n := e.dbgNew()
         line := e.D.LineAt(f.File, I64(l.Sp.Start)) if l.Sp.Start != I32(0) else e.D.LineAt(f.File, I64(f.Sp.Start))
-        argText := ", arg: " + $arg if l.Kind == mir.LocalKind.Param else ""
+        argText :~ ", arg: " + $arg if l.Kind == mir.LocalKind.Param else ""
         # a local in its block's lexical block - which LLVM reads off the location its declare carries
         si := -1 if l.Kind == mir.LocalKind.Param else fe.scopeAt(l.Sp.Start)
         sc := fe.dbgBlockOf(si, file)
@@ -2155,7 +2155,7 @@ fn (e mut Emitter&) ty(t types.TypeId) String {
 }
 
 fn (e mut Emitter&) need(t types.TypeId) {
-    tt := e.T
+    tt :~ e.T
     r := tt.Repr(t)
     match tt.KindOf(r) {
         case types.Kind.Named {
@@ -2239,8 +2239,8 @@ fn (e mut Emitter&) sole(k I64) String {
 
 # the root's decisions object (O8d): every candidate place decided sole, its constant defined true - "" for none
 fn (e mut Emitter&) SoleUnit() String {
-    fr := e.Lw.Free
-    if fr == null: return ""
+    fr :~ e.Lw.Free
+    if fr is null: return ""
     names Vec<String&>
     for k in fr.SoleNow(): names.Push(e.soleName(k))
     # O8e: where a generational type's instances may be reclaimed, by body and type (genOk)
@@ -2272,7 +2272,7 @@ fn (e mut Emitter&) stableSym(b I64) String {
 # place k's constant: a field's by its struct's canonical text and position, an array's elements by the array's, an
 # owner local by its function's symbol and its number there, a global by its module's identity and its name
 fn (e mut Emitter&) soleName(k I64) String {
-    fr := e.Lw.Free!
+    fr :~ e.Lw.Free!
     b, l := fr.LocalPlace(k)
     if b >= 0: return types.Symbol($"olang.sole." + $e.stableSym(b) + ".local." + $l)
     gm, gn := fr.GlobalPlace(k)
@@ -2314,12 +2314,12 @@ fn (e mut Emitter&) global(m I64, n source.NameId, t types.TypeId) String {
     if e.has(s): return "@" + $s
     b := e.globalBody(m, n)
     if b >= 0 and e.Baked.Has(b) {
-        img := try e.Baked.Ref(b) catch default eval.Image()
+        img :~ try e.Baked.Ref(b) catch default eval.Image()
         text := e.bakedText(s, img)
         if img.Mutable {
             # a mutable global's first value written as its storage's (interp.bakeMutable): plain data, declared
             # elsewhere as the writable global it is
-            ty := e.ty(t) if t != types.UnknownT else ""
+            ty :~ e.ty(t) if t != types.UnknownT else ""
             ext := $"@" + $s + " = external global " + $ty if ty != "" else $"@" + $s + " = external global i8"
             e.item(s, m, text, $ext + "\n")
             return "@" + $s
@@ -2345,12 +2345,12 @@ fn (e mut Emitter&) global(m I64, n source.NameId, t types.TypeId) String {
 fn (e mut Emitter&) bakedText(s String&, img eval.Image&) String {
     out := StringBuilder()
     for j in range img.Blobs.Len() {
-        b := img.Blobs.Ref(j)
+        b :~ img.Blobs.Ref(j)
         q I64 = 0       # the next of its references another global's image holds (K2b)
         name := "@" + $s if j == 0 else "@" + $s + ".k" + $j
         # K2: an immutable global's own storage is never written once set, so it is a constant, whose loads LLVM folds;
         # a mutable one's first value is its storage's (interp.bakeMutable)
-        kind := ("global" if img.Mutable else "constant") if j == 0 else "internal constant" if b.Constant else "internal global"
+        kind :~ ("global" if img.Mutable else "constant") if j == 0 else "internal constant" if b.Constant else "internal global"
         tyText, valText := StringBuilder(), StringBuilder()
         at I64 = 0
         for r in range b.At.Len() + 1 {
@@ -2455,7 +2455,7 @@ fn tbaaLeaves() String {
 # (a declared type's its base's), a run-time-length array's descriptor, a reference to a struct or an enum; empty -
 # untagged, aliasing anything - for an aggregate, a fixed array, a function value
 fn (e mut Emitter&) tbaa(ty types.TypeId, elem Bool) String {
-    t := e.T
+    t :~ e.T
     r := t.Repr(ty)
     if r >= types.BoolT and r <= types.TypeId(14) { return ", !tbaa !" + $(tbaaElem[I64(r)] if elem else tbaaField[I64(r)]) }
     if t.KindOf(r) == types.Kind.Array and t.Length(r) == types.TypeId(0): return e.descTag(elem, false)
@@ -2545,7 +2545,7 @@ fn (fe mut fnEm&) trace(sp source.Span) {
     if not fe.sited {
         fe.sited = true
         for blockIx in range fe.F.Blocks.Len() {
-            b := fe.F.Blocks.Ref(blockIx)
+            b :~ fe.F.Blocks.Ref(blockIx)
             match b.T {
                 case mir.Term.Call(csp, _) { fe.sites.Put(csp.Start, 1) }
                 case mir.Term.Wait(wsp, _, _, _, _) { fe.sites.Put(wsp.Start, 2) }
@@ -2554,9 +2554,9 @@ fn (fe mut fnEm&) trace(sp source.Span) {
         }
     }
     k := try fe.sites.Get(sp.Start) catch default 0
-    what := "try passed it on" if k == 1 else ("a task failed, and its join passed it on" if k == 2 else "raised here")
-    if k == 0 and fe.F.RaiseText(sp).Len() > 0 { what = $fe.F.RaiseText(sp) }   # a requirement false on entry (D17)
-    rf := "__olang_ert_pass" if k == 1 else "__olang_ert_raise"
+    what :~ "try passed it on" if k == 1 else ("a task failed, and its join passed it on" if k == 2 else "raised here")
+    if k == 0 and fe.F.RaiseText(sp).Len() > 0 { what ~ $fe.F.RaiseText(sp) }   # a requirement false on entry (D17)
+    rf :~ "__olang_ert_pass" if k == 1 else "__olang_ert_raise"
     fe.E.declare(rf, $"void @" + $rf + "(ptr)")
     fe.w($"call void @" + $rf + "(ptr " + $fe.located(sp, $": " + $what + "\n") + ")")
 }
@@ -2623,7 +2623,7 @@ fn (fe fnEm&) tagRange(w String&, n I64) String { return "" if n < 1 else $", !r
 # cases (tagRange), so a match on it needs no test for a case it does not have
 fn (fe mut fnEm&) caseRange(ty types.TypeId, lt String&) String {
     if lt != "i32": return ""
-    t := fe.E.T
+    t :~ fe.E.T
     r := t.Repr(ty)
     k := t.KindOf(r)
     if k != types.Kind.Named and k != types.Kind.AnonEnum: return ""
@@ -2641,7 +2641,7 @@ fn (fe mut fnEm&) gap(what String&) { fe.E.gap(what) }
 # question, and a size is known only once laid out - asked before, a struct over 128 bytes read as small, so a
 # function's header returned it as a value where its body (whose locals lay it out) returned it through %out
 fn (e mut Emitter&) signature(ty types.TypeId) {
-    t := e.T
+    t :~ e.T
     if t.KindOf(t.Repr(ty)) != types.Kind.Func: return
     res := t.Result(ty)
     if res != types.VoidT and res != types.NoreturnT: e.P.Layout(res)
@@ -2652,7 +2652,7 @@ fn (e mut Emitter&) signature(ty types.TypeId) {
 # a function's first line: "define LINK RET @SYM(PARAMS) #0 {" - or, with link "declare", how another object declares it
 fn (e mut Emitter&) header(k mir.FnKey, ty types.TypeId, symbol String&, passed I64, env Bool, link String& = "internal"
         inline String& = "", excl I64 = 0) String {
-    t := e.T
+    t :~ e.T
     e.signature(ty)
     b := StringBuilder()
     b.Push($("declare " if link == "declare" else $"define " + $link + " ") + $t.RetLlvm(ty) + " @" + $symbol + "(")
@@ -2672,7 +2672,7 @@ fn (e mut Emitter&) header(k mir.FnKey, ty types.TypeId, symbol String&, passed 
         b.Push("ptr %v" + $i)
         first = false
     }
-    ps := t.Items(t.Params(ty))
+    ps :~ t.Items(t.Params(ty))
     pass := t.Passing(ty)
     for i in range ps.Len() {
         if not first: b.Push(", ")
@@ -2699,7 +2699,7 @@ fn (e mut Emitter&) exclusive(p types.TypeId, excl I64, i I64) String {
     # (writable where no task can run beside the call, mir.Alone: LLVM may then store back bytes it loaded, as when it
     # keeps the referent in registers through a loop and stores it at the loop's exits)
     nullable := e.T.IsNullable(p)
-    w := " writable" if excl & mir.Alone != 0 and not nullable else ""
+    w :~ " writable" if excl & mir.Alone != 0 and not nullable else ""
     return $" noalias" + $w + " dereferenceable" + $("_or_null" if nullable else "") + "(" + $n + ")" + $(" align " + $a if a > 1 else "")
 }
 
@@ -2724,7 +2724,7 @@ fn linkFor(home I64) String {
 # constructor's twin) with the instances; a test in the root; a helper is shared; a lambda, which a parameter's default
 # makes in every module whose code calls it, local to each object
 fn (e mut Emitter&) homeOf(k mir.FnKey) I64 {
-    p := e.P
+    p :~ e.P
     match k {
         case mir.FnKey.Body(id) {
             match e.Lw.Bodies[I64(id)].Of {
@@ -2750,7 +2750,7 @@ fn (e mut Emitter&) homeOf(k mir.FnKey) I64 {
 }
 
 fn (e mut Emitter&) typeHome(ty types.TypeId) I64 {
-    t := e.T
+    t :~ e.T
     r := t.Repr(ty)
     if t.KindOf(r) != types.Kind.Named or t.Args(r) != types.ListId(0): return HomeInst
     return t.DeclModule(t.DeclOf(r))
@@ -2769,9 +2769,9 @@ fn (e mut Emitter&) fnItem(k mir.FnKey, ty types.TypeId, symbol String&, passed 
 # type is what precedes its name, a "%" never being inside a type a parameter is declared with but a named struct's
 fn fnTypeOf(decl String&) String {
     at := try decl.Find(" @") catch default 0
-    ret := decl[8:at]
+    ret :~ decl[8:at]
     open := try decl.Find("(") catch default decl.Len()
-    params := decl[open + 1:decl.Len() - 2]
+    params :~ decl[open + 1:decl.Len() - 2]
     b := StringBuilder()
     b.Push($ret + " (")
     i I64 = 0
@@ -2805,7 +2805,7 @@ fn (e mut Emitter&) function(k mir.FnKey) {
     env := e.hasEnv(k)
     passed := e.passedOf(k, f.Ty)
     hdr := e.header(k, f.Ty, symbol, passed, env, linkFor(e.homeOf(k)), excl = f.Exclusive)
-    bad := "" if e.Lw.Gapped or not e.VerifyMir else f.Verify(e.T)
+    bad :~ "" if e.Lw.Gapped or not e.VerifyMir else f.Verify(e.T)
     if e.Lw.Gapped or bad != "" {
         e.gap($"not lowered: " + $symbol + $(" (" + $bad.Trim() + ")" if bad != "" else ""))
         if e.isGlobalInit(k) {
@@ -2909,7 +2909,7 @@ fn (e mut Emitter&) writeBody(k mir.FnKey, f mir.Fn&, symbol String&, passed I64
 # the loop stops at the first Exhausted or error - and neither the re-entry flag nor the end is tested; only the
 # for-in's request to destroy it (the flag 2) is
 fn (e mut Emitter&) genNext(k mir.FnKey, f mir.Fn&, symbol String&, passed I64, promTy String&, walk Bool) String {
-    t := e.T
+    t :~ e.T
     e.coroDecls()
     rt := t.RetLlvm(f.Ty)
     via := t.Result(f.Ty) != types.VoidT and t.ViaMemory(t.Result(f.Ty))
@@ -3104,23 +3104,23 @@ fn foldSlots(body String&, nlocals I64) String {
         al := allocaAt[v]
         alEnd := lineEnd(body, al)
         tyAt := try body[al:alEnd].Find(" = alloca ") catch { continue }
-        ty := body[al + tyAt + 10:alEnd]
+        ty :~ body[al + tyAt + 10:alEnd]
         if ty.Contains(", align"): continue
         slot := $"%l" + $v
         # the load: "  %X = load TY, ptr %lN..."
-        ld := body[ll:lineEnd(body, ll)]
+        ld :~ body[ll:lineEnd(body, ll)]
         eq := try ld.Find(" = load ") catch { continue }
         if not ld[eq + 8:].StartsWith($ty + ", ptr " + $slot): continue
-        name := ld[2:eq]
+        name :~ ld[2:eq]
         if not name.StartsWith("%t"): continue
         k := try name[2:].ParseInt() catch { continue }
         # the store: "  store TY V, ptr %lN...", V one token
-        st := body[sl:lineEnd(body, sl)]
+        st :~ body[sl:lineEnd(body, sl)]
         if not st[8:].StartsWith($ty + " "): continue
         vs := 8 + ty.Len() + 1
         ve := try st.Find($", ptr " + $slot) catch { continue }
         if ve <= vs: continue
-        val := st[vs:ve]
+        val :~ st[vs:ve]
         if val.Contains(" ") or val.Contains(","): continue
         skips.Push(al)
         skips.Push(sl)
@@ -3197,11 +3197,11 @@ fn blockOf(labels Vec<I64>&, a I64) I64 {
 
 # foldSlots' text for the temporary numbered m: what it was folded into, followed through the temporaries that names
 fn finalSubst(subst Vec<String&>&, m I64) String& {
-    r := subst[m]
+    r :~ subst[m]
     for {
         q := tempNumber(r, 0, r.Len())
         if q < 0 or q >= subst.Len() or subst[q] == "": return r
-        r = subst[q]
+        r ~ subst[q]
     }
 }
 
@@ -3226,8 +3226,8 @@ fn (e mut Emitter&) stub(what String&, symbol String&) String {
 }
 
 fn (fe mut fnEm&) run() {
-    f := fe.F
-    t := fe.E.T
+    f :~ fe.F
+    t :~ fe.E.T
     fe.res = t.Result(f.Ty)
     fe.errs = t.Items(t.Errors(f.Ty)).Len() > 0
     fe.via = fe.res != types.VoidT and fe.res != types.NoreturnT and t.ViaMemory(fe.res)
@@ -3242,7 +3242,7 @@ fn (fe mut fnEm&) run() {
         pb.Push("{ " + $t.RetLlvm(f.Ty) + ", i32, ptr")
         for _ in range fe.passed: pb.Push(", ptr")
         pb.Push(" }")
-        fe.promTy = pb.ToString()
+        fe.promTy ~ pb.ToString()
         fe.head.Push("  %prom = alloca " + $fe.promTy + ", align 8\n")
         fe.head.Push("  store " + $fe.promTy + " zeroinitializer, ptr %prom\n")
         fe.head.Push("  %rv = getelementptr " + $fe.promTy + ", ptr %prom, i32 0, i32 0\n")
@@ -3365,7 +3365,7 @@ fn (fe mut fnEm&) run() {
     for b in f.Taken: taken.Put(I64(b), true)
     for b in range f.Blocks.Len() {
         fe.label(blockName(mir.BlockId(I32(b))))
-        bb := f.Blocks.Ref(b)
+        bb :~ f.Blocks.Ref(b)
         # S18d: a clause takes the error - the trace it left is no one's now
         if taken.Has(b) and fe.E.traced() {
             fe.E.runtime("__olang_ert_clear")
@@ -3483,7 +3483,7 @@ fn (fe mut fnEm&) put(at String&, ty types.TypeId, x mir.Operand, tag String& = 
 # an assignment of a value moved through memory: a copy by memmove, an aggregate built where it lands - straight into
 # the place where nothing its parts read can be the place, else in a slot of its own first
 fn (fe mut fnEm&) intoPlace(p mir.Lvalue, pt types.TypeId, rv mir.Rvalue) Bool {
-    t := fe.E.T
+    t :~ fe.E.T
     match rv {
         case mir.Rvalue.Use(x) {
             at, _ := fe.addr(p)
@@ -3550,7 +3550,7 @@ fn (fe mut fnEm&) derefs(p mir.Lvalue) Bool {
 
 # an aggregate of a type moved through memory, built in place at at: each part written where it lives
 fn (fe mut fnEm&) buildInto(at String&, ty types.TypeId, args mir.Range) {
-    t := fe.E.T
+    t :~ fe.E.T
     r := t.Repr(ty)
     lt := fe.ty(r)
     a := fe.arrayOf(r)
@@ -3561,7 +3561,7 @@ fn (fe mut fnEm&) buildInto(at String&, ty types.TypeId, args mir.Range) {
         }
         return
     }
-    fs := t.Items(fe.fieldList(r))
+    fs :~ t.Items(fe.fieldList(r))
     for i in range fs.Len() {
         fe.put(fe.let("getelementptr " + $lt + ", ptr " + $at + ", i32 0, i32 " + $i), fs[i], fe.arg(args, i), fe.E.tbaa(fs[i], false))
     }
@@ -3571,7 +3571,7 @@ fn (fe mut fnEm&) buildInto(at String&, ty types.TypeId, args mir.Range) {
 # repeated element as a loop, of more than 16 as a store each, and a copy of an aggregate over 128 bytes as a memcpy -
 # LLVM expands an aggregate value element by element, which for a million elements is a million instructions
 fn (fe mut fnEm&) fillInPlace(p mir.Lvalue, pt types.TypeId, rv mir.Rvalue) Bool {
-    t := fe.E.T
+    t :~ fe.E.T
     match rv {
         case mir.Rvalue.Aggregate(ty, _, args) {
             a := fe.arrayOf(ty)
@@ -3630,7 +3630,7 @@ fn (fe mut fnEm&) fillLoop(p mir.Lvalue, lt String&, et String&, v String&, n I6
 # a large value of type pt copied from place q to p in place, memory to memory - an array of a fixed length, a struct
 # or an enum over 128 bytes; false where it is no such copy
 fn (fe mut fnEm&) moveInPlace(p mir.Lvalue, pt types.TypeId, q mir.Lvalue) Bool {
-    t := fe.E.T
+    t :~ fe.E.T
     k := t.KindOf(t.Repr(pt))
     if k != types.Kind.Array and k != types.Kind.Named and k != types.Kind.AnonEnum: return false
     if t.KindOf(t.Repr(pt)) == types.Kind.Array and not fe.fixed(t.Repr(pt)): return false
@@ -3644,7 +3644,7 @@ fn (fe mut fnEm&) moveInPlace(p mir.Lvalue, pt types.TypeId, q mir.Lvalue) Bool 
 
 # a lambda's environment: its captures in order
 fn (fe mut fnEm&) envType() String {
-    f := fe.F
+    f :~ fe.F
     b := StringBuilder()
     b.Push("{ ")
     for i in range f.Captures.Len() {
@@ -3669,7 +3669,7 @@ fn (fe mut fnEm&) localAt(l mir.LocalId) String {
 
 # an array type, past a declared type over one; Unknown for none
 fn (fe mut fnEm&) arrayOf(ty types.TypeId) types.TypeId {
-    t := fe.E.T
+    t :~ fe.E.T
     r := t.Repr(ty)
     return r if t.KindOf(r) == types.Kind.Array else types.UnknownT
 }
@@ -3677,7 +3677,7 @@ fn (fe mut fnEm&) arrayOf(ty types.TypeId) types.TypeId {
 fn (fe mut fnEm&) fixed(a types.TypeId) Bool { return fe.E.T.Length(a) != types.TypeId(0) }
 
 fn (fe mut fnEm&) fixedLen(a types.TypeId) I64 {
-    t := fe.E.T
+    t :~ fe.E.T
     n := t.Length(a)
     return t.ConstValue(n) if t.KindOf(n) == types.Kind.Const else 0
 }
@@ -3686,7 +3686,7 @@ fn (fe mut fnEm&) fixedLen(a types.TypeId) I64 {
 # loaded and stored with (T36): its type's, in the family of the path's last step, an element's for an index and a
 # field's otherwise; untagged within an enum's payload, whose bytes two cases' fields share
 fn (fe mut fnEm&) addr(p mir.Lvalue) String, types.TypeId {
-    t := fe.E.T
+    t :~ fe.E.T
     at := ""
     ty := types.UnknownT
     elem := false
@@ -3707,7 +3707,7 @@ fn (fe mut fnEm&) addr(p mir.Lvalue) String, types.TypeId {
         r := t.Repr(ty)
         match pr {
             case mir.Proj.Field(k) {
-                fs := t.Items(fe.fieldList(r))
+                fs :~ t.Items(fe.fieldList(r))
                 at = fe.let("getelementptr " + $fe.ty(r) + ", ptr " + $at + ", i32 0, i32 " + $k)
                 ty = fs[k]
                 elem = false
@@ -3726,7 +3726,7 @@ fn (fe mut fnEm&) addr(p mir.Lvalue) String, types.TypeId {
             }
             case mir.Proj.Deref {
                 rt := t.Referent(r)
-                tag := "" if payload else fe.E.tbaa(r, elem)
+                tag :~ "" if payload else fe.E.tbaa(r, elem)
                 ty = rt
                 # a reference to a run-time-length array is the pair the array's value is (T11): the same storage
                 if fe.runTime(rt): continue
@@ -3736,13 +3736,13 @@ fn (fe mut fnEm&) addr(p mir.Lvalue) String, types.TypeId {
             }
             case mir.Proj.Payload(k) {
                 at = fe.let("getelementptr " + $fe.ty(r) + ", ptr " + $at + ", i32 0, i32 1")
-                cs := t.Items(fe.casesList(r))
+                cs :~ t.Items(fe.casesList(r))
                 ty = cs[k]
                 payload = true
             }
         }
     }
-    fe.tagAt = "" if payload else fe.E.tbaa(ty, elem)
+    fe.tagAt ~ "" if payload else fe.E.tbaa(ty, elem)
     return at, ty
 }
 
@@ -3753,18 +3753,18 @@ fn (fe mut fnEm&) runTime(ty types.TypeId) Bool {
 
 # an index's value as an I64: sign- or zero-extended from its own width
 fn (fe mut fnEm&) index(v String&, ty types.TypeId) String {
-    t := fe.E.T
+    t :~ fe.E.T
     r := t.Repr(ty)
     if t.Bits(r) == 64: return $v
     if t.Bits(r) > 64: return fe.let("trunc " + $fe.ty(r) + " " + $v + " to i64")
-    op := "zext" if t.IsUnsigned(r) else "sext"
+    op :~ "zext" if t.IsUnsigned(r) else "sext"
     return fe.let($op + " " + $fe.ty(r) + " " + $v + " to i64")
 }
 
 # an element's address in the array at at, of type ty
 # (desc: the access tag of the array's descriptor where it is a run-time-length one)
 fn (fe mut fnEm&) elemAt(at String&, ty types.TypeId, ix String&, desc String& = "") String, types.TypeId {
-    t := fe.E.T
+    t :~ fe.E.T
     a := fe.arrayOf(ty)
     if a == types.UnknownT {
         fe.gap("an index into no array")
@@ -3777,7 +3777,7 @@ fn (fe mut fnEm&) elemAt(at String&, ty types.TypeId, ix String&, desc String& =
 }
 
 fn (fe mut fnEm&) fieldList(r types.TypeId) types.ListId {
-    t := fe.E.T
+    t :~ fe.E.T
     return match t.KindOf(r) {
         case types.Kind.Tuple, types.Kind.Record: t.Parts(r)
         case types.Kind.Named: t.Fields(r)
@@ -3786,13 +3786,13 @@ fn (fe mut fnEm&) fieldList(r types.TypeId) types.ListId {
 }
 
 fn (fe mut fnEm&) casesList(r types.TypeId) types.ListId {
-    t := fe.E.T
+    t :~ fe.E.T
     return t.ShapeCases(r) if t.KindOf(r) == types.Kind.AnonEnum else t.Cases(r)
 }
 
 # a place's type, its projections followed, nothing emitted
 fn (fe mut fnEm&) placeType(p mir.Lvalue) types.TypeId {
-    t := fe.E.T
+    t :~ fe.E.T
     ty := match p.B {
         case mir.Base.Local(l): fe.localType(l)
         case mir.Base.Global(_, _, gt): gt
@@ -3840,7 +3840,7 @@ fn (fe mut fnEm&) val(x mir.Operand, want types.TypeId = types.UnknownT) String 
 
 # a constant's LLVM spelling: a number's bits as its type writes them, anything else all zero bits
 fn (e mut Emitter&) constText(ty types.TypeId, bits I64) String {
-    t := e.T
+    t :~ e.T
     r := t.Repr(ty)
     if r == types.BoolT { return "true" if bits != 0 else "false" }
     if t.IsInt(r) {
@@ -3871,7 +3871,7 @@ fn (e mut Emitter&) constText(ty types.TypeId, bits I64) String {
 # pair { length, storage } for a run-time-length array or a reference to one, the storage for a reference to a fixed
 # array, the array itself for a fixed array's value
 fn (fe mut fnEm&) data(ty types.TypeId, c I32, file I64, sp source.Span, where Bool = false) String {
-    t := fe.E.T
+    t :~ fe.E.T
     r := t.Repr(ty)
     x := t.Referent(r) if t.IsRef(r) else r
     a := fe.arrayOf(x)
@@ -3882,7 +3882,7 @@ fn (fe mut fnEm&) data(ty types.TypeId, c I32, file I64, sp source.Span, where B
     # T25d: one instance for each site written, two sites two - what lowering synthesizes (no span) by its contents
     # (by its contents too: an unrolled loop, G33, writes one site several times in a function, and its instances
     # each their own way)
-    site := "" if sp.Start == I32(0) and sp.End == I32(0) else $file + ":" + $sp.Start + ":" + $sp.End + ":" + $t.Canon(ty)
+    site :~ "" if sp.Start == I32(0) and sp.End == I32(0) else $file + ":" + $sp.Start + ":" + $sp.End + ":" + $t.Canon(ty)
     g, n := fe.constGlobal(t.Elem(a), c, site)
     if t.IsRef(r) and fe.fixed(a) { return "" if where else g }
     if fe.fixed(a) { return g if where else fe.load(fe.ty(a), g) }
@@ -3950,7 +3950,7 @@ hexDigits := "0123456789ABCDEF"
 
 # one element of an array constant, of type el
 fn (fe mut fnEm&) constItem(el types.TypeId, c I32) String {
-    t := fe.E.T
+    t :~ fe.E.T
     match fe.F.Consts[I64(c)] {
         case mir.ConstNode.Bits(v) { return fe.E.constText(el, v) }
         case _ {
@@ -4104,9 +4104,9 @@ fn (fe mut fnEm&) genLeaves(rt types.TypeId) Vec<Array<I64>> {
 }
 
 fn (fe mut fnEm&) leavesOf(r types.TypeId, path mut Vec<I64>&, out mut Vec<Array<I64>>&) {
-    t := fe.E.T
+    t :~ fe.E.T
     if path.Len() > 4 or out.Len() >= 8 or not mir.HasFields(t, r): return
-    fs := t.Items(fe.fieldList(r))
+    fs :~ t.Items(fe.fieldList(r))
     for i in range fs.Len() {
         fr := t.Repr(fs[i])
         if t.IsRef(fr) or out.Len() >= 8: continue
@@ -4119,11 +4119,11 @@ fn (fe mut fnEm&) leavesOf(r types.TypeId, path mut Vec<I64>&, out mut Vec<Array
 
 # the address of a leaf's array (its { i64, ptr } pair) in the instance at p of type rt
 fn (fe mut fnEm&) leafAt(p String&, rt types.TypeId, path Array<I64>&) String {
-    t := fe.E.T
-    at := p
+    t :~ fe.E.T
+    at :~ p
     ty := t.Repr(rt)
     for i in path {
-        at = fe.let("getelementptr " + $fe.ty(ty) + ", ptr " + $at + ", i32 0, i32 " + $i)
+        at ~ fe.let("getelementptr " + $fe.ty(ty) + ", ptr " + $at + ", i32 0, i32 " + $i)
         ty = t.Repr(t.Items(fe.fieldList(ty))[i])
     }
     return at
@@ -4156,7 +4156,7 @@ fn (fe mut fnEm&) genOwn(p String&, rt types.TypeId, ss String&) {
 # in place, none with destructors (a slot scope holds no registrations), copied part by part (no Copy of its own, which
 # may build anything) - else -1
 fn (fe mut fnEm&) slotCopy(c mir.Call) I64 {
-    t := fe.E.T
+    t :~ fe.E.T
     ty := match c.Target {
         case mir.Callee.Fn(k, _): match k {
             case mir.FnKey.Helper(kind, x): x if kind == mir.HelperKind.Copy else types.UnknownT
@@ -4203,7 +4203,7 @@ fn (fe mut fnEm&) newOnce(l I64, r types.TypeId) Bool {
 
 # whether statement st gives local l's value, a generational type r's, storage of its own (a New)
 fn (fe mut fnEm&) newOf(st mir.Stmt&, l I64, r types.TypeId) Bool {
-    t := fe.E.T
+    t :~ fe.E.T
     rv := match st {
         case mir.Stmt.Assign(_, _, v): v
         case _: mir.Rvalue.Use(mir.Operand.None)
@@ -4235,7 +4235,7 @@ fn (fe mut fnEm&) holders(x mir.Operand, by String&) {
 # ...of the value of type ty at address at: a reference's referent, the parts a value holds in place, and at the top an
 # array of a run-time length's elements
 fn (fe mut fnEm&) holdersAt(at String&, ty types.TypeId, by String&, top Bool) {
-    t := fe.E.T
+    t :~ fe.E.T
     r := t.Repr(ty)
     if not fe.E.holdsGen(r): return
     k := t.KindOf(r)
@@ -4259,7 +4259,7 @@ fn (fe mut fnEm&) holdersAt(at String&, ty types.TypeId, by String&, top Bool) {
         return
     }
     if mir.HasFields(t, r) {
-        fs := t.Items(fe.fieldList(r))
+        fs :~ t.Items(fe.fieldList(r))
         for i in range fs.Len() {
             if fe.E.weakField(r, i): continue
             fe.holdersAt(fe.let("getelementptr " + $fe.ty(r) + ", ptr " + $at + ", i32 0, i32 " + $i), fs[i], by, false)
@@ -4291,9 +4291,9 @@ fn (fe mut fnEm&) holdersEach(at String&, r types.TypeId, n String&, by String&)
 
 # ...of the payload of the enum value of type r at at, by its case
 fn (fe mut fnEm&) holdersCases(at String&, r types.TypeId, by String&) {
-    t := fe.E.T
+    t :~ fe.E.T
     lt := fe.ty(r)
-    cs := t.Items(fe.casesList(r))
+    cs :~ t.Items(fe.casesList(r))
     tag := fe.load("i64", fe.let("getelementptr " + $lt + ", ptr " + $at + ", i32 0, i32 0"))
     pay := fe.let("getelementptr " + $lt + ", ptr " + $at + ", i32 0, i32 1")
     for c in range cs.Len() {
@@ -4351,7 +4351,7 @@ fn (fe mut fnEm&) reclaim(x mir.Operand, ty types.TypeId, ks mir.Range) {
     refs Vec<mir.Operand>
     views Vec<mir.Operand>
     opaque := false
-    t := fe.E.T
+    t :~ fe.E.T
     for i in range I64(ks.N) {
         k := fe.F.Ops[I64(ks.At) + i]
         r := t.Repr(fe.otype(k))
@@ -4428,8 +4428,8 @@ fn (e mut Emitter&) genBufName(b I64, ty types.TypeId) String {
 # whether reclaiming an instance of ty may put back arrays: it, or a type it holds through owning references, holds
 # one in place
 fn (e mut Emitter&) genBufOn(ty types.TypeId) Bool {
-    t := e.T
-    g := e.Lw.Gen()
+    t :~ e.T
+    g :~ e.Lw.Gen()
     return g.HasLeaves(t, ty)
 }
 
@@ -4437,7 +4437,7 @@ fn (e mut Emitter&) genBufOn(ty types.TypeId) Bool {
 # let go of (__olang_gen_let - a child no owning place holds any more, and none of the n at keep, put on the worklist),
 # and the class of x's slot plus one returned - 0 where it is never put on a free list
 fn (e mut Emitter&) genDropFn(ty types.TypeId) String {
-    t := e.T
+    t :~ e.T
     s := types.Symbol($"olang.gendrop." + $t.Canon(ty))
     if e.genDrops.Has(s): return s
     e.genDrops.Put($s, true)
@@ -4463,7 +4463,7 @@ fn (e mut Emitter&) genDropFn(ty types.TypeId) String {
 # ---- statements ----
 
 fn (fe mut fnEm&) stmt(s mir.Stmt&) {
-    t := fe.E.T
+    t :~ fe.E.T
     if fe.dbgSp >= 0: fe.locate(stmtSpan(s))
     match s {
         case mir.Stmt.Assign(_, p, rv) {
@@ -4623,7 +4623,7 @@ fn (fe mut fnEm&) stmt(s mir.Stmt&) {
 # frame (a recursion through a join holds nothing but its operands, as stage 0's measured writes), no copy
 fn (fe mut fnEm&) findDirect() {
     for k in range fe.F.Blocks.Len() {
-        bb := fe.F.Blocks.Ref(k)
+        bb :~ fe.F.Blocks.Ref(k)
         n := bb.Stmts.Len()
         for i in range n {
             sc := fe.builderOpened(bb.Stmts[i])
@@ -4664,7 +4664,7 @@ fn (fe mut fnEm&) textInto(st mir.Stmt&, sc I64) Bool {
 }
 
 fn (fe mut fnEm&) findIdle() {
-    f := fe.F
+    f :~ fe.F
     u := scopeUse(Array<Bool>(f.Scopes.Len()))
     # D18: the scopes a generator holds open at a yield are not used by being held - one nothing else uses has no
     # header to close when the walk is dropped
@@ -4678,7 +4678,7 @@ fn (fe mut fnEm&) findIdle() {
         if not held[i]: u.use(f.Refs[i])
     }
     for k in range f.Blocks.Len() {
-        bb := f.Blocks.Ref(k)
+        bb :~ f.Blocks.Ref(k)
         for st in bb.Stmts: u.stmt(st)
         match bb.T {
             case mir.Term.Wait(_, j, _, _, _) { u.used[I64(j)] = true }
@@ -4706,7 +4706,7 @@ fn (fe mut fnEm&) findIdle() {
 # keeps that path everywhere, since a failed check unwinds the scope with no destroy written in this function
 fn (fe mut fnEm&) findWalks() {
     if fe.E.Tests: return
-    f := fe.F
+    f :~ fe.F
     by Map<I64, I64>     # a scope's walk call, -1 where two name it
     for i in range f.WalkCalls.Len() {
         c := I64(f.WalkCalls[i])
@@ -4755,9 +4755,9 @@ fn (fe mut fnEm&) walkFlow(sc I64, c I64) Map<I64, Bool> ? Undecided {
 
 # block b's turn of walkFlow: its entry state run through its statements - in phase 1 each close of sc recorded in out; in phase 0 its successors' states met with its exit state
 fn (fe mut fnEm&) walkBlock(sc I64, c I64, b I64, phase I64, st mut Array<I64>&, work mut Vec<I64>&, out mut Map<I64, Bool>&) ? Undecided {
-    f := fe.F
+    f :~ fe.F
     x := st[b]
-    bb := f.Blocks.Ref(b)
+    bb :~ f.Blocks.Ref(b)
     for i in range bb.Stmts.Len() {
         match bb.Stmts[i] {
             case mir.Stmt.Open(_, s) { if I64(s) == sc: x = 0 }
@@ -4838,7 +4838,7 @@ fn (fe mut fnEm&) walkEnd(sc I64, key I64) {
 # through the same function value as its Next calls, so the destroy is seen where the resumes are once LLVM has
 # inlined that code (D18e) - then back to the close that came
 fn (fe mut fnEm&) walkEnds() {
-    t := fe.E.T
+    t :~ fe.E.T
     for en in fe.wendN {
         sc := en.Key
         fe.label($"wend" + $sc)
@@ -4946,26 +4946,26 @@ fn (fe mut fnEm&) directText(into mir.ScopeRef) String {
         match fe.pieceKinds[i] {
             case mir.WriteKind.Bytes {
                 data, n := fe.arrayParts(v, xt)
-                vs[i] = $data
-                ns[i] = $n
+                vs[i] ~ $data
+                ns[i] ~ $n
             }
             case mir.WriteKind.Char {
-                vs[i] = $v
-                ns[i] = $"1"
+                vs[i] ~ $v
+                ns[i] ~ $"1"
             }
             case mir.WriteKind.Bool {
-                vs[i] = $fe.let("select i1 " + $v + ", ptr " + $fe.E.cstr("true") + ", ptr " + $fe.E.cstr("false"))
-                ns[i] = $fe.let("select i1 " + $v + ", i64 4, i64 5")
+                vs[i] ~ $fe.let("select i1 " + $v + ", ptr " + $fe.E.cstr("true") + ", ptr " + $fe.E.cstr("false"))
+                ns[i] ~ $fe.let("select i1 " + $v + ", i64 4, i64 5")
             }
             case _ {
                 # an integer: at 64 bits, or at 128 for a type wider than 64 (T4a)
                 un := fe.pieceKinds[i] == mir.WriteKind.Uint
-                w := "i128" if fe.E.T.Bits(fe.E.T.Repr(xt)) > 64 else "i64"
-                vs[i] = fe.extend(v, xt, w, un)
+                w :~ "i128" if fe.E.T.Bits(fe.E.T.Repr(xt)) > 64 else "i64"
+                vs[i] ~ fe.extend(v, xt, w, un)
                 f := $("__olang_fmt_u" if un else "__olang_fmt_i") + $w[1:]
                 fe.E.runtime(f)
-                fns[i] = $f
-                ns[i] = $fe.let("call i64 @" + $f + "(ptr null, " + $w + " " + $vs[i] + ")")
+                fns[i] ~ $f
+                ns[i] ~ $fe.let("call i64 @" + $f + "(ptr null, " + $w + " " + $vs[i] + ")")
             }
         }
         total = $ns[i] if i == 0 else fe.let("add i64 " + $total + ", " + $ns[i])
@@ -4998,7 +4998,7 @@ fn (fe mut fnEm&) dataPtr(p mir.Lvalue) String {
 
 # an array value's (or a reference to one's) data pointer and length
 fn (fe mut fnEm&) arrayParts(v String&, ty types.TypeId) String, String {
-    t := fe.E.T
+    t :~ fe.E.T
     r := t.Repr(ty)
     x := t.Referent(r) if t.IsRef(r) else r
     a := fe.arrayOf(x)
@@ -5013,7 +5013,7 @@ fn (fe mut fnEm&) arrayParts(v String&, ty types.TypeId) String, String {
 
 # x appended to the builder at b, as E11a writes it
 fn (fe mut fnEm&) write(b String&, how mir.WriteKind, x mir.Operand) {
-    t := fe.E.T
+    t :~ fe.E.T
     xt := fe.otype(x)
     v := fe.val(x, xt)
     match how {
@@ -5042,7 +5042,7 @@ fn (fe mut fnEm&) write(b String&, how mir.WriteKind, x mir.Operand) {
             fe.E.runtime("__olang_sb_room")
             fe.E.runtime("__olang_sb_add")
             un := how == mir.WriteKind.Uint
-            w := "i128" if t.Bits(t.Repr(xt)) > 64 else "i64"
+            w :~ "i128" if t.Bits(t.Repr(xt)) > 64 else "i64"
             wide := fe.extend(v, xt, w, un)
             fn64 := $("__olang_fmt_u" if un else "__olang_fmt_i") + $w[1:]
             fe.E.runtime(fn64)
@@ -5078,7 +5078,7 @@ fn (fe mut fnEm&) write(b String&, how mir.WriteKind, x mir.Operand) {
 
 # an integer's value as an LLVM integer of type w ("i64", "i128"), sign- or zero-extended from its own width
 fn (fe mut fnEm&) extend(v String&, ty types.TypeId, w String&, unsigned Bool) String {
-    t := fe.E.T
+    t :~ fe.E.T
     r := t.Repr(ty)
     if $fe.ty(r) == w: return $v
     return fe.let($("zext " if unsigned else "sext ") + $fe.ty(r) + " " + $v + " to " + $w)
@@ -5099,7 +5099,7 @@ fn (fe mut fnEm&) quoted(b String&, data String&, n String&, q I64) {
 
 # an rvalue's value, of the type of the place it is stored in (to)
 fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
-    t := fe.E.T
+    t :~ fe.E.T
     match rv {
         case mir.Rvalue.Use(x) { return fe.val(x, to) }
         case mir.Rvalue.Ref(p, ty) { return fe.ref(p, ty) }
@@ -5155,7 +5155,7 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
         }
         case mir.Rvalue.ScopeOr(sc, x) {
             fe.E.runtime("__olang_scope_or")
-            o := "null" if x == mir.Operand.None else fe.objectPtr(fe.val(x), fe.otype(x))
+            o :~ "null" if x == mir.Operand.None else fe.objectPtr(fe.val(x), fe.otype(x))
             r := fe.let("call ptr @__olang_scope_or(ptr " + $fe.scope(sc) + ", ptr " + $o + ")")
             return fe.let("ptrtoint ptr " + $fe.held(r) + " to i64")
         }
@@ -5191,7 +5191,7 @@ fn (fe mut fnEm&) rvalue(rv mir.Rvalue, to types.TypeId) String {
 fn (fe mut fnEm&) slotScope(sc String&, flat Bool = false) String {
     fe.E.runtime("__olang_slot_chunk")
     ss := fe.alloca("%olang.slotscope")
-    real := fe.flatScope(sc) if flat else sc
+    real :~ fe.flatScope(sc) if flat else sc
     fe.w("store %olang.scope zeroinitializer, ptr " + $ss)
     fe.w("store ptr @__olang_slot_chunk, ptr " + $ss)
     fe.w("store ptr " + $real + ", ptr " + $fe.let("getelementptr %olang.scope, ptr " + $ss + ", i32 0, i32 2"))
@@ -5208,7 +5208,7 @@ fn (fe mut fnEm&) flatScope(sc String&) String {
 
 # n bytes of text storage in scope into - through __olang_held_alloc where a local holds the scope (arrayStorage)
 fn (fe mut fnEm&) textStorage(into mir.ScopeRef, n String&) String {
-    f := "__olang_held_alloc" if into == mir.ScopeRef.Held else "__olang_scope_alloc"
+    f :~ "__olang_held_alloc" if into == mir.ScopeRef.Held else "__olang_scope_alloc"
     fe.E.runtime(f)
     return fe.let("call ptr @" + $f + "(ptr " + $fe.scope(into) + ", i64 " + $n + ")")
 }
@@ -5228,7 +5228,7 @@ fn (fe mut fnEm&) builtText(b mir.ScopeRef, into mir.ScopeRef) String {
 # rvalue's value given storage in s: a generational instance's, laid out in memory, or a run-time array's copy (E12c,
 # O16, O30)
 fn (fe mut fnEm&) newValue(s mir.ScopeRef, x mir.Operand, ty types.TypeId) String {
-    t := fe.E.T
+    t :~ fe.E.T
     rt := t.Referent(t.Repr(ty))
     if fe.E.genType(rt) {
         p := fe.genAlloc(s, rt)
@@ -5259,7 +5259,7 @@ fn (fe mut fnEm&) newValue(s mir.ScopeRef, x mir.Operand, ty types.TypeId) Strin
 # holding storage names - each one's found while all are live - else null. An owner's anchor in a part region (an array
 # it grew while it was built, O8f) names the region that one is a kid of (__olang_region_home)
 fn (fe mut fnEm&) anchorRegion(at String&, ty types.TypeId) String {
-    t := fe.E.T
+    t :~ fe.E.T
     home := not t.OwnedPart(ty)
     fe.E.runtime("__olang_region_or")
     if home: fe.E.runtime("__olang_region_home")
@@ -5267,10 +5267,10 @@ fn (fe mut fnEm&) anchorRegion(at String&, ty types.TypeId) String {
     anchors := t.Anchors(ty)
     if t.OwnedPart(ty) { anchors.Push(Array<I64>(0)) }   # (an array place's value: its own one anchor)
     for i := anchors.Len() - 1, i >= 0, i-- {
-        q := at
+        q :~ at
         qt := ty
         for k in anchors[i] {
-            q = fe.let("getelementptr " + $fe.ty(t.Repr(qt)) + ", ptr " + $q + ", i32 0, i32 " + $k)
+            q ~ fe.let("getelementptr " + $fe.ty(t.Repr(qt)) + ", ptr " + $q + ", i32 0, i32 " + $k)
             qt = t.Items(fe.fieldList(t.Repr(qt)))[k]
         }
         o := fe.objectPtr(fe.load(fe.ty(qt), q), qt)
@@ -5297,13 +5297,13 @@ fn (fe mut fnEm&) objectPtr(v String&, ty types.TypeId) String {
 # __olang_held_alloc, which reaches a slot scope's allocation in one call - only such sites test for one
 fn (fe mut fnEm&) arrayStorage(sc String&, bytes String&, el types.TypeId, zeroed Bool, held Bool = false) String {
     a := fe.align(el)
-    pre := "__olang_held_alloc" if held and not zeroed else "__olang_scope_alloc"
+    pre :~ "__olang_held_alloc" if held and not zeroed else "__olang_scope_alloc"
     if a > 8 {
-        f := "__olang_scope_alloc_zeroed_min" if zeroed else $pre + "_min"
+        f :~ "__olang_scope_alloc_zeroed_min" if zeroed else $pre + "_min"
         fe.E.runtime(f)
         return fe.let("call ptr @" + $f + "(ptr " + $sc + ", i64 " + $bytes + ", i64 " + $a + ")")
     }
-    f := "__olang_scope_alloc_zeroed" if zeroed else pre
+    f :~ "__olang_scope_alloc_zeroed" if zeroed else pre
     fe.E.runtime(f)
     return fe.let("call ptr @" + $f + "(ptr " + $sc + ", i64 " + $bytes + ")")
 }
@@ -5313,16 +5313,16 @@ fn (fe mut fnEm&) arrayStorage(sc String&, bytes String&, el types.TypeId, zeroe
 fn (fe mut fnEm&) bufferCopy(ty types.TypeId) Bool {
     k := fe.F.Of
     if k != mir.FnKey.Helper or (k.kind != mir.HelperKind.Copy and k.kind != mir.HelperKind.Parts): return false
-    t := fe.E.T
+    t :~ fe.E.T
     r := t.Repr(k.t)
     if t.KindOf(r) != types.Kind.Named: return false
     decl := t.DeclOf(r)
-    name := fe.E.P.L.Names.Text(t.DeclName(decl))
-    mod := t.Modules[t.DeclModule(decl)]
-    field := "data" if name == "Vec" and mod == "std/prelude/vec" else "ents" if name == "Map" and mod == "std/prelude/map" else ""
+    name :~ fe.E.P.L.Names.Text(t.DeclName(decl))
+    mod :~ t.Modules[t.DeclModule(decl)]
+    field :~ "data" if name == "Vec" and mod == "std/prelude/vec" else "ents" if name == "Map" and mod == "std/prelude/map" else ""
     if field == "": return false
     names := fe.E.P.FieldNames(r)
-    parts := t.Items(mir.FieldsOf(t, r))
+    parts :~ t.Items(mir.FieldsOf(t, r))
     for i in range names.Len().Min(parts.Len()) {
         if fe.E.P.L.Names.Text(names[i]) == field: return t.Repr(parts[i]) == t.Repr(ty)
     }
@@ -5336,7 +5336,7 @@ fn (fe mut fnEm&) copyArray(s mir.ScopeRef, v String&, ty types.TypeId) String {
 
 # ... in the scope whose header is hdr (held: one a local holds, which may be a slot scope - arrayStorage)
 fn (fe mut fnEm&) copyArrayIn(hdr String&, v String&, ty types.TypeId, held Bool = false) String {
-    t := fe.E.T
+    t :~ fe.E.T
     el := t.Elem(fe.arrayOf(ty))
     n := fe.let("extractvalue { i64, ptr } " + $v + ", 0")
     data := fe.let("extractvalue { i64, ptr } " + $v + ", 1")
@@ -5361,7 +5361,7 @@ fn (e mut Emitter&) enumWords(ty types.TypeId) Bool {
 # a reference to a place (E12c): its address, or for a run-time-length array the pair its value is; a fixed array's
 # address widened to the pair where the reference is to a run-time-length one
 fn (fe mut fnEm&) ref(p mir.Lvalue, ty types.TypeId) String {
-    t := fe.E.T
+    t :~ fe.E.T
     at, pty := fe.addr(p)
     rt := t.Referent(t.Repr(ty))
     if fe.runTime(rt) {
@@ -5373,7 +5373,7 @@ fn (fe mut fnEm&) ref(p mir.Lvalue, ty types.TypeId) String {
 }
 
 fn (fe mut fnEm&) newArray(s mir.ScopeRef, ty types.TypeId, n mir.Operand, fill mir.Operand) String {
-    t := fe.E.T
+    t :~ fe.E.T
     r := t.Repr(ty)
     x := t.Referent(r) if t.IsRef(r) else r
     el := t.Elem(fe.arrayOf(x))
@@ -5409,7 +5409,7 @@ fn (fe mut fnEm&) newArray(s mir.ScopeRef, ty types.TypeId, n mir.Operand, fill 
     if not zero {
         if p == "": p = fe.arrayStorage(sc, bytes, el, false, s == mir.ScopeRef.Held)
         big := fe.viaMem(el)
-        v := "" if big else fe.val(fill, el)
+        v :~ "" if big else fe.val(fill, el)
         elt := fe.ty(el)
         i := fe.alloca("i64")
         fe.store("i64", "0", i)
@@ -5431,7 +5431,7 @@ fn (fe mut fnEm&) newArray(s mir.ScopeRef, ty types.TypeId, n mir.Operand, fill 
 }
 
 fn (fe mut fnEm&) slice(p mir.Lvalue, lo mir.Operand, hi mir.Operand, ty types.TypeId) String {
-    t := fe.E.T
+    t :~ fe.E.T
     pty := fe.placeType(p)
     a := fe.arrayOf(pty)
     el := t.Elem(a)
@@ -5447,7 +5447,7 @@ fn (fe mut fnEm&) slice(p mir.Lvalue, lo mir.Operand, hi mir.Operand, ty types.T
 # a value made of parts: a struct, tuple or record, a fixed array - and an enum's case, a tag and its payload written
 # where the value is held
 fn (fe mut fnEm&) aggregate(ty types.TypeId, tag I64, args mir.Range) String {
-    t := fe.E.T
+    t :~ fe.E.T
     r := t.Repr(ty)
     k := t.KindOf(r)
     isEnum := k == types.Kind.AnonEnum or (k == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Enum)
@@ -5479,7 +5479,7 @@ fn (fe mut fnEm&) aggregate(ty types.TypeId, tag I64, args mir.Range) String {
 # a packed struct's field read out (Unpack) or replaced (Repack): shifts and masks over the value's bits as one integer
 # of its whole bytes
 fn (fe mut fnEm&) packedPrim(op typed.PrimOp, ty types.TypeId, args mir.Range) String {
-    t := fe.E.T
+    t :~ fe.E.T
     x := fe.arg(args, 0)
     pt := t.Repr(fe.otype(x))
     k := match fe.arg(args, 1) {
@@ -5497,7 +5497,7 @@ fn (fe mut fnEm&) packedPrim(op typed.PrimOp, ty types.TypeId, args mir.Range) S
 
 # a packed value made or given a new field, stored straight into its place as its bits
 fn (fe mut fnEm&) packedInto(p mir.Lvalue, pt types.TypeId, rv mir.Rvalue) Bool {
-    t := fe.E.T
+    t :~ fe.E.T
     r := t.Repr(pt)
     if not t.Packed(r) or fe.size(r) == 0: return false
     bits := ""
@@ -5562,15 +5562,15 @@ fn (fe mut fnEm&) placeBits(acc String&, n I64, off I64, w I64, b String&) Strin
     nt := "i" + $n
     z := fe.let("zext i" + $w + " " + $b + " to " + $nt) if w < n else $b
     sh := fe.let("shl " + $nt + " " + $z + ", " + $off) if off > 0 else z
-    ones := fe.let("lshr " + $nt + " -1, " + $(n - w)) if w < n else "-1"
-    mk := fe.let("shl " + $nt + " " + $ones + ", " + $off) if off > 0 else ones
+    ones :~ fe.let("lshr " + $nt + " -1, " + $(n - w)) if w < n else "-1"
+    mk :~ fe.let("shl " + $nt + " " + $ones + ", " + $off) if off > 0 else ones
     keep := fe.let("and " + $nt + " " + $acc + ", " + $fe.let("xor " + $nt + " " + $mk + ", -1"))
     return fe.let("or " + $nt + " " + $keep + ", " + $sh)
 }
 
 # a field's value of type ft made from its w bits (an iw)
 fn (fe mut fnEm&) fromBits(b String&, w I64, ft types.TypeId) String {
-    t := fe.E.T
+    t :~ fe.E.T
     r := t.Repr(ft)
     if r == types.BoolT or t.IsInt(r): return $b
     if t.IsFloat(r): return fe.bitcast(b, "i" + $w, fe.ty(r))
@@ -5591,7 +5591,7 @@ fn (fe mut fnEm&) fromBits(b String&, w I64, ft types.TypeId) String {
         return cur
     }
     # a payload-free enum: its case's position from 0, or its raw value mapped to the case holding it (T17e)
-    raws := t.RawBits(r)
+    raws :~ t.RawBits(r)
     if t.RawType(r) == types.UnknownT or raws.Len() == 0 { return fe.let("zext i" + $w + " " + $b + " to i32") if w < 32 else fe.let("trunc i" + $w + " " + $b + " to i32") if w > 32 else $b }
     cur := "0"
     for i in range raws.Len() {
@@ -5603,7 +5603,7 @@ fn (fe mut fnEm&) fromBits(b String&, w I64, ft types.TypeId) String {
 
 # a field's value v of type ft as its w bits (an iw)
 fn (fe mut fnEm&) toBits(v String&, ft types.TypeId, w I64) String {
-    t := fe.E.T
+    t :~ fe.E.T
     r := t.Repr(ft)
     if r == types.BoolT or t.IsInt(r): return $v
     if t.IsFloat(r): return fe.bitcast(v, fe.ty(r), "i" + $w)
@@ -5624,7 +5624,7 @@ fn (fe mut fnEm&) toBits(v String&, ft types.TypeId, w I64) String {
         }
         return acc
     }
-    raws := t.RawBits(r)
+    raws :~ t.RawBits(r)
     if t.RawType(r) == types.UnknownT or raws.Len() == 0 { return fe.let("trunc i32 " + $v + " to i" + $w) if w < 32 else fe.let("zext i32 " + $v + " to i" + $w) if w > 32 else $v }
     cur := "0"
     for i in range raws.Len() {
@@ -5639,10 +5639,10 @@ fn bmaskOf(w I64) I64 { return -1 if w >= 64 else (I64(1) << w) - 1 }
 
 # a packed struct made of its fields' values: their bits placed one after another
 fn (fe mut fnEm&) packedMake(pt types.TypeId, args mir.Range) String {
-    t := fe.E.T
+    t :~ fe.E.T
     n := 8 * fe.size(pt)
     if n == 0: return "0"
-    fs := t.Items(t.Fields(pt))
+    fs :~ t.Items(t.Fields(pt))
     offs := t.BitOffsets(pt)
     acc := "0"
     for i in range fs.Len() {
@@ -5665,8 +5665,8 @@ fn (fe mut fnEm&) parts(ty types.TypeId, ps Array<types.TypeId>&, args mir.Range
 
 # an error code under list from as the same error under list to (R6): the type's position mapped, the word kept
 fn (fe mut fnEm&) recode(code String&, from types.ListId, to types.ListId) String {
-    t := fe.E.T
-    xs := t.Items(from)
+    t :~ fe.E.T
+    xs :~ t.Items(from)
     hi := fe.let("lshr i32 " + $code + ", 16")
     word := fe.let("and i32 " + $code + ", 65535")
     pos := "0"
@@ -5684,8 +5684,8 @@ fn (fe mut fnEm&) recode(code String&, from types.ListId, to types.ListId) Strin
 # T19b: an i1 saying whether error code (of list l) is of a type carrying a payload, its names prefixed by tag - "" where no
 # type of l carries one
 fn (e mut Emitter&) carriesText(b mut StringBuilder&, code String&, l types.ListId, tag String&) String {
-    t := e.T
-    xs := t.Items(l)
+    t :~ e.T
+    xs :~ t.Items(l)
     got := ""
     for k in range xs.Len() {
         if e.P.PayloadOf(t.ErrOf(xs[k])) == types.UnknownT: continue
@@ -5702,8 +5702,8 @@ fn (e mut Emitter&) carriesText(b mut StringBuilder&, code String&, l types.List
 }
 
 fn (e mut Emitter&) position(l types.ListId, err types.TypeId) I64 {
-    t := e.T
-    xs := t.Items(l)
+    t :~ e.T
+    xs :~ t.Items(l)
     for k in range xs.Len() {
         if t.Same(t.ErrOf(xs[k]), t.ErrOf(err)): return k + 1
     }
@@ -5717,7 +5717,7 @@ fn (e mut Emitter&) position(l types.ListId, err types.TypeId) I64 {
 
 fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String {
     if op == typed.PrimOp.Unpack or op == typed.PrimOp.Repack: return fe.packedPrim(op, ty, args)
-    t := fe.E.T
+    t :~ fe.E.T
     a0 := fe.arg(args, 0)
     t0 := fe.otype(a0)
     if args.N > I32(1) and (t0 == types.NullT or t0 == types.UnknownT): t0 = fe.otype(fe.arg(args, 1))
@@ -5808,7 +5808,7 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
         }
         case typed.PrimOp.LeadingZeros, typed.PrimOp.TrailingZeros, typed.PrimOp.PopCount {
             # E37: one instruction where the target has one; a zero's count is its width (the intrinsic's i1 false)
-            name := "ctpop" if op == typed.PrimOp.PopCount else ("ctlz" if op == typed.PrimOp.LeadingZeros else "cttz")
+            name :~ "ctpop" if op == typed.PrimOp.PopCount else ("ctlz" if op == typed.PrimOp.LeadingZeros else "cttz")
             intr := "llvm." + $name + "." + $lt
             fe.E.declare(intr, $lt + " @" + $intr + "(" + $lt + $(", i1)" if name != "ctpop" else ")"))
             c := fe.let("call " + $lt + " @" + $intr + "(" + $lt + " " + $x + $(", i1 false)" if name != "ctpop" else ")"))
@@ -5857,7 +5857,7 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
         # rounding for + - * / % (F32's 24 bits hold any of them before BF16's 8 do) - LLVM's own calls the runtime
         # library (T4)
         a, b := fe.widenBF16(x, "float"), fe.widenBF16(y, "float")
-        w := match op {
+        w :~ match op {
             case typed.PrimOp.Add: "fadd"
             case typed.PrimOp.Sub: "fsub"
             case typed.PrimOp.Mul: "fmul"
@@ -5882,7 +5882,7 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
         case typed.PrimOp.Shl, typed.PrimOp.Shr {
             t1 := fe.otype(fe.arg(args, 1))
             amt := fe.width(fe.val(fe.arg(args, 1), t1), t1, r)
-            name := "shl " if op == typed.PrimOp.Shl else ("lshr " if un else "ashr ")
+            name :~ "shl " if op == typed.PrimOp.Shl else ("lshr " if un else "ashr ")
             return fe.let($name + $lt + " " + $x + ", " + $amt)
         }
         case typed.PrimOp.BitAnd { return fe.let("and " + $lt + " " + $x + ", " + $y) }
@@ -5893,7 +5893,7 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
         }
         case typed.PrimOp.Same {
             if lt == "{ i64, ptr }" or lt == "{ ptr, ptr }" {
-                w0 := "i64 " if lt == "{ i64, ptr }" else "ptr "
+                w0 :~ "i64 " if lt == "{ i64, ptr }" else "ptr "
                 a := fe.let("icmp eq " + $w0 + $fe.let("extractvalue " + $lt + " " + $x + ", 0") + ", " + $fe.let("extractvalue " + $lt + " " + $y + ", 0"))
                 b := fe.let("icmp eq ptr " + $fe.let("extractvalue " + $lt + " " + $x + ", 1") + ", " + $fe.let("extractvalue " + $lt + " " + $y + ", 1"))
                 return fe.let("and i1 " + $a + ", " + $b)
@@ -5911,7 +5911,7 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
         }
         case typed.PrimOp.AtomicAdd, typed.PrimOp.AtomicSwap {
             it := t.Referent(r)
-            how := "add" if op == typed.PrimOp.AtomicAdd else "xchg"
+            how :~ "add" if op == typed.PrimOp.AtomicAdd else "xchg"
             return fe.let("atomicrmw " + $how + " ptr " + $x + ", " + $fe.ty(it) + " " + $fe.val(fe.arg(args, 1), it) + " seq_cst")
         }
         case typed.PrimOp.AtomicCompareSwap {
@@ -5932,9 +5932,9 @@ fn (fe mut fnEm&) prim(op typed.PrimOp, ty types.TypeId, args mir.Range) String 
 # add, sub and a shift (its count, an I64 within the width, taken to x's width) as their own; a product as the fixed-point
 # multiply of scale 0, which the target lowers to a multiply with its overflow test and a select
 fn (fe mut fnEm&) saturating(op typed.PrimOp, r types.TypeId, x String&, args mir.Range) String {
-    t := fe.E.T
+    t :~ fe.E.T
     lt := fe.ty(r)
-    s := "u" if t.IsUnsigned(r) else "s"
+    s :~ "u" if t.IsUnsigned(r) else "s"
     if op == typed.PrimOp.SatShl {
         n := fe.width(fe.val(fe.arg(args, 1), mir.I64T), mir.I64T, r)
         intr := "llvm." + $s + "shl.sat." + $lt
@@ -5966,7 +5966,7 @@ fn (fe mut fnEm&) saturating(op typed.PrimOp, r types.TypeId, x String&, args mi
 # would stay a lane at a time
 fn (fe mut fnEm&) satMulWide(s String&, lt String&, b I64, x String&, y String&) String {
     wt := "i" + $(2 * b)
-    ext := "zext " if s == "u" else "sext "
+    ext :~ "zext " if s == "u" else "sext "
     wx, wy := fe.let($ext + $lt + " " + $x + " to " + $wt), fe.let($ext + $lt + " " + $y + " to " + $wt)
     p := fe.let("mul " + $("nuw " if s == "u" else "nsw ") + $wt + " " + $wx + ", " + $wy)
     if s == "u" { p = fe.minMax("umin", wt, p, (I64(1) << b) - 1) } else {
@@ -5984,7 +5984,7 @@ fn (fe mut fnEm&) minMax(f String&, wt String&, v String&, k I64) String {
 
 # an integer value of type from at the width of type to
 fn (fe mut fnEm&) width(v String&, from types.TypeId, to types.TypeId) String {
-    t := fe.E.T
+    t :~ fe.E.T
     a, b := t.Bits(t.Repr(from)), t.Bits(t.Repr(to))
     if a == b: return $v
     if a > b: return fe.let("trunc " + $fe.ty(t.Repr(from)) + " " + $v + " to " + $fe.ty(t.Repr(to)))
@@ -5992,10 +5992,10 @@ fn (fe mut fnEm&) width(v String&, from types.TypeId, to types.TypeId) String {
 }
 
 fn (fe mut fnEm&) compare(op typed.PrimOp, r types.TypeId, x String&, y String&) String {
-    t := fe.E.T
+    t :~ fe.E.T
     lt := fe.ty(r)
     if t.IsFloat(r) {
-        c := match op {
+        c :~ match op {
             case typed.PrimOp.Eq: "oeq"
             case typed.PrimOp.Ne: "une"
             case typed.PrimOp.Lt: "olt"
@@ -6006,7 +6006,7 @@ fn (fe mut fnEm&) compare(op typed.PrimOp, r types.TypeId, x String&, y String&)
         return fe.let("fcmp " + $c + " " + $lt + " " + $x + ", " + $y)
     }
     un := t.IsUnsigned(r) or r == types.BoolT
-    c := match op {
+    c :~ match op {
         case typed.PrimOp.Eq: "eq"
         case typed.PrimOp.Ne: "ne"
         case typed.PrimOp.Lt: "ult" if un else "slt"
@@ -6016,7 +6016,7 @@ fn (fe mut fnEm&) compare(op typed.PrimOp, r types.TypeId, x String&, y String&)
     }
     # a pair (an array reference, a function value) is equal to another, null among them, when both its words are
     if lt == "{ i64, ptr }" or lt == "{ ptr, ptr }" {
-        w0 := "i64 " if lt == "{ i64, ptr }" else "ptr "
+        w0 :~ "i64 " if lt == "{ i64, ptr }" else "ptr "
         a := fe.let("icmp eq " + $w0 + $fe.let("extractvalue " + $lt + " " + $x + ", 0") + ", " + $fe.let("extractvalue " + $lt + " " + $y + ", 0"))
         b := fe.let("icmp eq ptr " + $fe.let("extractvalue " + $lt + " " + $x + ", 1") + ", " + $fe.let("extractvalue " + $lt + " " + $y + ", 1"))
         both := fe.let("and i1 " + $a + ", " + $b)
@@ -6032,7 +6032,7 @@ fn (fe mut fnEm&) compare(op typed.PrimOp, r types.TypeId, x String&, y String&)
 # sticky bit, so the runtime's one rounding of it is the true value's, then scaled back by a power of two - exact in an
 # F32 (a BF16's eight bits, an exponent of at most 2^65), and at most an overflow to infinity, which is the true answer
 fn (fe mut fnEm&) wideToBF16(v String&, f types.TypeId) String {
-    t := fe.E.T
+    t :~ fe.E.T
     fl := fe.ty(f)
     x := $v
     if fl != "i128" { x = fe.let($("zext " if t.IsUnsigned(f) else "sext ") + $fl + " " + $v + " to i128") }
@@ -6061,7 +6061,7 @@ fn (fe mut fnEm&) wideToBF16(v String&, f types.TypeId) String {
 
 # a value of type from as a to (T4, T6b, E26, T7c): widened, narrowed, between integers and floats, or the same bits
 fn (fe mut fnEm&) convert(v String&, from types.TypeId, to types.TypeId) String {
-    t := fe.E.T
+    t :~ fe.E.T
     f, g := t.Repr(from), t.Repr(to)
     fl, gl := fe.ty(f), fe.ty(g)
     if t.KindOf(f) == types.Kind.Func and t.KindOf(g) == types.Kind.Func and fe.E.abiDiffers(f, g) { return fe.adapt(v, f, g) }
@@ -6161,7 +6161,7 @@ fn (fe mut fnEm&) bf16Bits(v String&, opaque Bool) String {
 # E39's Sum<A> over a byte product (LaneDot): its n lanes from p and q added by a helper (laneDotFn), the total as ty -
 # the unsigned operand first, as vpdpbusd takes it
 fn (fe mut fnEm&) laneDot(p String&, pt types.TypeId, args mir.Range, ty types.TypeId) String {
-    t := fe.E.T
+    t :~ fe.E.T
     q := fe.arg(args, 1)
     qt := fe.otype(q)
     nx := fe.arg(args, 2)
@@ -6173,7 +6173,7 @@ fn (fe mut fnEm&) laneDot(p String&, pt types.TypeId, args mir.Range, ty types.T
     x := v if swap else $p
     y := $p if swap else v
     bits := t.Bits(t.Repr(ty))
-    rt := "i64" if bits > 32 else "i32"
+    rt :~ "i64" if bits > 32 else "i32"
     f := fe.E.laneDotFn(uy if swap else ux, ux if swap else uy, bits > 32)
     r := fe.let("call " + $rt + " @" + $f + "(ptr " + $x + ", ptr " + $y + ", i64 " + $n + ")")
     if bits >= 32: return r
@@ -6183,7 +6183,7 @@ fn (fe mut fnEm&) laneDot(p String&, pt types.TypeId, args mir.Range, ty types.T
 # E39's "x += (p * q).Sum<A>(4)" (LaneDots): the groups added into x's lanes by a helper (laneDotsFn) - the unsigned
 # operand first, as vpdpbusd takes it
 fn (fe mut fnEm&) laneDots(a String&, args mir.Range) {
-    t := fe.E.T
+    t :~ fe.E.T
     po, qo := fe.arg(args, 1), fe.arg(args, 2)
     pt, qt := fe.otype(po), fe.otype(qo)
     ux := t.IsUnsigned(t.Repr(t.Referent(t.Repr(pt))))
@@ -6244,7 +6244,7 @@ fn laneDotsBody(name String&, d laneDotForm&) String {
         dotsSteps(b, d.L, "i32", vt, "i8", 1, op, d.Tags)
     }
     # the groups left, one by one
-    from := "0" if d.Dp == 0 else "%jt"
+    from :~ "0" if d.Dp == 0 else "%jt"
     b.Push($"sh:\n  %k = phi i64 [ " + $from + ", %t ], [ %k1, %sb ]\n  %ck = icmp slt i64 %k, %g\n  br i1 %ck, label %sb, label %done\nsb:\n")
     b.Push($"  %akp = getelementptr i32, ptr %a, i64 %k\n  %s0 = load i32, ptr %akp, align 4" + $d.Tags.A + "\n")
     b.Push("  %pko = mul i64 %k, %ps\n  %qko = mul i64 %k, %qs\n")
@@ -6284,7 +6284,7 @@ fn (e mut Emitter&) pairDotsFn(tags laneTags) String {
         dotsSteps(b, l, "float", it, "i16", 2, op, tags)
     }
     # the groups left, one by one
-    from := "0" if dp == 0 else "%jt"
+    from :~ "0" if dp == 0 else "%jt"
     b.Push($"sh:\n  %k = phi i64 [ " + $from + ", %t ], [ %k1, %sb ]\n  %ck = icmp slt i64 %k, %g\n  br i1 %ck, label %sb, label %done\nsb:\n")
     b.Push($"  %akp = getelementptr float, ptr %a, i64 %k\n  %s0 = load float, ptr %akp, align 4" + $tags.A + "\n")
     pairFlush(b, "%s0", "s")
@@ -6292,13 +6292,13 @@ fn (e mut Emitter&) pairDotsFn(tags laneTags) String {
     for i in Array<I64>[1, 0] {
         for side in Array<String&>["p", "q"] {
             o := $"%" + $side + $i
-            tag := tags.P if side == "p" else tags.Q
+            tag :~ tags.P if side == "p" else tags.Q
             b.Push($"  " + $o + "i = add i64 %" + $side + "ko, " + $i + "\n  " + $o + "a = getelementptr i16, ptr %" + $side + ", i64 " + $o + "i\n")
             b.Push($"  " + $o + "b = load i16, ptr " + $o + "a, align 2" + $tag + "\n  " + $o + "z = zext i16 " + $o + "b to i32\n")
             b.Push($"  " + $o + "w = shl i32 " + $o + "z, 16\n  " + $o + "f = bitcast i32 " + $o + "w to float\n")
             pairFlush(b, $o + "f", $side + $i + "d")
         }
-        acc := "%s" if i == 1 else "%f1"
+        acc :~ "%s" if i == 1 else "%f1"
         b.Push($"  %m" + $i + " = call float @llvm.fma.f32(float %p" + $i + "d, float %q" + $i + "d, float " + $acc + ")\n")
         pairFlush(b, $"%m" + $i, $"f" + $i)
     }
@@ -6318,8 +6318,8 @@ fn dotsSteps(b mut StringBuilder&, l I64, ae String&, vt String&, el String&, al
     b.Push("  br i1 %some, label %pre, label %t\npre:\n")
     for side in Array<String&>["p", "q"] {
         o := $"%" + $side
-        tag := tags.P if side == "p" else tags.Q
-        prev := "pre" if side == "p" else "pn"
+        tag :~ tags.P if side == "p" else tags.Q
+        prev :~ "pre" if side == "p" else "pn"
         b.Push($"  br i1 " + $o + "one, label %" + $side + "b, label %" + $side + "n\n" + $side + "b:\n")
         b.Push($"  " + $o + "w = load i32, ptr " + $o + ", align " + $al + $tag + "\n")
         b.Push($"  " + $o + "i = insertelement " + $vt + " poison, i32 " + $o + "w, i64 0\n")
@@ -6340,7 +6340,7 @@ fn dotsSteps(b mut StringBuilder&, l I64, ae String&, vt String&, el String&, al
             x := $o + "x" + n
             step = step.Replace($o + "xK", $o + "B" if shared else x)
             if shared: continue
-            tag := tags.P if side == "p" else tags.Q
+            tag :~ tags.P if side == "p" else tags.Q
             b.Push($"  " + $o + "o" + n + " = mul i64 %j" + n + ", %" + $side + "s\n  " + $o + "a" + n + " = getelementptr " + $el + ", ptr " + $o + ", i64 " + $o + "o" + n + "\n")
             b.Push($"  " + $x + " = load " + $vt + ", ptr " + $o + "a" + n + ", align " + $al + $tag + "\n")
         }
@@ -6412,7 +6412,7 @@ fn (e mut Emitter&) laneDotFn(ux Bool, uy Bool, wide Bool) String {
     d.V = d.Dp / 8 if d.Dp > 0 else width / 8
     d.L = d.V / 4 if d.Dp > 0 else d.V
     d.Masked = e.feature("avx512bw") and (d.V == 64 or e.feature("avx512vl"))
-    d.Rt = "i64" if wide else "i32"
+    d.Rt ~ "i64" if wide else "i32"
     name := $"olang_lanedot." + $("dp" if d.Dp > 0 else "w") + $d.V + "." + $("u" if ux else "s") + $("u" if uy else "s") +
         $(".m" if d.Masked else "") + "." + $d.Rt
     if e.has(name): return name
@@ -6470,7 +6470,7 @@ fn laneDotBody(name String&, d laneDotForm&) String {
     }
     b.Push("  br label %h\nx:\n")
     for k in range 1, LaneDotTurn {
-        prev := "%a0" if k == 1 else $"%s" + $(k - 1)
+        prev :~ "%a0" if k == 1 else $"%s" + $(k - 1)
         b.Push($"  %s" + $k + " = add " + $vt + " " + $prev + ", %a" + $k + "\n")
     }
     # then one step at a time while one fits
@@ -6521,7 +6521,7 @@ fn laneDotStep(b mut StringBuilder&, d laneDotForm&, r String&, acc String&, at 
                    " x i1> " + $mask + ", " + $bt + " zeroinitializer)\n")
         }
         un := d.Ux if side == "x" else d.Uy
-        how := "bitcast" if d.Dp > 0 else ("zext" if un else "sext")
+        how :~ "bitcast" if d.Dp > 0 else ("zext" if un else "sext")
         b.Push($"  " + $o + "w = " + $how + " " + $bt + " " + $o + " to " + $vt + "\n")
     }
     if d.Dp > 0 {
@@ -6573,7 +6573,7 @@ fn (fe mut fnEm&) narrowBF16(f String&) String {
 # whether op over args, typed ty, has a true result ty cannot hold (E15a's Overflow)
 # whether a float x (of type r, lt in LLVM) converted to the integer type g does not fit it - a NaN included
 fn (fe mut fnEm&) floatOverflows(x String&, lt String&, r types.TypeId, g types.TypeId) String {
-    t := fe.E.T
+    t :~ fe.E.T
     d := $x
     if t.Bits(r) != 64: d = fe.let("fpext " + $lt + " " + $x + " to double")
     gb := t.Bits(g)
@@ -6596,7 +6596,7 @@ fn (fe mut fnEm&) floatOverflows(x String&, lt String&, r types.TypeId, g types.
 }
 
 fn (fe mut fnEm&) overflows(op typed.PrimOp, ty types.TypeId, args mir.Range) String {
-    t := fe.E.T
+    t :~ fe.E.T
     a0 := fe.arg(args, 0)
     t0 := fe.otype(a0)
     r := t.Repr(t0)
@@ -6608,7 +6608,7 @@ fn (fe mut fnEm&) overflows(op typed.PrimOp, ty types.TypeId, args mir.Range) St
     match op {
         case typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul {
             y := fe.val(fe.arg(args, 1), t0)
-            name := match op {
+            name :~ match op {
                 case typed.PrimOp.Add: "add"
                 case typed.PrimOp.Sub: "sub"
                 case _: "mul"
@@ -6776,7 +6776,7 @@ fn (e mut Emitter&) codeType(k mir.FnKey) types.TypeId {
 # the value's scopes passed on (the program's for any more code takes, under the stand-in placement), its parameters
 # passed on as they came
 fn (e mut Emitter&) thunk(code mir.FnKey, ty types.TypeId) {
-    t := e.T
+    t :~ e.T
     s := e.sym(code)
     mine := e.codeType(code)
     vp := mir.PassedCount(t, mir.Callee.Value(mir.Operand.None), ty)
@@ -6822,7 +6822,7 @@ fn (e mut Emitter&) thunk(code mir.FnKey, ty types.TypeId) {
             args.Push("ptr %g" + $i)
         }
     }
-    ps := t.Items(t.Params(ty))
+    ps :~ t.Items(t.Params(ty))
     pass := t.Passing(ty)
     for i in range ps.Len() {
         if not first: args.Push(", ")
@@ -6835,7 +6835,7 @@ fn (e mut Emitter&) thunk(code mir.FnKey, ty types.TypeId) {
     }
     rt := t.RetLlvm(mine)
     vt := t.RetLlvm(ty)
-    closeTail := "  call void @__olang_scope_close(ptr %tail)\n" if tail else ""
+    closeTail :~ "  call void @__olang_scope_close(ptr %tail)\n" if tail else ""
     if rt == "void" {
         b.Push("  call void @" + $s + "(" + $args.ToString() + ")\n" + $closeTail)
         # a function that cannot fail as a value that can (R6): it never fails
@@ -6858,13 +6858,13 @@ fn (e mut Emitter&) thunk(code mir.FnKey, ty types.TypeId) {
     hasRes := res2 != types.VoidT and res2 != types.NoreturnT and not t.ViaMemory(res2)
     code0 := "0"
     if t.Items(from).Len() > 0 { code0 = "%r" if not hasRes else fe.let("extractvalue " + $rt + " %r, 0") }
-    c := fe.recode(code0, from, to) if t.Items(from).Len() > 0 else "0"
+    c :~ fe.recode(code0, from, to) if t.Items(from).Len() > 0 else "0"
     if vt == "i32" {
         fe.w("ret i32 " + $c)
     } else if t.Items(to).Len() == 0 {
         fe.w("ret " + $vt + " " + $(fe.let("extractvalue " + $rt + " %r, 1") if t.Items(from).Len() > 0 else "%r"))
     } else {
-        v := fe.let("extractvalue " + $rt + " %r, 1") if t.Items(from).Len() > 0 else "%r"
+        v :~ fe.let("extractvalue " + $rt + " %r, 1") if t.Items(from).Len() > 0 else "%r"
         a := fe.let("insertvalue " + $vt + " zeroinitializer, i32 " + $c + ", 0")
         fe.w("ret " + $vt + " " + $fe.let("insertvalue " + $vt + " " + $a + ", " + $e.ty(t.Result(ty)) + " " + $v + ", 1"))
     }
@@ -6892,7 +6892,7 @@ fn (e mut Emitter&) adapter(f types.TypeId, g types.TypeId) String {
 # whether a call through a function value of type f and one of type g differ in what is returned (R6: a function that
 # cannot fail as a value that can, or another error list)
 fn (e mut Emitter&) abiDiffers(f types.TypeId, g types.TypeId) Bool {
-    t := e.T
+    t :~ e.T
     return t.RetLlvm(f) != t.RetLlvm(g) or t.Errors(f) != t.Errors(g)
 }
 
@@ -6910,7 +6910,7 @@ fn (fe mut fnEm&) adapt(v String&, f types.TypeId, g types.TypeId) String {
 # the adapter of fvAdapt: the inner value's code called with its environment, the outer's scopes (the program's for
 # any more the inner takes) and arguments, its error code re-encoded under g's list (R6, R17)
 fn (e mut Emitter&) fvAdapter(f types.TypeId, g types.TypeId) {
-    t := e.T
+    t :~ e.T
     vp := mir.PassedCount(t, mir.Callee.Value(mir.Operand.None), g)
     ip := mir.PassedCount(t, mir.Callee.Value(mir.Operand.None), f)
     key := e.adaptKey(f, g)
@@ -6927,7 +6927,7 @@ fn (e mut Emitter&) fvAdapter(f types.TypeId, g types.TypeId) {
         if i < vp: args.Push(", ptr %v" + $i)
         else: args.Push(", ptr " + $fe.program())
     }
-    ps := t.Items(t.Params(g))
+    ps :~ t.Items(t.Params(g))
     pass := t.Passing(g)
     for i in range ps.Len() {
         match pass[i] {
@@ -6949,7 +6949,7 @@ fn (e mut Emitter&) fvAdapter(f types.TypeId, g types.TypeId) {
         errs := t.Items(from).Len() > 0
         c := "0"
         if errs { c = fe.recode(r if not hasRes else fe.let("extractvalue " + $rt + " " + $r + ", 0"), from, to) }
-        val := (fe.let("extractvalue " + $rt + " " + $r + ", 1") if errs else r) if hasRes else ""
+        val :~ (fe.let("extractvalue " + $rt + " " + $r + ", 1") if errs else r) if hasRes else ""
         if vt == "i32" {
             fe.w("ret i32 " + $c)
         } else if t.Items(to).Len() == 0 {
@@ -6964,7 +6964,7 @@ fn (e mut Emitter&) fvAdapter(f types.TypeId, g types.TypeId) {
 
 # a destructor as the runtime calls it, fn(ptr instance, ptr scope): the scope being closed passed for every scope
 fn (e mut Emitter&) dtorThunk(k mir.FnKey) {
-    t := e.T
+    t :~ e.T
     s := e.sym(k)
     ty := e.codeType(k)
     b := StringBuilder()
@@ -6984,7 +6984,7 @@ fn (e mut Emitter&) dtorThunk(k mir.FnKey) {
 # ---- terminators ----
 
 fn (fe mut fnEm&) term(tm mir.Term) {
-    t := fe.E.T
+    t :~ fe.E.T
     if fe.dbgSp >= 0: fe.locate(termSpan(tm))
     match tm {
         case mir.Term.None { fe.w("unreachable") }
@@ -7065,7 +7065,7 @@ fn (fe mut fnEm&) term(tm mir.Term) {
 # through memory - and the coroutine suspended: resumed, it goes on at resume; dropped, at drop, the way out lowering
 # made (S20: its deferred code and holders' drops run, the scopes it holds closed, innermost first). In a test build the scopes it holds are off the chain of open scopes while it is suspended (P1d)
 fn (fe mut fnEm&) suspend(x mir.Operand, resume mir.BlockId, held mir.Range, drop mir.BlockId) {
-    t := fe.E.T
+    t :~ fe.E.T
     rt := t.RetLlvm(fe.F.Ty)
     if fe.via {
         out := fe.load("ptr", fe.let("getelementptr " + $fe.promTy + ", ptr %prom, i32 0, i32 2"))
@@ -7103,8 +7103,8 @@ fn (fe mut fnEm&) suspend(x mir.Operand, resume mir.BlockId, held mir.Range, dro
 # C11, S20: a walk let go before it started - the generator's parameters it holds by value with destructors to run
 # (its captures, copied into its frame as it was made) ended, last first, in the scope it lives in, which is closing
 fn (fe mut fnEm&) freshDrops() {
-    t := fe.E.T
-    f := fe.F
+    t :~ fe.E.T
+    f :~ fe.F
     for j in range f.Captures.Len() {
         l := f.Captures[f.Captures.Len() - 1 - j]
         ty := f.Locals[I64(l)].Ty
@@ -7134,10 +7134,10 @@ fn (fe mut fnEm&) rehold(hs Vec<I64>&) {
 # the test or the process ends (S16-S18a): a failed check prints "FILE:LINE: " and what failed, an assert's message
 # after it
 fn (fe mut fnEm&) exit(sp source.Span, kind mir.ExitKind, msg mir.Operand) {
-    what := mir.ExitText(kind)
+    what :~ mir.ExitText(kind)
     if kind == mir.ExitKind.Done or kind == mir.ExitKind.Fail {
         fe.gap("an Exit " + $kind)
-        what = "ended"
+        what ~ "ended"
     }
     if kind == mir.ExitKind.Escaped {
         # S16, S18d: "left the test" in the trace, the error named on the test's FAIL line
@@ -7164,7 +7164,7 @@ fn (fe mut fnEm&) exit(sp source.Span, kind mir.ExitKind, msg mir.Operand) {
         return
     }
     if kind == mir.ExitKind.Unhandled {
-        tr := "true" if fe.E.traced() else "false"
+        tr :~ "true" if fe.E.traced() else "false"
         fe.E.runtime("__olang_unhandled_text")
         fe.w("call void @__olang_unhandled_text({ i64, ptr } " + $fe.textPair(msg) + ", i1 " + $tr + ")")
         fe.w("unreachable")
@@ -7178,14 +7178,14 @@ fn (fe mut fnEm&) exit(sp source.Span, kind mir.ExitKind, msg mir.Operand) {
             case _ {
                 # T19b: a name rendered with the payload its error carries
                 fe.E.runtime("__olang_bang_failed_text")
-                tr := "true" if fe.E.traced() else "false"
+                tr :~ "true" if fe.E.traced() else "false"
                 fe.w("call void @__olang_bang_failed_text(ptr " + $fe.located(sp, ": ") + ", { i64, ptr } " + $fe.textPair(msg) + ", i1 " + $tr + ")")
                 fe.w("unreachable")
                 return
             }
         }
         # where no trace is kept, the requirement that raised it is named, then the hint (D17)
-        f := "__olang_bang_failed" if fe.E.traced() else "__olang_bang_failed_plain"
+        f :~ "__olang_bang_failed" if fe.E.traced() else "__olang_bang_failed_plain"
         fe.E.declare(f, $"void @" + $f + "(ptr) cold noreturn")
         fe.w($"call void @" + $f + "(ptr " + $fe.located(sp, $": " + $text + "\n") + ")")
         fe.w("unreachable")
@@ -7245,11 +7245,11 @@ fn (fe mut fnEm&) knownOf(x mir.Operand) lower.FnVal {
 # parameter on unchanged at k's parameter of the same type; in the root's object, the clone decided for the call (the
 # sites collected while nothing is decided); else k's own
 fn (fe mut fnEm&) callSym(k mir.FnKey, fty types.TypeId, c mir.Call) String {
-    e := fe.E
-    t := e.T
+    e :~ fe.E
+    t :~ e.T
     if fe.clone >= 0 {
         cl := e.Lw.Clones[fe.clone]
-        ps := t.Items(t.Params(fty))
+        ps :~ t.Items(t.Params(fty))
         for j in range I64(c.Args.N) {
             x := fe.arg(c.Args, j)
             if j >= ps.Len() or ps[j] != cl.Ty or fe.otype(x) != cl.Ty or fe.knownOf(x) != lower.FnVal.Param(cl.Param): continue
@@ -7269,9 +7269,9 @@ fn (fe mut fnEm&) callSym(k mir.FnKey, fty types.TypeId, c mir.Call) String {
 
 # 4.4: each argument of a call of k that is one known body's code made at the very type of k's parameter, a site
 fn (fe mut fnEm&) noteSites(k mir.FnKey, fty types.TypeId, c mir.Call) {
-    e := fe.E
-    t := e.T
-    ps := t.Items(t.Params(fty))
+    e :~ fe.E
+    t :~ e.T
+    ps :~ t.Items(t.Params(fty))
     if not ps.Some(fn(p types.TypeId) Bool: return t.KindOf(p) == types.Kind.Func): return
     for j in range I64(c.Args.N) {
         x := fe.arg(c.Args, j)
@@ -7300,7 +7300,7 @@ fn (fe mut fnEm&) cloneCode(x mir.Operand, ty types.TypeId) String {
 # a call (MIR's Call terminator): its arguments as its callee takes them, its result stored on its ok edge, its error
 # code on its error edge
 fn (fe mut fnEm&) call(c mir.Call) {
-    t := fe.E.T
+    t :~ fe.E.T
     ty := types.UnknownT
     target := ""
     env := ""
@@ -7388,7 +7388,7 @@ fn (fe mut fnEm&) call(c mir.Call) {
         first = false
         args.Push("ptr null")
     }
-    ps := t.Items(t.Params(ty))
+    ps :~ t.Items(t.Params(ty))
     pass := t.Passing(ty)
     for i in range ps.Len() {
         if not first: args.Push(", ")
@@ -7468,7 +7468,7 @@ BigCloseMark String& = "  ;olang.bigclose\n"
 # scope is closed before it (lowering's), the arguments are values and scopes the function was given (section 8's), the
 # signature is the function's own and nothing passes through memory (check's), so the frame is dead at the jump
 fn (fe mut fnEm&) tailCall(c mir.Call) {
-    t := fe.E.T
+    t :~ fe.E.T
     ty := types.UnknownT
     target := ""
     match c.Target {
@@ -7492,7 +7492,7 @@ fn (fe mut fnEm&) tailCall(c mir.Call) {
         first = false
         args.Push("ptr " + $fe.scope(fe.F.Refs[I64(c.Scopes.At) + i]))
     }
-    ps := t.Items(t.Params(ty))
+    ps :~ t.Items(t.Params(ty))
     pass := t.Passing(ty)
     for i in range ps.Len() {
         if not first: args.Push(", ")
@@ -7533,7 +7533,7 @@ fn (fe mut fnEm&) constText(c I32) String {
 # an extern's argument (X3): a number as itself, an array as a pointer to its first element, a function value (the
 # runtime's own, X2) as its two words
 fn (fe mut fnEm&) externArg(v String&, ty types.TypeId) String {
-    t := fe.E.T
+    t :~ fe.E.T
     r := t.Repr(ty)
     if t.KindOf(r) == types.Kind.Func {
         return "ptr " + $fe.let("extractvalue { ptr, ptr } " + $v + ", 0") + ", ptr " + $fe.let("extractvalue { ptr, ptr } " + $v + ", 1")
@@ -7593,15 +7593,15 @@ fn mathInexactTable() Map<String&, Bool> {
 
 # the intrinsic an exact C math function of its exact prototype is ("llvm.fma.f32" for fmaf), "" for any other
 fn (e mut Emitter&) mathIntrinsic(name String&, ty types.TypeId) String {
-    t := e.T
-    base := name[:]
+    t :~ e.T
+    base :~ name[:]
     f32 := false
     if not mathExact.Has(base) and name.EndsWith("f") {
-        base = name[:name.Len() - 1]
+        base ~ name[:name.Len() - 1]
         f32 = true
     }
     n := try mathExact.Get(base) catch { return "" }
-    ps := t.Items(t.Params(ty))
+    ps :~ t.Items(t.Params(ty))
     want := types.Kind.F32 if f32 else types.Kind.F64
     if ps.Len() != n or t.KindOf(t.Result(ty)) != want: return ""
     for p in ps {
@@ -7612,7 +7612,7 @@ fn (e mut Emitter&) mathIntrinsic(name String&, ty types.TypeId) String {
 
 # a math function's parameters spelled for its declaration: every one F32 or F64 - "" where one is not
 fn (e mut Emitter&) mathParams(ty types.TypeId) String {
-    t := e.T
+    t :~ e.T
     b := StringBuilder()
     for i, p in t.Items(t.Params(ty)) {
         if t.KindOf(p) != types.Kind.F32 and t.KindOf(p) != types.Kind.F64: return ""
@@ -7643,7 +7643,7 @@ fn (e mut Emitter&) cHeader(ty types.TypeId) String {
 
 # a C function's parameters as its declaration spells them (X2, X3, X11)
 fn (e mut Emitter&) cParamList(ty types.TypeId, runtime Bool) String {
-    t := e.T
+    t :~ e.T
     b := StringBuilder()
     first := true
     regs := cabi.Regs(6, 8)
@@ -7663,7 +7663,7 @@ fn (e mut Emitter&) cParamList(ty types.TypeId, runtime Bool) String {
 
 # one C parameter spelled for a declaration
 fn (e mut Emitter&) cParamSpelled(p types.TypeId, regs mut cabi.Regs&, runtime Bool) String {
-    t := e.T
+    t :~ e.T
     rp := t.Repr(p)
     if t.KindOf(rp) == types.Kind.Func and runtime {
         regs.Int -= 2
@@ -7690,7 +7690,7 @@ fn (e mut Emitter&) cParamSpelled(p types.TypeId, regs mut cabi.Regs&, runtime B
 
 # a call of an extern (X1-X3, X11): each argument as C takes it, the result as C gives it, stored on the ok edge
 fn (fe mut fnEm&) cCall(c mir.Call, target String&, ty types.TypeId, variadic Bool) {
-    t := fe.E.T
+    t :~ fe.E.T
     res := t.Result(ty)
     args := StringBuilder()
     first := true
@@ -7707,7 +7707,7 @@ fn (fe mut fnEm&) cCall(c mir.Call, target String&, ty types.TypeId, variadic Bo
             regs.Int--
         }
     }
-    ps := t.Items(t.Params(ty))
+    ps :~ t.Items(t.Params(ty))
     for i in range ps.Len() {
         if not first: args.Push(", ")
         first = false
@@ -7763,7 +7763,7 @@ fn (fe mut fnEm&) cCall(c mir.Call, target String&, ty types.TypeId, variadic Bo
 
 # cCall's argument x for a parameter of type p, passed as the C ABI's way w says (X11)
 fn (fe mut fnEm&) cArg(args mut StringBuilder&, w cabi.Way&, p types.TypeId, x mir.Operand) {
-    t := fe.E.T
+    t :~ fe.E.T
     match w.Kind {
         case cabi.Pass.Direct {
             args.Push($fe.ty(p) + $(" " + $w.Attr if w.Attr != "" else "") + " " + $fe.val(x, p))
@@ -7793,14 +7793,14 @@ fn (fe mut fnEm&) cArg(args mut StringBuilder&, w cabi.Way&, p types.TypeId, x m
 
 # cCall's result r, of type res, stored where the call's value goes, as the C ABI's way rw returned it (X11)
 fn (fe mut fnEm&) cResult(c mir.Call&, rw cabi.Way&, r String&, rt String&, res types.TypeId, sret String&) {
-    t := fe.E.T
+    t :~ fe.E.T
     at, dt := fe.addr(c.Dest)
     match rw.Kind {
         case cabi.Pass.Direct { fe.store(fe.ty(dt), r, at) }
         case cabi.Pass.Parts {
             tmp := fe.alloca($"[" + $cabi.Span(t, rw, res) + " x i8]", 8)
             for k in range rw.Parts.Len() {
-                v := r if rw.Parts.Len() == 1 else fe.let($"extractvalue " + $rt + " " + $r + ", " + $k)
+                v :~ r if rw.Parts.Len() == 1 else fe.let($"extractvalue " + $rt + " " + $r + ", " + $k)
                 to := tmp if rw.Offs[k] == 0 else fe.let($"getelementptr i8, ptr " + $tmp + ", i64 " + $rw.Offs[k])
                 fe.store(rw.Parts[k], v, to)
             }
@@ -7823,7 +7823,7 @@ fn (fe mut fnEm&) exportNamed(x mir.Operand) String {
         }
     }
     for blockIx in range fe.F.Blocks.Len() {
-        bb := fe.F.Blocks.Ref(blockIx)
+        bb :~ fe.F.Blocks.Ref(blockIx)
         for st in bb.Stmts {
             if st != mir.Stmt.Assign or st.p.Path.N != I32(0) or not st.p.BaseIs(l): continue
             rv := st.v
@@ -7866,7 +7866,7 @@ fn (e mut Emitter&) exportBody(rv mir.Rvalue) String {
 # an export fn's result returned to C in registers, in parts (X11): stored, then read back as the parts' aggregate - the
 # operand of its "ret"
 fn (fe mut fnEm&) partsResult(rw cabi.Way, res types.TypeId, val String&) String {
-    t := fe.E.T
+    t :~ fe.E.T
     tmp := fe.alloca($"[" + $cabi.Span(t, rw, res) + " x i8]", 8)
     fe.store(fe.E.ty(res), val, tmp)
     whole := cabi.PartsType(rw)
@@ -7884,12 +7884,12 @@ fn (fe mut fnEm&) partsResult(rw cabi.Way, res types.TypeId, val String&) String
 # same way, so they are written in the root's object
 fn (e mut Emitter&) exportBodies() Vec<I64> {
     out Vec<I64>
-    p := e.P
+    p :~ e.P
     for i in range e.Lw.Bodies.Len() {
         match e.Lw.Bodies[i].Of {
             case typed.BodyOf.Fn(inst) {
                 f := p.InstanceFn(inst)
-                if p.FnDecl(f).Export and e.Lw.Bodies[i].Root != null and (not e.Module or p.FnModule(f) == p.L.Root) { out.Push(i) }
+                if p.FnDecl(f).Export and e.Lw.Bodies[i].Root is not null and (not e.Module or p.FnModule(f) == p.L.Root) { out.Push(i) }
             }
             case _ { }
         }
@@ -7900,7 +7900,7 @@ fn (e mut Emitter&) exportBodies() Vec<I64> {
 # the error types the export fns' lists name, in order of first appearance - the default error among them where one
 # has it (R1a): a library's codes are (position << 16) | word, as R6 encodes one function's (X14)
 fn (e mut Emitter&) ExportErrors() Vec<types.TypeId> {
-    t := e.T
+    t :~ e.T
     out Vec<types.TypeId>
     for i in e.exportBodies() {
         for x in t.Items(t.Errors(e.Lw.Bodies[i].Ty)) {
@@ -7919,9 +7919,9 @@ fn (e mut Emitter&) ExportErrors() Vec<types.TypeId> {
 # scope opened for the call and closed before it returns - the result copied out first; an error's code re-encoded
 # under the library's numbering (X14), the result then through the pointer C gives
 fn (e mut Emitter&) exportEntry(i I64) {
-    t := e.T
-    p := e.P
-    body := e.Lw.Bodies[i]
+    t :~ e.T
+    p :~ e.P
+    body :~ e.Lw.Bodies[i]
     f := -1
     match body.Of {
         case typed.BodyOf.Fn(inst) { f = p.InstanceFn(inst) }
@@ -8001,9 +8001,9 @@ fn (e mut Emitter&) exportEntry(i I64) {
 # exportEntry's parameters: C's (cps), and the function's arguments made of them (olang), by C's convention
 fn (e mut Emitter&) exportParams(fe mut fnEm&, ty types.TypeId, cps mut Vec<String&>&, regs mut cabi.Regs&
                                  olang mut Vec<String&>&) {
-    t := e.T
-    p := e.P
-    ps := t.Items(t.Params(ty))
+    t :~ e.T
+    p :~ e.P
+    ps :~ t.Items(t.Params(ty))
     pass := t.Passing(ty)
     for j in range ps.Len() {
         pt := ps[j]
@@ -8075,7 +8075,7 @@ fn (e mut Emitter&) threadEntry(fe mut fnEm&) String {
 
 # exportEntry's call of the function: where its result is put through memory (else "") and the call's value
 fn (e mut Emitter&) exportCall(fe mut fnEm&, k mir.FnKey, ty types.TypeId, sc String&, olang Vec<String&>&) String, String {
-    t := e.T
+    t :~ e.T
     res := t.Result(ty)
     hasRes := res != types.VoidT and res != types.NoreturnT
     args Vec<String&>
@@ -8101,7 +8101,7 @@ fn (e mut Emitter&) exportCall(fe mut fnEm&, k mir.FnKey, ty types.TypeId, sc St
 
 # exportEntry's way out where the function failed: its scope closed, the payload popped, C given the code
 fn (e mut Emitter&) exportFailed(fe mut fnEm&, ty types.TypeId, code String&, sc String&) {
-    t := e.T
+    t :~ e.T
     bad := fe.let($"icmp ne i32 " + $code + ", 0")
     fe.w($"br i1 " + $bad + ", label %failed, label %done")
     fe.code.Push("failed:\n")
@@ -8127,7 +8127,7 @@ fn (e mut Emitter&) exportFailed(fe mut fnEm&, ty types.TypeId, code String&, sc
 # pointer where the entry gives a code, else by C's convention - what the entry returns
 fn (e mut Emitter&) exportResult(fe mut fnEm&, rw cabi.Way&, res types.TypeId, el types.TypeId, val String&, errs Bool
                                  arr Bool, hasRes Bool) String {
-    t := e.T
+    t :~ e.T
     ret := ""
     if arr {
         n := fe.let($"extractvalue { i64, ptr } " + $val + ", 0")
@@ -8216,7 +8216,7 @@ type cDecls struct() {
 # the C header of a library named lib built from file: its extern types declared, the plain structs its entries take
 # defined, its error codes named, and each export fn's entry declared as X12 says it is called
 fn (e mut Emitter&) Header(lib String&, file String&) String {
-    t := e.T
+    t :~ e.T
     up := lib.ToUpper()
     ds := cDecls()
     fns StringBuilder
@@ -8245,7 +8245,7 @@ fn (e mut Emitter&) Header(lib String&, file String&) String {
                 b.Push($"#define " + $up + "_ERROR ((int32_t)" + $((k + 1) << 16) + ")\n")
                 continue
             }
-            ws := e.P.ErrorWords(t.DeclOf(et))
+            ws :~ e.P.ErrorWords(t.DeclOf(et))
             for j in range ws.Len() {
                 b.Push($"#define " + $up + "_" + $cWordName(e.P.ErrorWordName(t.DeclOf(et), j)) + " ((int32_t)" + $(((k + 1) << 16) | j) + ")\n")
             }
@@ -8259,11 +8259,11 @@ fn (e mut Emitter&) Header(lib String&, file String&) String {
 
 # an export fn's entry declared in C (X12): "RESULT NAME(PARAMS);", with the olang signature above it
 fn (e mut Emitter&) cEntryDecl(f I64, ty types.TypeId, ds mut cDecls&) String {
-    t := e.T
-    fd := e.P.FnDecl(f)
+    t :~ e.T
+    fd :~ e.P.FnDecl(f)
     name := $e.text(fd.Name)
     ps := Vec<String&>()
-    pts := t.Items(t.Params(ty))
+    pts :~ t.Items(t.Params(ty))
     for j in range pts.Len() {
         pn := $e.text(fd.S.Params[j].Name) if j < fd.S.Params.Len() else $"a" + $j
         pt := pts[j]
@@ -8316,10 +8316,10 @@ fn (e mut Emitter&) cEntryDecl(f I64, ty types.TypeId, ds mut cDecls&) String {
 # a function's signature as its declaration writes it, for a header's comment
 fn (e mut Emitter&) signatureText(f I64) String {
     m := e.P.FnModule(f)
-    src := e.P.L.Mods[m].Src
-    fd := e.P.FnDecl(f)
-    if src == null: return $"fn " + $e.text(fd.Name)
-    text := src.Text[I64(fd.Sp.Start):I64(fd.Sp.End)]
+    src :~ e.P.L.Mods[m].Src
+    fd :~ e.P.FnDecl(f)
+    if src is null: return $"fn " + $e.text(fd.Name)
+    text :~ src.Text[I64(fd.Sp.Start):I64(fd.Sp.End)]
     at := try text.FindByte('{') catch default text.Len()
     return $text[:at].Trim().Replace("*/", "* /")
 }
@@ -8327,7 +8327,7 @@ fn (e mut Emitter&) signatureText(f I64) String {
 # the C type of a value of type ty in a header (X2): a number's stdint type, bool, a 16-bit float's _Float16 or __bf16,
 # a char for a Char, an extern type's reference a pointer to its opaque struct, a plain struct by its name - defined
 fn (e mut Emitter&) cType(ty types.TypeId, ds mut cDecls&) String {
-    t := e.T
+    t :~ e.T
     if t.KindOf(ty) == types.Kind.Named and t.DeclKindOf(t.DeclOf(ty)) == types.DeclKind.Over {
         if e.text(t.DeclName(t.DeclOf(ty))) == "Char": return "char"
         return e.cType(t.Base(ty), ds)
@@ -8365,7 +8365,7 @@ fn (e mut Emitter&) cType(ty types.TypeId, ds mut cDecls&) String {
         if ds.seen.Has($"s " + $n): return n
         ds.seen.Put($"s " + $n, true)
         e.P.Layout(r)
-        fs := t.Items(t.Fields(r))
+        fs :~ t.Items(t.Fields(r))
         names := e.fieldNames(r, fs.Len())
         if t.Packed(r) {
             ds.Structs.Push($"typedef struct __attribute__((packed)) " + $n + " {\n" + $e.cBitfields(fs, names) + "} " + $n + ";\n\n")
@@ -8389,10 +8389,10 @@ fn (e mut Emitter&) cType(ty types.TypeId, ds mut cDecls&) String {
 # X13a: a C function pointer's type in a header - a typedef of its own, "olang_fn_K", declared before what names it:
 # "typedef int32_t (*olang_fn_1)(int32_t);", a plain struct's reference its pointer (const where read-only)
 fn (e mut Emitter&) cFuncType(r types.TypeId, ds mut cDecls&) String {
-    t := e.T
+    t :~ e.T
     f := t.Referent(r)
     key := "p " + $t.Canon(t.Plain(f))
-    n := try ds.Fns.Get(key) catch default ""
+    n :~ try ds.Fns.Get(key) catch default ""
     if n != "": return n
     ps := StringBuilder()
     for k, p in t.Items(t.Params(f)) {
@@ -8412,8 +8412,8 @@ fn (e mut Emitter&) cFuncType(r types.TypeId, ds mut cDecls&) String {
     }
     if ps.Len() == 0: ps.Push("void")
     res := t.Result(f)
-    ret := "void" if res == types.VoidT else e.cType(res, ds)
-    n = "olang_fn_" + $(ds.Fns.Len() + 1)
+    ret :~ "void" if res == types.VoidT else e.cType(res, ds)
+    n ~ "olang_fn_" + $(ds.Fns.Len() + 1)
     ds.Fns.Put(key, n)
     ds.Structs.Push($"typedef " + $ret + " (*" + $n + ")(" + $ps.ToString() + ");\n\n")
     return n
@@ -8423,7 +8423,7 @@ fn (e mut Emitter&) cFuncType(r types.TypeId, ds mut cDecls&) String {
 # type of at least the width (a signed one for a signed integer), bool for a Bool - C lays bitfields of a packed struct
 # bit by bit, as T13c does
 fn (e mut Emitter&) cBitfields(fs Array<types.TypeId>&, names Array<String&>&) String {
-    t := e.T
+    t :~ e.T
     b := StringBuilder()
     for k in range fs.Len() {
         ft := t.Repr(fs[k])
@@ -8438,11 +8438,11 @@ fn (e mut Emitter&) cBitfields(fs Array<types.TypeId>&, names Array<String&>&) S
 }
 
 fn (e mut Emitter&) cBitfield(ft types.TypeId) String {
-    t := e.T
+    t :~ e.T
     if ft == types.BoolT: return "bool"
     w := t.PackedBits(ft)
     signed := t.IsInt(ft) and not t.IsUnsigned(ft)
-    base := "int" if signed else "uint"
+    base :~ "int" if signed else "uint"
     if w > 64 { return "__int128" if signed else "unsigned __int128" }
     return $base + $IntBytes8(w) + "_t"
 }
@@ -8451,13 +8451,13 @@ fn IntBytes8(w I64) I64 { return 8 if w <= 8 else 16 if w <= 16 else 32 if w <= 
 
 # whether an export fn's result is an array copied out into C's buffer (X12)
 fn (e mut Emitter&) exportArrayResult(r types.TypeId) Bool {
-    t := e.T
+    t :~ e.T
     return not t.IsRef(t.Repr(r)) and e.arrayOfE(r) != types.UnknownT
 }
 
 # the array type a type is or is declared over (String's Array<Char>), Unknown for none
 fn (e mut Emitter&) arrayOfE(r types.TypeId) types.TypeId {
-    t := e.T
+    t :~ e.T
     x := t.Repr(r)
     for _ in range 8 {
         if t.KindOf(x) == types.Kind.Array: return x
@@ -8515,7 +8515,7 @@ fn (e mut Emitter&) runtimeItems() {
     }
     # a text builder's layout, which the runtime reaches by offsets and so does not name: emission's own (E11b)
     tys.Push("%olang.builder = type { ptr, i64, i64, ptr, ptr }\n")
-    e.rtTypes = tys.ToString()
+    e.rtTypes ~ tys.ToString()
 }
 
 # the symbol a line of the runtime's declarations declares or defines: after its first "@", to "(" or " = "
@@ -8552,7 +8552,7 @@ fn (e mut Emitter&) sanInit(b mut StringBuilder&) {
 }
 
 fn (e mut Emitter&) entry(inits Vec<I64>, mainBody I64) {
-    t := e.T
+    t :~ e.T
     e.define("__olang_argc", "@__olang_argc = external global i32")
     e.define("__olang_argv", "@__olang_argv = external global ptr")
     e.runtime("__olang_thread_init")
@@ -8573,7 +8573,7 @@ fn (e mut Emitter&) entry(inits Vec<I64>, mainBody I64) {
     }
     k := mir.FnKey.Body(typed.BodyId(I32(mainBody)))
     ty := e.Lw.Bodies[mainBody].Ty
-    errs := t.Items(t.Errors(ty))
+    errs :~ t.Items(t.Errors(ty))
     # O1b, C11: the program's scope's destructors run as it ends normally
     e.runtime("__olang_prog_end")
     if errs.Len() == 0 {
@@ -8591,7 +8591,7 @@ fn (e mut Emitter&) entry(inits Vec<I64>, mainBody I64) {
     n I64 = 0
     for i in range errs.Len() {
         et := t.ErrOf(errs[i])
-        ws := e.P.ErrorWords(t.DeclOf(et))
+        ws :~ e.P.ErrorWords(t.DeclOf(et))
         for j in range ws.Len() {
             n++
             code := ((i + 1) << 16) | j
@@ -8627,8 +8627,8 @@ fn (e mut Emitter&) dbgFunctions(text String&) String {
             at := try line.Find("@") catch default -1
             open := try line.Find("(") catch default -1
             if at >= 0 and open > at {
-                sym := line[at + 1:open]
-                name := "startup" if sym == "main" else ("task" if sym.StartsWith("olang_task") else e.readableTypes(types.Demangle(sym)))
+                sym :~ line[at + 1:open]
+                name :~ "startup" if sym == "main" else ("task" if sym.StartsWith("olang_task") else e.readableTypes(types.Demangle(sym)))
                 file := e.dbgGenFile()
                 sp := e.dbgNew()
                 l := e.dbgNew()
@@ -8839,7 +8839,7 @@ fn (e mut Emitter&) testSource() {
 # B19: the tests a fuzz build's word names, as the harness's B7a selection reads a word: its target, its target's type,
 # or text of its description
 fn (e mut Emitter&) fuzzSelected(tests Vec<I64>) Vec<I64> {
-    w := e.Fuzz
+    w :~ e.Fuzz
     out Vec<I64>
     for id in tests {
         tg, ds := e.testParts(id)
@@ -8894,17 +8894,17 @@ fn (e mut Emitter&) fuzzHarness(tests Vec<I64>, gs Vec<String&>, b mut StringBui
     if picked.Len() != 1 {
         names Vec<String&>
         for id in picked: names.Push(e.testName(id))
-        e.FuzzErr = $"" if picked.Len() == 0 else names.Join(", ")
+        e.FuzzErr ~ $"" if picked.Len() == 0 else names.Join(", ")
         e.FuzzPicked = picked.Len()
         return
     }
     e.FuzzPicked = 1
     id := picked[0]
     name := e.testName(id)
-    file := e.P.L.Mods[e.P.L.Root].Path
+    file :~ e.P.L.Mods[e.P.L.Root].Path
     corpus := fuzzCorpus(file, name)
     cache := $e.FuzzCache + "/" + $fuzzSlug(name)
-    e.FuzzCorpus = $corpus
+    e.FuzzCorpus ~ $corpus
     e.testSource()
     e.declare("malloc", "ptr @malloc(i64)")
     e.declare("mkdir", "i32 @mkdir(ptr, i32)")
@@ -8959,7 +8959,7 @@ fn (e mut Emitter&) fuzzHarness(tests Vec<I64>, gs Vec<String&>, b mut StringBui
 # not where its body is in the program's table, and an edit elsewhere in the root leaves every test's symbol (and so
 # the part of the root's object it is in, partOf) as it was
 fn (e mut Emitter&) testSym(id I64) String {
-    s := try e.testSyms.Get(id) catch default ""
+    s :~ try e.testSyms.Get(id) catch default ""
     if s != "": return $s
     seen Map<I64, I64>
     for i in range e.Lw.Bodies.Len() {
@@ -8977,17 +8977,17 @@ fn (e mut Emitter&) testSym(id I64) String {
 }
 
 fn (e mut Emitter&) testName(id I64) String {
-    m := e.P.L.Mods[e.P.L.Root]
-    d := ast.FindTest(m.Decls, e.Lw.Bodies[id].Sp)
-    if d == null: return "test"
+    m :~ e.P.L.Mods[e.P.L.Root]
+    d :~ ast.FindTest(m.Decls, e.Lw.Bodies[id].Sp)
+    if d is null: return "test"
     return ast.TestLabel(d, m.Src!.Text, e.P.L.Names)
 }
 
 # B7a: a test's target and description, apart, for the harness's selection by the words its command line gives
 fn (e mut Emitter&) testParts(id I64) String, String {
-    m := e.P.L.Mods[e.P.L.Root]
-    d := ast.FindTest(m.Decls, e.Lw.Bodies[id].Sp)
-    if d == null: return "", "test"
+    m :~ e.P.L.Mods[e.P.L.Root]
+    d :~ ast.FindTest(m.Decls, e.Lw.Bodies[id].Sp)
+    if d is null: return "", "test"
     return ast.TestTarget(d, e.P.L.Names), ast.TestDesc(d, m.Src!.Text)
 }
 
@@ -8999,8 +8999,8 @@ fn (e mut Emitter&) testParts(id I64) String, String {
 # worker handed a trampoline of its own that unpacks the environment, makes the call, stores the results, and returns
 # an error no clause took under the join's list (P4b)
 fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
-    t := fe.E.T
-    e := fe.E
+    t :~ fe.E.T
+    e :~ fe.E
     js := "%s" + $j
     ty := types.UnknownT
     callee := ""
@@ -9033,7 +9033,7 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
             fe.gap("a task calling through a C function pointer")
         }
     }
-    ps := t.Items(t.Params(ty))
+    ps :~ t.Items(t.Params(ty))
     # the environment's fields and their values
     fields Vec<String&>
     vals Vec<String&>
@@ -9057,7 +9057,7 @@ fn (fe mut fnEm&) spawn(j mir.ScopeId, k mir.Task) {
                 # where its making is guarded by its place's decision, where that place is decided sole: else the scope
                 # is the region's parent, which the spawner may build in beside the task)
                 fresh := freshScope(k, I64(i))
-                how := "__olang_standin_or" if fresh else "__olang_standin_in"
+                how :~ "__olang_standin_or" if fresh else "__olang_standin_in"
                 e.runtime(how)
                 whole := ""
                 if fresh: whole = ", i1 " + $("true" if k.FreshGuard < 0 else fe.load("i1", "@" + $e.sole(k.FreshGuard)))
@@ -9161,8 +9161,8 @@ fn freshScope(k mir.Task, i I64) Bool { return i < 63 and (k.Fresh & (I64(1) << 
 # error it fails with re-encoded under the join's list (as a pointer's bits, the runtime's contract), null for none
 fn (fe mut fnEm&) trampoline(envT String&, fields Vec<String&>, isValue Bool, callee String&, ty types.TypeId
                              nscopes I64, k mir.Task, joinErrs types.ListId, copyF Array<I64>&, dfield I64) String {
-    e := fe.E
-    t := e.T
+    e :~ fe.E
+    t :~ e.T
     ntargets := I64(k.Targets.N)
     name := "olang_task" + $e.ntask
     e.ntask++
@@ -9172,18 +9172,18 @@ fn (fe mut fnEm&) trampoline(envT String&, fields Vec<String&>, isValue Bool, ca
     tfield := (1 if isValue else 0) + t.Items(t.Params(ty)).Len() + nscopes
     fe.taskOld(b, k, tfield)
     at I64 = 0
-    target := callee
+    target :~ callee
     args := StringBuilder()
     first := true
     if isValue {
         b.Push("  %fv = load { ptr, ptr }, ptr %f0\n  %code = extractvalue { ptr, ptr } %fv, 0\n  %fenv = extractvalue { ptr, ptr } %fv, 1\n")
-        target = "%code"
+        target ~ "%code"
         args.Push("ptr %fenv")
         first = false
         at = 1
     }
     e.signature(ty)
-    ps := t.Items(t.Params(ty))
+    ps :~ t.Items(t.Params(ty))
     pass := t.Passing(ty)
     res := t.Result(ty)
     via := res != types.VoidT and res != types.NoreturnT and t.ViaMemory(res)
@@ -9246,7 +9246,7 @@ fn (fe mut fnEm&) trampoline(envT String&, fields Vec<String&>, isValue Bool, ca
         }
     }
     if errs {
-        code := "%r" if (via or res == types.VoidT) else "%c"
+        code :~ "%r" if (via or res == types.VoidT) else "%c"
         if code == "%c": b.Push("  %c = extractvalue " + $rt + " %r, 0\n")
         b.Push("  %bad = icmp ne i32 " + $code + ", 0\n  br i1 %bad, label %fail, label %ok\nfail:\n")
         fe.clauses(b, code, k, ty, at + ps.Len() + nscopes + ntargets, at + ps.Len() + nscopes, copyF, dfield)
@@ -9273,7 +9273,7 @@ fn (fe mut fnEm&) trampoline(envT String&, fields Vec<String&>, isValue Bool, ca
             if ntargets == 1 {
                 b.Push("  %d0 = load ptr, ptr %f" + $t0 + "\n  call void @llvm.memmove.p0.p0.i64(ptr %d0, ptr %out, i64 " + $t.Size(res) + ", i1 false)\n")
             } else {
-                parts := t.Items(t.Parts(t.Repr(res)))
+                parts :~ t.Items(t.Parts(t.Repr(res)))
                 for i in range ntargets {
                     e.P.Layout(parts[i])
                     b.Push("  %d" + $i + " = load ptr, ptr %f" + $(t0 + i) + "\n")
@@ -9284,7 +9284,7 @@ fn (fe mut fnEm&) trampoline(envT String&, fields Vec<String&>, isValue Bool, ca
         } else if ntargets == 1 {
             b.Push("  %d0 = load ptr, ptr %f" + $t0 + "\n  store " + $e.ty(res) + " " + $value + ", ptr %d0\n")
         } else {
-            parts := t.Items(t.Parts(t.Repr(res)))
+            parts :~ t.Items(t.Parts(t.Repr(res)))
             for i in range ntargets {
                 b.Push("  %d" + $i + " = load ptr, ptr %f" + $(t0 + i) + "\n")
                 b.Push("  %x" + $i + " = extractvalue " + $e.ty(res) + " " + $value + ", " + $i + "\n")
@@ -9301,7 +9301,7 @@ fn (fe mut fnEm&) trampoline(envT String&, fields Vec<String&>, isValue Bool, ca
 # whether a task's target i holds an array by value (P1g)
 fn (fe mut fnEm&) valueTarget(k mir.Task, i I64) Bool {
     if k.Copies.N == I32(0): return false
-    t := fe.E.T
+    t :~ fe.E.T
     r := t.Repr(fe.placeType(fe.F.Places[I64(k.Targets.At) + i]))
     return t.KindOf(r) == types.Kind.Array and t.Length(r) == types.TypeId(0)
 }
@@ -9318,8 +9318,8 @@ fn (fe mut fnEm&) taskOld(b mut StringBuilder&, k mir.Task, tfield I64) {
 # result's elements written into the storage the target held where the length is unchanged, else the target keeps the
 # result's storage, or a copy of it made where the target's storage is (copyF) where that assignment copies
 fn (fe mut fnEm&) taskFix(b mut StringBuilder&, k mir.Task, tfield I64, copyF Array<I64>&, tag String&) {
-    e := fe.E
-    t := e.T
+    e :~ fe.E
+    t :~ e.T
     for i in range k.Targets.N {
         if not fe.valueTarget(k, i): continue
         r := t.Repr(fe.placeType(fe.F.Places[I64(k.Targets.At) + i]))
@@ -9337,7 +9337,7 @@ fn (fe mut fnEm&) taskFix(b mut StringBuilder&, k mir.Task, tfield I64, copyF Ar
         b.Push("  store { i64, ptr } %old" + $i + ", ptr " + $n + "d\n  br label %" + $l + "e\n" + $l + "f:\n")
         if copyF[i] >= 0 {
             al := t.Align(el)
-            af := "__olang_scope_alloc_min" if al > 8 else "__olang_scope_alloc"
+            af :~ "__olang_scope_alloc_min" if al > 8 else "__olang_scope_alloc"
             e.runtime(af)
             e.define("__olang_prog_scope", "@__olang_prog_scope = external thread_local(initialexec) global ptr")
             b.Push("  " + $n + "c = load ptr, ptr %f" + $copyF[i] + "\n  " + $n + "z = icmp eq ptr " + $n + "c, null\n")
@@ -9357,8 +9357,8 @@ fn (fe mut fnEm&) taskFix(b mut StringBuilder&, k mir.Task, tfield I64, copyF Ar
 # the environment's field dfield says (mir.Task.Default), the program's where it is -1
 fn (fe mut fnEm&) clauses(b mut StringBuilder&, code String&, k mir.Task, ty types.TypeId, hfield I64, tfield I64
                           copyF Array<I64>&, dfield I64) {
-    e := fe.E
-    t := e.T
+    e :~ fe.E
+    t :~ e.T
     errs := t.Errors(ty)
     h := hfield
     for ci in range k.Clauses.N {
@@ -9438,8 +9438,8 @@ fn (fe mut fnEm&) clauses(b mut StringBuilder&, code String&, k mir.Task, ty typ
 # a handler's several results (its value, of type res) stored into the task's targets, whose places are the frame's
 # fields from tfield on - clause ci's
 fn (fe mut fnEm&) storeParts(b mut StringBuilder&, ci String&, res types.TypeId, value String&, tfield I64, n I32) {
-    t := fe.E.T
-    parts := t.Items(t.Parts(t.Repr(res)))
+    t :~ fe.E.T
+    parts :~ t.Items(t.Parts(t.Repr(res)))
     for i in range n {
         b.Push("  %hd" + $ci + "_" + $i + " = load ptr, ptr %f" + $(tfield + i) + "\n")
         b.Push("  %hx" + $ci + "_" + $i + " = extractvalue " + $fe.E.ty(res) + " " + $value + ", " + $i + "\n")
@@ -9450,8 +9450,8 @@ fn (fe mut fnEm&) storeParts(b mut StringBuilder&, ci String&, res types.TypeId,
 # "spawn f(x)!" (E35, P6): the error code the task's call failed with ends the program from the task's thread, named
 # as a "!" names it, where the "!" is
 fn (fe mut fnEm&) taskEnds(b mut StringBuilder&, code String&, k mir.Task) {
-    e := fe.E
-    bf := "__olang_bang_failed" if e.traced() else "__olang_bang_failed_plain"
+    e :~ fe.E
+    bf :~ "__olang_bang_failed" if e.traced() else "__olang_bang_failed_plain"
     e.declare(bf, $"void @" + $bf + "(ptr)")
     for i in range 0, I64(k.Ends.N), 2 {
         v I64 = 0
@@ -9472,8 +9472,8 @@ fn (fe mut fnEm&) taskEnds(b mut StringBuilder&, code String&, k mir.Task) {
 
 # a code under list from as the same error under list to, written into b: the name of its value
 fn (e mut Emitter&) recodeText(b mut StringBuilder&, code String&, from types.ListId, to types.ListId) String {
-    t := e.T
-    xs := t.Items(from)
+    t :~ e.T
+    xs :~ t.Items(from)
     b.Push("  %rhi = lshr i32 " + $code + ", 16\n  %rw = and i32 " + $code + ", 65535\n")
     pos := "0"
     for k in range xs.Len() {

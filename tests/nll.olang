@@ -39,15 +39,15 @@ fn churn() I64 {
 fn click(w mut Widget&) I64 {
     at mut Widget?& = w
     n := 0
-    for at != null {
-        a := at
+    for at is not null {
+        a :~ at
         if a.kind == Kind.Button {
             a.clicks++
             return n
         }
         if a.kind == Kind.Panel: a.clicks++
         n++
-        at = a.parent
+        at ~ a.parent
     }
     return n
 }
@@ -65,8 +65,8 @@ fn clickDepth() I64 {
 # a list's tail found by a cursor and appended to: what is built through it lives where the list does
 fn appendTail(head mut Node&, v I64) {
     at mut Node& = head
-    for at.next != null: at = at.next!
-    at.next = Node(v)
+    for at.next is not null: at ~ at.next!
+    at.next ~ Node(v)
 }
 
 fn chainSum(n I64) I64 {
@@ -75,9 +75,9 @@ fn chainSum(n I64) I64 {
     churn()
     s := 0
     at Node?& = head
-    for at != null {
+    for at is not null {
         s = s * 10 + at.v
-        at = at.next
+        at ~ at.next
     }
     return s
 }
@@ -86,7 +86,7 @@ fn chainSum(n I64) I64 {
 fn planAt(args Array<String&>&) String {
     plan String& = ""
     for k in range args.Len() {
-        if args[k] == "-plan" and k + 1 < args.Len(): plan = args[k + 1]
+        if args[k] == "-plan" and k + 1 < args.Len(): plan ~ args[k + 1]
     }
     return $plan
 }
@@ -96,7 +96,7 @@ fn ops(n I64) String {
     out := StringBuilder()
     op String& = " < "
     for k in range n {
-        if k >= 2: op = Array<String&>[" + ", " - ", " * "][(k - 2) % 3]
+        if k >= 2: op ~ Array<String&>[" + ", " - ", " * "][(k - 2) % 3]
         out.Push(op)
     }
     churn()
@@ -121,9 +121,9 @@ fn caught(v I64) I64 {
     xs := Array<Node&>[a, b]
     got Node& = a
     try check(v) catch {
-        got = b
+        got ~ b
     }
-    if v == 2 { got = try find(xs, v) catch default a }
+    if v == 2 { got ~ try find(xs, v) catch default a }
     churn()
     return got.v
 }
@@ -132,7 +132,7 @@ fn caught(v I64) I64 {
 fn lastSeen(xs Array<Node&>&, out mut Box&) {
     cur Node& = xs[0]
     defer { out.v = cur.v }
-    for x in xs: cur = x
+    for x in xs: cur ~ x
 }
 
 fn deferred() I64 {
@@ -147,7 +147,7 @@ fn captured(k I64) I64 {
     a := Node(10)
     b := Node(20)
     cur Node& = a
-    if k > 0: cur = b
+    if k > 0: cur ~ b
     f := fn() I64 { return cur.v }
     churn()
     return f()
@@ -158,7 +158,7 @@ fn afterLoop(n I64) I64 {
     keep Node& = Node(-1)
     for i in range n {
         inner mut Node& = Node(i * 3)
-        keep = inner
+        keep ~ inner
     }
     churn()
     return keep.v
@@ -169,8 +169,8 @@ fn twoOfOne(k I64) I64 {
     a := Node(1)
     b := Node(2)
     at mut Node& = a
-    if k > 0: at = b
-    at.next = Node(9)
+    if k > 0: at ~ b
+    at.next ~ Node(9)
     churn()
     return a.v * 100 + b.v * 10 + at.next!.v
 }

@@ -19,7 +19,7 @@ fn main()?io.Error{
   n<100 {
       try io.PutLn( $n )
   }
-  s := xs[ 1 : 2 ]
+  s :~ xs[ 1 : 2 ]
   f:=fn(x I64)I64{ return x+1 }
   a,b:=two()
   try io.PutLn($f(a) +  $b + $s.Len() + $l.Len()  )   ## a block comment ##

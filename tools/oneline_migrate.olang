@@ -62,7 +62,7 @@ fn simple(s String&) Bool {
         if w == k: return false
     }
     # a declaration: a word followed by a name or type; only the statement keywords take a word after them
-    rest := s[w.Len():]
+    rest :~ s[w.Len():]
     if w == "fn": return false
     if rest.Len() > 1 and rest[0] == ' ' and (srcmask.IsIdStart(rest[1]) or rest[1] == '?' or rest[1] == ',') {
         ok := w == "return" or w == "error" or w == "assert" or w == "spawn" or w == "unreachable" or w == "try"
@@ -75,7 +75,7 @@ fn simple(s String&) Bool {
 # the head of an opener line (stripped), with its trailing " {" removed, or "" when the line is no convertible head
 fn headOf(t String&, first Bool) String {
     if not t.EndsWith(" {"): return ""
-    h := t[:t.Len() - 2]
+    h :~ t[:t.Len() - 2]
     if first {
         if h.StartsWith("if ") or (h.StartsWith("for ") and h != "for"): return $h
         return ""
@@ -85,16 +85,16 @@ fn headOf(t String&, first Bool) String {
 }
 
 fn rewrite(src String&, c mut Count&) String {
-    lines := src.Split("\n")
+    lines :~ src.Split("\n")
     out Vec<String&>
     inText := false
     i I64 = 0
     for i < lines.Len() {
-        line := lines[i]
+        line :~ lines[i]
         if countOf(line, "\"\"\"") % 2 == 1 or (line.StartsWith("##") and countOf(line, "##") % 2 == 1) { inText = not inText }
         n := 0
         if not inText: n = chain(lines, i, out)
-        braced := "" if inText or n > 0 else braces(lines, i)
+        braced :~ "" if inText or n > 0 else braces(lines, i)
         if braced.Len() > 0 {
             out.Push($braced)
             c.n++
@@ -113,14 +113,14 @@ fn rewrite(src String&, c mut Count&) String {
 # the one-line braced form `if c { stmt }` / `for x in xs { stmt }` at lines[i] as `if c: stmt`, "" if the line is not one:
 # its head begins `if `/`for `, one `{` and the closing `}` end it, the body qualifies, the next line is no `else`
 fn braces(lines Array<String&>&, i I64) String {
-    line := lines[i]
+    line :~ lines[i]
     ind := indentOf(line)
-    t := line[ind:]
+    t :~ line[ind:]
     if ind == 0 or not (t.StartsWith("if ") or t.StartsWith("for ")) or not t.EndsWith(" }"): return ""
     if countOf(t, "{") != 1 or countOf(t, "}") != 1: return ""
     k := try t.Find(" { ") catch { return "" }
     if k + 3 > t.Len() - 2 or t[:k] == "for": return ""
-    stmt := t[k + 3:t.Len() - 2]
+    stmt :~ t[k + 3:t.Len() - 2]
     if not simple(stmt): return ""
     if i + 1 < lines.Len() and lines[i + 1][indentOf(lines[i + 1]):].StartsWith("else"): return ""
     row := $line[:ind] + $t[:k] + ": " + $stmt
@@ -129,11 +129,11 @@ fn braces(lines Array<String&>&, i I64) String {
 
 # tries to convert the chain starting at lines[i]; pushes the new lines to out and gives how many lines it covered, 0 if none
 fn chain(lines Array<String&>&, i I64, out mut Vec<String&>&) I64 {
-    line := lines[i]
+    line :~ lines[i]
     ind := indentOf(line)
     if ind == 0: return 0
-    t := line[ind:]
-    pad := line[:ind]
+    t :~ line[ind:]
+    pad :~ line[:ind]
     isFor := t.StartsWith("for ")
     head := headOf(t, true)
     if head == "": return 0
@@ -141,14 +141,14 @@ fn chain(lines Array<String&>&, i I64, out mut Vec<String&>&) I64 {
     j := i
     for {
         if j + 2 >= lines.Len(): return 0
-        body := lines[j + 1]
+        body :~ lines[j + 1]
         if indentOf(body) != ind + 4: return 0
-        stmt := body[ind + 4:]
+        stmt :~ body[ind + 4:]
         if not simple(stmt): return 0
         row := $pad + $head + ": " + $stmt
         if row.Len() > MaxWidth: return 0
         mine.Push(row)
-        closer := lines[j + 2]
+        closer :~ lines[j + 2]
         if closer == $pad + "}" {
             for r in mine: out.Push($r)
             return j + 3 - i
@@ -179,9 +179,9 @@ fn main() ? {
     check := false
     verbose := false
     paths Vec<String&>
-    args := os.Args()
+    args :~ os.Args()
     for i in range 1, args.Len() {
-        a := args[i]
+        a :~ args[i]
         if a == "--check": check = true
         else if a == "-v": verbose = true
         else: paths.Push($a)
@@ -214,7 +214,7 @@ fn main() ? {
             }
         }
     }
-    verb := "would change " if check else "changed "
+    verb :~ "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files: " + $total.n + " blocks")
     if check and changed > 0: os.Exit(1)
 }

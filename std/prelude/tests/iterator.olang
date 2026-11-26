@@ -8,7 +8,7 @@ fn upTo(n I64) Vec<I64>& {
 }
 
 test "Take and Skip walk part of an iterator" {
-    l := upTo(10)
+    l :~ upTo(10)
     assert l.Iter().Take(3).ToVec() == upTo(3)
     assert l.Iter().Skip(7).ToVec().ToArray() == Array<I64>[7, 8, 9]
     assert l.Iter().Skip(2).Take(3).ToVec().ToArray() == Array<I64>[2, 3, 4]
@@ -131,7 +131,7 @@ test "the walks fail with what their iterator and callbacks fail with" {
     yes, no := try Array<I64>[1, 3, 5].Iter().Partition(odd) catch Bad { unreachable }
     assert yes.ToArray() == Array<I64>[1, 3, 5] and no.Len() == 0
     assert (try Array<I64>[1, 4].Iter().SkipWhile(odd).ToVec() catch Bad default Vec<I64>()).Len() == 0
-    flat := try upToSeven(5).FlatMap(fn(x I64) Generator<I64 ? Bad> { return upToSeven(x) }).ToVec()
+    flat :~ try upToSeven(5).FlatMap(fn(x I64) Generator<I64 ? Bad> { return upToSeven(x) }).ToVec()
     assert flat.Len() == 10
     try upToSeven(9).FlatMap(fn(x I64) Generator<I64 ? Bad> { return upToSeven(x) }).ToVec() catch Bad {
         return

@@ -408,31 +408,31 @@ fn (r reader&) col() I64 {
 
 fn (r mut reader&) push(v mut Json&) {
     if r.nv == r.vals.Len() {
-        old := r.vals
-        r.vals = Array<mut Json&>(r.nv * 2, old[0])
-        for i in range r.nv: r.vals[i] = old[i]
+        old :~ r.vals
+        r.vals ~ Array<mut Json&>(r.nv * 2, old[0])
+        for i in range r.nv: r.vals[i] ~ old[i]
     }
-    r.vals[r.nv] = v
+    r.vals[r.nv] ~ v
     r.nv++
 }
 
 fn (r mut reader&) pushName(name String&) {
     if r.nn == r.names.Len() {
-        old := r.names
-        r.names = Array<String&>(r.nn * 2, old[0])
-        for i in range r.nn: r.names[i] = old[i]
+        old :~ r.names
+        r.names ~ Array<String&>(r.nn * 2, old[0])
+        for i in range r.nn: r.names[i] ~ old[i]
     }
-    r.names[r.nn] = name
+    r.names[r.nn] ~ name
     r.nn++
 }
 
 fn (r mut reader&) open(isObject Bool) ? Error {
     if r.depth == MaxDepth: error Error.Depth(r.line(), r.col())
     if r.depth == r.starts.Len() {
-        old := r.starts
-        oldNames := r.nameStarts
-        r.starts = Array<I64>(r.depth * 2)
-        r.nameStarts = Array<I64>(r.depth * 2)
+        old :~ r.starts
+        oldNames :~ r.nameStarts
+        r.starts ~ Array<I64>(r.depth * 2)
+        r.nameStarts ~ Array<I64>(r.depth * 2)
         for i in range r.depth {
             r.starts[i] = old[i]
             r.nameStarts[i] = oldNames[i]
@@ -450,14 +450,14 @@ fn (r mut reader&) close() {
     from I64 = r.starts[r.depth]
     n I64 = r.nv - from
     items mut Array<Json&>& = Array<Json&>(n, r.vals[0])     # each written below
-    for i in range n: items[i] = r.vals[from + i]
+    for i in range n: items[i] ~ r.vals[from + i]
     r.nv = from
     namesFrom I64 = r.nameStarts[r.depth]
     if namesFrom < 0 {
         r.push(Json.Arr(items))
     } else {
         names mut Array<String&>& = Array<String&>(n, r.names[0])
-        for i in range n: names[i] = r.names[namesFrom + i]
+        for i in range n: names[i] ~ r.names[namesFrom + i]
         r.nn = namesFrom
         r.push(Json.Obj(try Object(names, items) catch { unreachable }))
     }
@@ -812,7 +812,7 @@ fn (r reader&) digitAt(i I64) Bool { return i < r.src.Len() and r.src[i].IsDigit
 # the number the text from start to pos is, its F64 v: a Num - or, for a whole number written with no fraction and no
 # exponent that an I64 or a U64 holds and v does not hold exactly, an Int or a Uint holding it exactly
 fn (r reader&) exact(start I64, v F64) mut Json& {
-    t := r.src[start:r.pos]
+    t :~ r.src[start:r.pos]
     if t.Len() - (1 if t[0] == '-' else 0) <= 15 { return Json.Num(v) }      # 15 digits or fewer: v is exact
     for ch in t {
         if ch == '.' or ch == 'e' or ch == 'E': return Json.Num(v)
@@ -987,7 +987,7 @@ fn keyText<F>(f F, keys Naming) String& {
 # Fails with what Parse fails with, with Error.Missing and Error.WrongKind where the text does not fit
 # the type, and with what a constructor fails with
 fn Decode<T>(text String&, naming Naming = Naming.Exact) T ? {
-    j := try Json.Parse(text)
+    j :~ try Json.Parse(text)
     return try From<T>(j, naming)
 }
 
@@ -998,7 +998,7 @@ fn From<T>(j Json&, naming Naming = Naming.Exact) T ? {
         case String { return String(try j.AsStr()) }
         case String& { return $(try j.AsStr()) }
         case Char {
-            t := try j.AsStr()
+            t :~ try j.AsStr()
             if t.Len() != 1: error Error.WrongKind
             return t[0]
         }
@@ -1038,7 +1038,7 @@ fn From<T>(j Json&, naming Naming = Naming.Exact) T ? {
                 v := try From<T.Target>(j, keys)
                 return v
             } else if T.Kind == TypeKind.Struct {
-                o := try j.AsObj()
+                o :~ try j.AsObj()
                 n := namer<T>(keys)
                 return try T(try member(o, p, n) for p in T.Params)
             } else if T.Kind == TypeKind.Error {
@@ -1068,7 +1068,7 @@ fn From<T>(j Json&, naming Naming = Naming.Exact) T ? {
                         if o.Len() == 1 {
                             for c in T.Cases {
                                 if o.Keys[0] == n.key(c) {
-                                    fs := try o.Values[0].AsObj()
+                                    fs :~ try o.Values[0].AsObj()
                                     return c(try caseField(fs, f, keyText(f, keys), keys) for f in c.Fields)
                                 }
                             }
@@ -1236,7 +1236,7 @@ fn (w mut writer&) any<T>(v T, depth I64) {
                 w.fields(v, T.Fields.Len(), depth)
             } else if T.Kind == TypeKind.Error {
                 # an error value (T20) as "$" writes it, "io.Error.Failed"; null for none
-                if v == null { w.out.Push("null") } else { w.text($v) }
+                if v is null { w.out.Push("null") } else { w.text($v) }
             } else if T.Kind == TypeKind.Enum {
                 n := namer<T>(w.keys)
                 for c in T.Cases {
@@ -1359,7 +1359,7 @@ if TestBuild {
 
     # the number text is, or NaN when it is not one
     fn num(text String&) F64 {
-        doc := try Json.Parse(text) catch { return 0.0 / 0.0 }
+        doc :~ try Json.Parse(text) catch { return 0.0 / 0.0 }
         return try doc.AsNum() catch { return 0.0 / 0.0 }
     }
 
@@ -1380,13 +1380,13 @@ if TestBuild {
         i I64 = 1
         assert (try (try doc["a"][i][1]).AsNum()) == 3.0
         assert (try (try doc["a"]).AsArr()).Len() == 3
-        o := try doc.AsObj()
+        o :~ try doc.AsObj()
         assert o.Len() == 6 and o.Keys[0] == "s" and o.Keys[5] == "a"
         assert (try (try o["t"]).AsBool()) and "z" in o and "y" not in o
     }
 
     test "every kind of value, and asking for its parts" {
-        doc := try Json.Parse("{\"s\": \"text\", \"n\": -12.5e1, \"t\": true, \"f\": false, \"z\": null, \"a\": [1, [2, 3], {}]}")
+        doc :~ try Json.Parse("{\"s\": \"text\", \"n\": -12.5e1, \"t\": true, \"f\": false, \"z\": null, \"a\": [1, [2, 3], {}]}")
 
         try kinds(doc)
         assert (try doc["s"] as Json.Str catch default "") == "text"
@@ -1394,13 +1394,13 @@ if TestBuild {
         assert (try doc["a"][9] as Json.Num catch default -1.0) == -1.0
         assert "s" in doc and "a" in doc and "missing" not in doc
         assert asking(doc, "missing") == "MISSING" and asking(doc, 0) == "WRONG_KIND"
-        a := try doc["a"]
+        a :~ try doc["a"]
         assert asking(a, 3) == "MISSING" and asking(a, -1) == "MISSING" and asking(a, 2) == "ok"
         assert asking(a, "s") == "WRONG_KIND" and asking(try doc["s"], 0) == "WRONG_KIND"
         wrong := false
         try (try doc["s"]).AsNum() catch Error.WrongKind { wrong = true }
         assert wrong
-        half := try Json.Parse("2.5")
+        half :~ try Json.Parse("2.5")
         notWhole := false
         try half.AsInt() catch Error.WrongKind { notWhole = true }
         assert notWhole
@@ -1429,13 +1429,13 @@ if TestBuild {
     }
 
     test "strings: escapes, \\u and surrogate pairs to UTF-8" {
-        s := try (try Json.Parse("\"a\\\"b\\\\c\\/d\\b\\f\\n\\r\\t\"")).AsStr()
+        s :~ try (try Json.Parse("\"a\\\"b\\\\c\\/d\\b\\f\\n\\r\\t\"")).AsStr()
         assert s == "a\"b\\c/d" + $Char(8) + $Char(12) + "\n\r\t"
-        e := try (try Json.Parse("\"\\u00e9\\u4e2d\\ud83d\\ude00\\u0000!\"")).AsStr()
+        e :~ try (try Json.Parse("\"\\u00e9\\u4e2d\\ud83d\\ude00\\u0000!\"")).AsStr()
         assert e.Len() == 2 + 3 + 4 + 1 + 1
         assert e[0] == 0xC3 and e[1] == 0xA9 and e[2] == 0xE4 and e[3] == 0xB8 and e[4] == 0xAD
         assert e[5] == 0xF0 and e[6] == 0x9F and e[7] == 0x98 and e[8] == 0x80 and e[9] == 0 and e[10] == '!'
-        raw := try (try Json.Parse("[\"é中😀\"]"))[0]
+        raw :~ try (try Json.Parse("[\"é中😀\"]"))[0]
         assert (try raw.AsStr()) == "é中😀"
         assert problem("\"\\ud83d\"") == "BAD_ESCAPE 1:2" and problem("\"\\ude00\"") == "BAD_ESCAPE 1:2"
         assert problem("\"\\ud83dx\"") == "BAD_ESCAPE 1:2" and problem("\"\\x\"") == "BAD_ESCAPE 1:2"
@@ -1477,7 +1477,7 @@ if TestBuild {
     }
 
     test "Encode writes compact and indented text" {
-        doc := try Json.Parse("{\"a\": [1, 2.5, \"x\\ny\"], \"b\": {}, \"c\": [], \"d\": null, \"e\": true}")
+        doc :~ try Json.Parse("{\"a\": [1, 2.5, \"x\\ny\"], \"b\": {}, \"c\": [], \"d\": null, \"e\": true}")
         assert Encode(doc) == "{\"a\":[1,2.5,\"x\\ny\"],\"b\":{},\"c\":[],\"d\":null,\"e\":true}"
         assert Encode(doc, "  ") == "{\n  \"a\": [\n    1,\n    2.5,\n    \"x\\ny\"\n  ],\n  \"b\": {},\n  \"c\": [],\n  \"d\": null,\n  \"e\": true\n}"
         assert Encode(doc, "\t").StartsWith("{\n\t\"a\": [\n\t\t1,")
@@ -1492,7 +1492,7 @@ if TestBuild {
     test "a number is written as the shortest text that reads back as it" {
         for x in Array<F64>[0.1, 1.0 / 3.0, 2.0 / 3.0, 1e23, 9007199254740993.0, 2.2250738585072014e-308, 4.9406564584124654e-324
             1.7976931348623157e308, 7.120236347223045e-307, 123.456, -98765.4321e-12, 3.141592653589793] {
-            text := Encode(Json.Num(x))
+            text :~ Encode(Json.Num(x))
             assert num(text) == x and text.Len() <= ($x).Len()
         }
         assert Encode(Json.Num(7.120236347223045e-307)) == "7.120236347223045e-307"     # a power of two: 16 digits
@@ -1500,15 +1500,15 @@ if TestBuild {
 
     test "what Encode writes, Parse reads back as an equal value" {
         text := "[{\"x\": 1, \"y\": [true, false, null, \"\\u00e9\\ud83d\\ude00\"]}, -0.0, 1e-300, \"\", {\"\": {}}]"
-        doc := try Json.Parse(text)
-        again := try Json.Parse(Encode(doc))
-        pretty := try Json.Parse(Encode(doc, "    "))
+        doc :~ try Json.Parse(text)
+        again :~ try Json.Parse(Encode(doc))
+        pretty :~ try Json.Parse(Encode(doc, "    "))
         assert doc == again and doc == pretty and Encode(again) == Encode(doc)
         assert Encode(doc) == "[{\"x\":1,\"y\":[true,false,null,\"é😀\"]},-0,1e-300,\"\",{\"\":{}}]"
     }
 
     test "objects keep their order, answer with the last of a repeated name, and index big ones" {
-        doc := try Json.Parse("{\"b\": 1, \"a\": 2, \"b\": 3}")
+        doc :~ try Json.Parse("{\"b\": 1, \"a\": 2, \"b\": 3}")
         assert (try doc["b"] as Json.Num catch default 0.0) == 3.0
         assert Encode(doc) == "{\"b\":1,\"a\":2,\"b\":3}"
         big := StringBuilder()
@@ -1518,7 +1518,7 @@ if TestBuild {
             big.Push("\"key" + $i + "\": " + $(i * i))
         }
         big.Push(", \"key7\": -1}")
-        o := try Json.Parse(big.ToString())
+        o :~ try Json.Parse(big.ToString())
         for i in range 500 {
             want F64 = F64(i * i) if i != 7 else -1.0
             assert (try o["key" + $i] as Json.Num catch default -2.0) == want
@@ -1528,9 +1528,9 @@ if TestBuild {
     }
 
     test "two values are equal when they hold equal parts, objects in any order" {
-        a := try Json.Parse("{\"x\": [1, 2, {\"p\": null}], \"y\": \"s\"}")
-        b := try Json.Parse("{\"y\": \"s\", \"x\": [1.0, 2e0, {\"p\": null}]}")
-        c := try Json.Parse("{\"y\": \"s\", \"x\": [1, 2, {\"p\": false}]}")
+        a :~ try Json.Parse("{\"x\": [1, 2, {\"p\": null}], \"y\": \"s\"}")
+        b :~ try Json.Parse("{\"y\": \"s\", \"x\": [1.0, 2e0, {\"p\": null}]}")
+        c :~ try Json.Parse("{\"y\": \"s\", \"x\": [1, 2, {\"p\": false}]}")
         assert a == b and a != c and a.Hash() == b.Hash()
         assert (try Json.Parse("0")) == (try Json.Parse("-0"))
         assert (try Json.Parse("[1, 2]")) != (try Json.Parse("[2, 1]"))
@@ -1591,8 +1591,8 @@ if TestBuild {
     }
 
     test "the fixture file" {
-        text := try os.ReadFile("checks/fixtures/json/sample.json")
-        doc := try Json.Parse(text)
+        text :~ try os.ReadFile("checks/fixtures/json/sample.json")
+        doc :~ try Json.Parse(text)
         try fixture(doc)
         # T19b: where a text stops being JSON is carried by the error
         assert (try $Json.Parse("{\"a\":\n  [1, 2,]}") catch Error e default $e) == "Error.Unexpected(2, 9)"
@@ -1636,7 +1636,7 @@ if TestBuild {
         m := Map<String&, I64>()
         m.Put("a", 1)
         assert Encode(m) == "{\"a\":1}" and Encode(Hidden(1, 2)) == "{\"Open\":1,\"shut\":2}"
-        doc := try Json.Parse(Encode(report))
+        doc :~ try Json.Parse(Encode(report))
         assert Encode(doc) == bakedReport
     }
 
@@ -1742,8 +1742,8 @@ if TestBuild {
         want := "{\"N\":3,\"E\":\"" + $jsErr.Bad + "\",\"A\":\"" + $jsAny.Timeout + "\",\"Seen\":[\"" + $jsErr.Bad + "\",null]}"
         assert errText == want and errBack == jsErr.Bad
         r := try Decode<jsRec>(Encode(jsRec(4, null, jsAny.Timeout, jsSeen())))
-        assert r.N == 4 and r.E == null and r.A == jsAny.Timeout and r.Seen.Len() == 2 and r.Seen[0] == jsErr.Bad
-        assert r.Seen[1] == null and $r.A == "jsAny.Timeout"
+        assert r.N == 4 and r.E is null and r.A == jsAny.Timeout and r.Seen.Len() == 2 and r.Seen[0] == jsErr.Bad
+        assert r.Seen[1] is null and $r.A == "jsAny.Timeout"
         # T19b: an error carrying a payload is written as "$" writes it - read back only where its word carries none
         assert Encode(jsRec(5, null, os.Error.Denied("p"), jsSeen())).Contains("os.Error.Denied(\\\"p\\\")")
         assert (try Decode<jsAny>("\"os.Error.Denied(\\\"p\\\")\"") catch Error.WrongKind default jsAny.Timeout) == jsAny.Timeout
@@ -1769,7 +1769,7 @@ if TestBuild {
         assert (try Decode<I64>("-9223372036854775808")) == I64.Min and (try Decode<U64>("9223372036854775808")) == U64(9223372036854775808)
         assert (try Decode<I64>("9223372036854775808") catch Error.WrongKind default 0) == 0
         assert (try Decode<U64>("-1") catch Error.WrongKind default 7) == 7
-        n := try Json.Parse("[9007199254740993, -9007199254740993, 18446744073709551615, 9007199254740992, 1e19, 12.0]")
+        n :~ try Json.Parse("[9007199254740993, -9007199254740993, 18446744073709551615, 9007199254740992, 1e19, 12.0]")
         assert Encode(n) == "[9007199254740993,-9007199254740993,18446744073709551615,9007199254740992,1e+19,12]"
         assert (try (try n[0]).AsInt()) == 9007199254740993 and (try (try n[2]).AsUint()) == 18446744073709551615
         assert (try (try n[0]).AsNum()) == 9007199254740992.0 and (try (try n[4]).AsUint()) == 10000000000000000000

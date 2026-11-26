@@ -1,17 +1,17 @@
-# check: fail error[S4e]: 'out' is repointed at a new value: the caller still sees what it passed
-# S4e: '=' on a reference parameter repoints the callee's copy (S4a) - never read again, the caller's value is unchanged
+# check: fail error[S4e]: 'out' is linked to a new value: the caller still sees what it passed
+# S4e: '~' on a reference parameter links the callee's copy (S4f) - never read again, the caller's value is unchanged
 type Box struct() {
     Xs mut Array<F64>& = Array<F64>(0)
     N I64 = 0
 }
 fn Box.Make(n I64) Box {
     b := Box()
-    b.Xs = Array<F64>(n)
+    b.Xs ~ Array<F64>(n)
     b.N = n
     return b
 }
 fn fill(out mut Box&) {
-    out = Box.Make(3)
+    out ~ Box.Make(3)
 }
 fn main() {
     b := Box()

@@ -55,21 +55,21 @@ fn (b mut Bag1&) First() mut Node& { return b.p.C }
 
 fn (b mut Bag2&) Elem() mut Node& { return b.ps[0].C }
 
-fn (b mut Bag3&) into(s mut Slot&) { s.n = b.p.C }
+fn (b mut Bag3&) into(s mut Slot&) { s.n ~ b.p.C }
 
 fn (b mut Bag4&) wrap() Hold { return Hold.N(b.p.C) }
 
 fn viaReturn(outer mut Node&, i I64) {
     b := Bag1(Pass1(outer))
-    x := b.First()
+    x :~ b.First()
     y := Node(10 + i)
-    x.next = y
+    x.next ~ y
 }
 
 fn viaElem(outer mut Node&, i I64) {
     b := Bag2()
     b.ps.Push(Pass2(outer))
-    b.Elem().next = Node(20 + i)
+    b.Elem().next ~ Node(20 + i)
 }
 
 fn viaField(outer mut Node&, i I64) {
@@ -77,7 +77,7 @@ fn viaField(outer mut Node&, i I64) {
     s := Slot()
     b.into(s)
     y := Node(30 + i)
-    s.n!.next = y
+    s.n!.next ~ y
 }
 
 fn viaPayload(outer mut Node&, i I64) {
@@ -85,7 +85,7 @@ fn viaPayload(outer mut Node&, i I64) {
     h := b.wrap()
     y := Node(40 + i)
     match h {
-        case Hold.N(n) { n.next = y }
+        case Hold.N(n) { n.next ~ y }
         case Hold.Nil {}
     }
 }

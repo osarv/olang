@@ -3,7 +3,7 @@
 type C struct() { n I64 = 0 }
 type B struct(c mut C&) { c }
 fn (a B&) Str() String {
-    k := a.c
+    k :~ a.c
     f := fn() { k.n = k.n + 1 }
     g := f
     g()

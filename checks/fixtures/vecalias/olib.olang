@@ -4,4 +4,4 @@ type Node struct(V I64) {
 type Holder struct() {
     N Node?& = null
 }
-fn Stash(h mut Holder&, x Node&) { h.N = x }
+fn Stash(h mut Holder&, x Node&) { h.N ~ x }

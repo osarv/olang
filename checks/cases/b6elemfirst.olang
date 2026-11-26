@@ -10,6 +10,6 @@ fn main() ? {
     cells.Push(Cell())
     for i in range 3 {
         x String& = "w" + $i
-        (try cells.First()).s = x
+        (try cells.First()).s ~ x
     }
 }

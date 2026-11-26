@@ -19,7 +19,7 @@ fn main() ? {
         m.Put(k, Node(k, t * 2))
         nums.Put("k" + $t, t)
         if t >= 100 {
-            old := m.Get("n" + $(t - 100))!
+            old :~ m.Get("n" + $(t - 100))!
             assert m.Remove(old.key)
             assert nums.Take("k" + $(t - 100))! == t - 100
         }
@@ -27,7 +27,7 @@ fn main() ? {
     assert m.Len() == 100 and nums.Len() == 100
     sum := 0
     for t in range 2900, 3000 {
-        n := m.Get("n" + $t)!
+        n :~ m.Get("n" + $t)!
         assert n.key == "n" + $t and n.v == t * 2
         sum += nums.Get("k" + $t)!
     }

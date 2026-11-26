@@ -5,7 +5,7 @@ import "std/sha256"
 import "std/hex"
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     mb I64 = 16
     rounds I64 = 4
     if args.Len() > 2 {

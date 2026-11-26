@@ -44,7 +44,7 @@ fn grow(v mut Vec<Node>&) I64 {
 }
 
 fn kidsOf(v Vec<Node>&, at I32) I64 {
-    kids := v[at].kids.View()
+    kids :~ v[at].kids.View()
     s := 0
     for k in kids: s += I64(k)
     return s

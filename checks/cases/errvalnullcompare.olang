@@ -2,8 +2,8 @@
 # T20, E10c: an error value holding no error is tested with "== null", the one null test (an error naming "e is null"
 # until 2026-11-15)
 type PErr error { Bad }
-fn held(e PErr) Bool { return e != null }
-fn empty(e PErr) Bool { return null == e }
+fn held(e PErr) Bool { return e is not null }
+fn empty(e PErr) Bool { return null is e }
 fn main() {
     none PErr = null
     assert not held(none) and empty(none)

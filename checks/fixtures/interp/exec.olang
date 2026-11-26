@@ -7,7 +7,7 @@ import "std/cancel"
 
 fn main() ? os.Error, io.Error, json.Error {
     r := try os.Output.Exec("printf", "{\"a\": [1, 2.5e-3, true], \"b\": \"%s\"}", "it's ok \\u00e9")
-    doc := try json.Json.Parse(r.Stdout)
+    doc :~ try json.Json.Parse(r.Stdout)
     try io.Put($r.Status + " " + $json.Encode(doc) + "\n")
     try io.Put($json.Encode(doc, "  ") + "\n")
     e := try os.Output.Exec("sh", "-c", "cat; echo err >&2; exit 4", input = "fed in")

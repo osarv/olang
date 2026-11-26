@@ -1,4 +1,4 @@
-# check: fail error[S4e]: 'n' is repointed at a new value: the caller still sees what it passed
+# check: fail error[S4e]: 'n' is linked to a new value: the caller still sees what it passed
 # S4e: a call returning a value is storage given here too (E12c), whatever function builds it
 type N struct(v I64) {
     v
@@ -7,7 +7,7 @@ type N struct(v I64) {
 fn make(v I64) N { return N(v) }
 
 fn Bump(n N&) I64 {
-    n = make(n.v + 1)
+    n ~ make(n.v + 1)
     return n.v
 }
 

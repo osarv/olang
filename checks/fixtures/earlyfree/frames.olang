@@ -14,7 +14,7 @@ type Interp struct() {
 
 fn (it mut Interp&) call(d I64) I64 {
     it.frames.Push(Frame(d))
-    f := try it.frames.Last() catch { unreachable }
+    f :~ try it.frames.Last() catch { unreachable }
     f.vars.Put("x" + $d, d)
     depth := f.depth
     r := d

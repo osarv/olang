@@ -146,13 +146,13 @@ fn transportError(status I32) ? Error {
 # and an empty line, the last the one answered with - and whose body is "body"
 fn Response.response(dump String&, body String&) Response ? Error {
     # the last block: from after the last empty line that has a status line after it
-    lines := dump.Split("\n")
+    lines :~ dump.Split("\n")
     start I64 = -1
     for i, line in lines {
         if line.StartsWith("HTTP/"): start = i
     }
     if start < 0: error Error.Transfer
-    status := lines[start].Trim()
+    status :~ lines[start].Trim()
     space := try status.FindByte(' ') catch { error Error.Transfer }
     code := try status[space + 1:].Trim().Split(" ")[0].ParseInt() catch { error Error.Transfer }
     n I64 = 0
@@ -235,15 +235,15 @@ if TestBuild {
     fn startServer() I64 {
         if os.Run("command -v curl >/dev/null 2>&1") != 0: return -1
         try os.Remove("build/http_port") catch { }      # a port written by an earlier run is not this server's
-        given := try os.Env("OLANG") catch default "build/olang"
-        compiler := try os.RealPath(given) catch { return -2 }
+        given :~ try os.Env("OLANG") catch default "build/olang"
+        compiler :~ try os.RealPath(given) catch { return -2 }
         if os.Run($os.Quote(compiler) + " build checks/fixtures/http/server.olang >/dev/null 2>&1") != 0: return -2
         os.Run("build/checks_fixtures_http_server build/http_port >/dev/null 2>&1 &")
         for _ in range 200 {
             if os.Exists("build/http_port"): break
             os.Run("sleep 0.05")
         }
-        text := try os.ReadFile("build/http_port") catch { return -2 }
+        text :~ try os.ReadFile("build/http_port") catch { return -2 }
         return try text.Trim().ParseInt() catch default -2
     }
 
@@ -270,7 +270,7 @@ if TestBuild {
         moved := try Response.Get($base + "/redirect")
         assert moved.Status == 200 and moved.Body == "hello"
         data := try Response.Get($base + "/json")
-        doc := try json.Json.Parse(data.Body) catch json.Error { error Error.Failed }
+        doc :~ try json.Json.Parse(data.Body) catch json.Error { error Error.Failed }
         assert (try doc["a"][1] as json.Json.Num catch default 0.0) == 2.5
         assert failure("GET", $base + "/slow", Array<Header>(0), 300) == "TIMEOUT"
         assert failure("GET", "ftp://127.0.0.1:" + $port + "/", Array<Header>(0), 0) == "BAD_URL"

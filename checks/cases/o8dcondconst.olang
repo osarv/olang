@@ -6,9 +6,9 @@ import "std/io"
 fn mk(src String&) I64 {
     fence := ""
     t I64 = 0
-    lines := src.Split("\n")
+    lines :~ src.Split("\n")
     for k in range lines.Len() {
-        line := lines[k]
+        line :~ lines[k]
         if fence != "" {
             if line.StartsWith("`"): fence = ""
         } else if line.StartsWith("`") {

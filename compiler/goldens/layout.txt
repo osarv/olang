@@ -3960,7 +3960,7 @@ compiler/ast:JoinS	40 8	%"compiler/ast:JoinS"	{ i1, { i64, ptr }, { i64, ptr } }
 compiler/ast:JoinS&	8 8	ptr	-	-
 compiler/ast:Match	40 8	%"compiler/ast:Match"	{ %"compiler/source:Span", ptr, i1, { i64, ptr } }	fields 0,8,16,24
 compiler/ast:Match&	8 8	ptr	-	-
-compiler/ast:Multi	40 8	%"compiler/ast:Multi"	{ { i64, ptr }, i1, { i64, ptr } }	fields 0,16,24
+compiler/ast:Multi	48 8	%"compiler/ast:Multi"	{ { i64, ptr }, i1, { i64, ptr }, i1 }	fields 0,16,24,40
 compiler/ast:Multi&	8 8	ptr	-	-
 compiler/ast:Param	32 8	%"compiler/ast:Param"	{ %"compiler/source:Span", i32, ptr, ptr }	fields 0,8,16,24
 compiler/ast:Param&	8 8	ptr	-	-
@@ -3986,7 +3986,7 @@ compiler/ast:TypeParam	56 8	%"compiler/ast:TypeParam"	{ %"compiler/source:Span",
 compiler/ast:TypeParam&	8 8	ptr	-	-
 compiler/ast:TypeRef	48 8	{ i64, [5 x i64] }	-	cases 0,8,24;0,8;0,8;0,8,16,17;0,8,16;0,8;0,8;0,8
 compiler/ast:TypeRef&	8 8	ptr	-	-
-compiler/ast:VarDecl	64 8	%"compiler/ast:VarDecl"	{ { i64, ptr }, { i64, ptr }, ptr, { i64, ptr }, i1, i1 }	fields 0,16,32,40,56,57
+compiler/ast:VarDecl	64 8	%"compiler/ast:VarDecl"	{ { i64, ptr }, { i64, ptr }, ptr, { i64, ptr }, i1, i1, i1 }	fields 0,16,32,40,56,57,58
 compiler/ast:VarDecl&	8 8	ptr	-	-
 compiler/source:NameId	4 4	i32	-	-
 compiler/source:Names	104 8	%"compiler/source:Names"	{ %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/map:Map.38ecd5291a2eac158a479efae74bd262" }	fields 0,32

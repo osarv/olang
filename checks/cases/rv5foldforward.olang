@@ -17,7 +17,7 @@ fn pass(f fn&(i I64)) fn&(i I64) { return f }
 fn call(f fn&(i I64), i I64) { f(i) }
 fn run() {
     n mut Holder& = Holder()
-    g := fn(i I64) { n.res = R(i) }
+    g := fn(i I64) { n.res ~ R(i) }
     k fn&(i I64) = g
     join {
         spawn k = pass(g)

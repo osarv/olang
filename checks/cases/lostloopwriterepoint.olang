@@ -1,5 +1,5 @@
 # check: fail error[S9g]: the write to 'p' is lost: nothing reads 'p' after it
-# S9g: a walk of an array of references names each reference, and '=' repoints the name (S4a) - never read again, lost
+# S9g: a walk of an array of references names each reference, and '~' links the name (S4f) - never read again, lost
 type P struct(x I64) {
     x
 }
@@ -8,7 +8,7 @@ fn main() {
     b := P(2)
     ps := Array<P&>[a, b]
     for p in ps {
-        p = b
+        p ~ b
     }
     Println(a.x)
 }

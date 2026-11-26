@@ -45,7 +45,7 @@ fn freed(n I64) I64 {
 
 fn viewed(n I64) I64 {
     give(4)
-    v := held.View()
+    v :~ held.View()
     s := 0
     for k in range n {
         give(5 + k.Mod(2))
@@ -59,7 +59,7 @@ fn keeper(n I64) I64 {
     s := 0
     for k in range n {
         give(6 + k)
-        kept = held.ViewMut()
+        kept ~ held.ViewMut()
         churn()
         s += kept[5]
     }

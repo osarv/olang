@@ -39,7 +39,7 @@ fn vecWork(k I64) I64 {
     t += w.Len() * 1000 + v.Len()
     for x in v: t += x
     t += v.Iter().Fold(0, fn(a I64, x I64) I64 { return a + x * 2 })
-    a := v.ToArray()
+    a :~ v.ToArray()
     t += a.Len() + a[3]
     v.Clear()
     t += v.Len()
@@ -55,10 +55,10 @@ test "Vec: Push, indexing, Insert, TakeAt, RemoveAt, SwapTake, SwapRemove, Sort,
 fn vecText(k I64) I64 {
     v := Vec<String&>()
     for i in range 30: v.Push($(i * k % 17))
-    s := v[3]                                           # kept across the growth below
+    s :~ v[3]                                           # kept across the growth below
     for i in range 30: v.Push("x" + $i)
     v.Sort(fn(a String&, b String&) Bool { return a < b })
-    d := v.View()                                       # used before the next Push
+    d :~ v.View()                                       # used before the next Push
     t := d.Len() * 100 + d[0].Len() + d[59].Len() + s.Len()
     v.Push("z")
     return t + v.Len() + (try v.IndexOf("x7") catch default -1)
@@ -92,7 +92,7 @@ test "Vec: growth keeps every element, the buffer doubling from 8" {
 test "Vec: text kept in one, an element kept while it grows, read back after a churn" {
     v := Vec<String&>()
     for i in range 40 { v.Push($i) }                    # each text built where v lives - its elements' reach
-    s := v[7]                                           # an element refers outside the buffer
+    s :~ v[7]                                           # an element refers outside the buffer
     for i in range 200 { v.Push("x" + $i) }               # so the buffer may be replaced under it
     churn()
     assert s == "7" and v.Len() == 240 and v[37] == "37" and v[239] == "x199"
@@ -104,11 +104,11 @@ test "Vec: text kept in one, an element kept while it grows, read back after a c
 test "Vec: View lends the elements as an array, and for-in walks them by position" {
     v := Vec<F64>()
     for i in range 10: v.Push(F64(i) * 0.5)
-    d := v.View()
+    d :~ v.View()
     s := 0.0
     for x in d: s += x
     assert d.Len() == 10 and s == 22.5
-    m := v.ViewMut()
+    m :~ v.ViewMut()
     m[0] = 9.0
     assert v[0] == 9.0
     w := 0.0
@@ -229,7 +229,7 @@ type vecNode struct(name String&, n I64) {
 test "Vec: references kept in one, read back after a churn and after the Vec is replaced" {
     v := Vec<vecNode&>()
     for i in range 30: v.Push(vecNode($i, i))
-    first := v[0]
+    first :~ v[0]
     v = Vec<vecNode&>()                                 # another Vec; the nodes, and the old one, live where v does
     churn()
     assert first.name == "0" and first.n == 0 and v.Len() == 0
@@ -369,8 +369,8 @@ test "Vec: elements that are values holding references, kept across growth and r
     churn()
     assert e.text == "e3" and v[3].text == "e3" and v[109].text == "f99"
     v.Reverse()
-    m := v.ViewMut()
-    m[0].text = "last"                          # a field of an element written through a view, its text a literal
+    m :~ v.ViewMut()
+    m[0].text ~ "last"                          # a field of an element written through a view, its text a literal
     assert v[0].text == "last" and v[109].text == "e0"
 }
 
@@ -408,10 +408,10 @@ test "Vec: a Vec local that is returned, its text read back after the arena chur
 fn vecVacated() I64 {
     v := Vec<String&>()
     for i in range 20: v.Push($i)
-    a := try v.SwapTake(19) catch default ""                 # the last: nothing moves into the gap
-    b := try v.SwapTake(0) catch default ""                  # the last moved into position 0
+    a :~ try v.SwapTake(19) catch default ""                 # the last: nothing moves into the gap
+    b :~ try v.SwapTake(0) catch default ""                  # the last moved into position 0
     try v.Insert(3, "in") catch { unreachable }
-    c := try v.TakeAt(10) catch default ""
+    c :~ try v.TakeAt(10) catch default ""
     assert v[0] == "18" and v[3] == "in" and v[4] == "3" and v[10] == "10" and v.Len() == 18
     v.Truncate(12)
     for i in range 3: v.Push("t" + $i)

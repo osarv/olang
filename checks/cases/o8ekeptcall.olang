@@ -16,15 +16,15 @@ type List struct() {
 }
 
 fn (l mut List&) drop() {
-    h := l.head!
-    l.head = h.next
+    h :~ l.head!
+    l.head ~ h.next
 }
 
 fn main() {
     l := List()
-    l.head = Node(1)
-    l.head!.next = Node(2)
-    h := l.head!
+    l.head ~ Node(1)
+    l.head!.next ~ Node(2)
+    h :~ l.head!
     l.drop()
     assert h.v == 1
 }

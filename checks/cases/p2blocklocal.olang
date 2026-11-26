@@ -15,7 +15,7 @@ fn main() ? {
     join {
         {
             o mut Holder& = Holder()
-            o.cur = Node(7)
+            o.cur ~ Node(7)
             spawn look(o)
         }
     }

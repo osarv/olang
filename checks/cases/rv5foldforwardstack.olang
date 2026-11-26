@@ -18,7 +18,7 @@ fn run() {
     c mut Vec<I64>& = Vec<I64>()
     g := fn() {
         c.Push(1)
-        h.res = R(c.Len())
+        h.res ~ R(c.Len())
     }
     k fn&() = g
     join {

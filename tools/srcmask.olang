@@ -184,14 +184,14 @@ fn PathJoin(a String&, b String&) String {
 # "path" made absolute and cleaned, as Python's os.path.abspath does
 fn AbsPath(path String&) String {
     if filepath.IsAbs(path): return $filepath.Clean(path)
-    cwd := try os.Cwd() catch default ""
+    cwd :~ try os.Cwd() catch default ""
     return $filepath.Clean(filepath.Join(cwd, path))
 }
 
 # the .olang files under dir, depth first: a directory's own files in byte order, then each subdirectory, also in byte
 # order. A directory named build or .git is not entered, nor a symbolic link to one
 fn Walk(dir String&, out mut Vec<String&>&) {
-    names := try os.ReadDir(dir) catch default Array<String&>(0)
+    names :~ try os.ReadDir(dir) catch default Array<String&>(0)
     subs Vec<String&>
     for name in names {
         path := PathJoin(dir, name)
@@ -209,10 +209,10 @@ fn Walk(dir String&, out mut Vec<String&>&) {
 # the repository this program is in: the directory above the one it sits in (build/ once built, tools/ when run with -i),
 # found from the program's own path
 fn RepoRoot() String {
-    arg0 := os.Args()[0]
+    arg0 :~ os.Args()[0]
     exe := $arg0
     if not ("/" in arg0) {
-        real := try os.RealPath("/proc/self/exe") catch default ""
+        real :~ try os.RealPath("/proc/self/exe") catch default ""
         if real.Len() > 0: exe = $real
     }
     return $filepath.Dir(filepath.Dir(AbsPath(exe)))
@@ -220,7 +220,7 @@ fn RepoRoot() String {
 
 # the compiler a tool runs when none is named: $OLANG, else the repository's build/olang (make bootstrap)
 fn Compiler() String {
-    given := try os.Env("OLANG") catch default ""
+    given :~ try os.Env("OLANG") catch default ""
     if given.Len() > 0: return AbsPath(given)
     return $RepoRoot() + "/build/olang"
 }
@@ -324,7 +324,7 @@ fn StartsExpr(src String&, i I64) Bool {
     if c == '=' { return not (a >= 2 and (src[a - 2] == '=' or src[a - 2] == '!' or src[a - 2] == '<' or src[a - 2] == '>')) }
     b := a
     for b > 0 and IsWord(src[b - 1]): b--
-    word := src[b:a]
+    word :~ src[b:a]
     return word == "return" or word == "if" or word == "assert" or word == "for" or word == "in" or word == "else" or word == "spawn"
 }
 
@@ -335,7 +335,7 @@ fn OpBefore(src String&, i I64) String, I64 {
     for a > 0 and src[a - 1] == ' ': a--
     b := a
     for b > 0 and IsWord(src[b - 1]): b--
-    word := src[b:a]
+    word :~ src[b:a]
     if word.Len() > 0 {
         for w in Words {
             if w == word { return $word, 7 if word == "not" else Prec(word) }
@@ -373,7 +373,7 @@ type NoIoImport error {
 # directory
 fn IoAlias(text String&, path String&) String ? {
     n := text.Len()
-    dir := filepath.Dir(AbsPath(path))
+    dir :~ filepath.Dir(AbsPath(path))
     at I64 = 0
     for at < n {
         j := at
@@ -395,7 +395,7 @@ fn IoAlias(text String&, path String&) String ? {
                 close := k + 1
                 for close < n and text[close] != '"': close++
                 if close < n and close > k + 1 {
-                    target := text[k + 1:close]
+                    target :~ text[k + 1:close]
                     resolved := $filepath.Clean(target) if filepath.IsAbs(target) else $filepath.Clean(filepath.Join(dir, target))
                     if target == "std/io" or resolved.EndsWith("/std/io") {
                         return alias if alias.Len() > 0 else "io"

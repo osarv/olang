@@ -18,7 +18,7 @@ fn describe(args Array<String&>&) String {
 }
 
 fn describeAll(z I64) String {
-    w := "x" if z == 0 else "?"
+    w :~ "x" if z == 0 else "?"
     b := StringBuilder()
     for a in Array<Array<String&>&>[Array<String&>[], Array<String&>["test", "a.olang", w, "y"], Array<String&>["run", "z"], Array<String&>["hi"]] {
         b.Push(describe(a))

@@ -13,9 +13,9 @@ type Holder struct(log mut Tally&) {
     log
 }
 fn note(h mut Holder&, id I64, other mut Holder&) {
-    h.log.last = Box(id)
-    h = other
-    h.log.last = Box(id + 100)
+    h.log.last ~ Box(id)
+    h ~ other
+    h.log.last ~ Box(id + 100)
 }
 fn churn(d I64) I64 {
     a := Array<I64>[d, d, d, d, d, d, d, d]

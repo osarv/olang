@@ -13,7 +13,7 @@ fn (w mut World&) age(s I64) {
     for id in w.alive {
         if (id + s) % 7 != 0: still.Push(id)
     }
-    w.alive = still
+    w.alive ~ still
 }
 fn main() ? {
     w := World()

@@ -1,0 +1,17 @@
+# check: fail error[E10d]: '==' compares contents, and two any Named& have none in common
+# E10d: two "any" values may hold instances of two types - "is" asks whether they name one object
+type Named trait {
+    Name() String
+}
+
+type Cat struct(n String&) {
+    n
+}
+fn (c Cat&) Name() String { return "cat " + $c.n }
+
+fn main() {
+    c := Cat("tom")
+    x any Named& = c
+    y any Named& = c
+    assert x == y
+}

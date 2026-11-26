@@ -10,7 +10,7 @@ fn main() ? {
     f := fn() {
         for i in range 100: r.Push(Vec<I64>[i])
     }
-    d := v.View()
+    d :~ v.View()
     callIt(f)
     try io.PutLn($d[0][0])
 }

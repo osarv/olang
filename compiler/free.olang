@@ -499,7 +499,7 @@ fn (f mut Free&) T() mut types.Table& { return f.P.T }
 # enum or an array, whose contents hold nothing freeing cannot meet (a destructor, a function value, an any, a type
 # variable) - never an extern type's
 fn (f mut Free&) refCand(ty types.TypeId) Bool {
-    t := f.T()
+    t :~ f.T()
     if not t.IsRef(ty) or t.ForeignRef(ty) or t.IsAny(ty): return false
     r := t.Repr(t.Referent(ty))
     k := t.KindOf(r)
@@ -512,11 +512,11 @@ fn (f mut Free&) refCand(ty types.TypeId) Bool {
 
 # whether a field's type is a handle: a struct of one field, a reference refCand admits - Map, List, Vec
 fn (f mut Free&) handleCand(ty types.TypeId) Bool {
-    t := f.T()
+    t :~ f.T()
     r := t.Repr(ty)
     if t.KindOf(r) != types.Kind.Named or not t.HasBody(r) or t.DeclKindOf(t.DeclOf(r)) != types.DeclKind.Struct { return false }
     if t.Destructs(r): return false
-    fs := t.Items(t.Fields(r))
+    fs :~ t.Items(t.Fields(r))
     return fs.Len() == 1 and f.refCand(fs[0])
 }
 
@@ -525,7 +525,7 @@ fn (f mut Free&) handleCand(ty types.TypeId) Bool {
 # when the place lets go of it. Its value changed in place (a store into it, a writable reference to it handed on)
 # makes the place keep: what such a change builds would be built where the container lives (inOwner)
 fn (f mut Free&) ownerCand(ty types.TypeId) Bool {
-    t := f.T()
+    t :~ f.T()
     if t.IsRef(ty): return false
     return t.Anchors(ty).Len() > 0 and f.safe(ty)
 }
@@ -540,7 +540,7 @@ fn (f mut Free&) arrayCand(ty types.TypeId) Bool { return f.T().OwnedPart(ty) an
 # store into them, built where the copy is - outside any region of their own - so a place a copy reaches keeps
 # (RCopied), but where the copy is itself the value a store makes for the place (copyInto's view constructor)
 fn (f mut Free&) heldPlaces(ty types.TypeId) Vec<I64> {
-    t := f.T()
+    t :~ f.T()
     r := t.Plain(t.Repr(ty))
     if f.ownersAsked.Has(r) { return try f.ownersAsked.Get(r) catch default Vec<I64>() }
     out Vec<I64>
@@ -554,7 +554,7 @@ fn (f mut Free&) heldPlaces(ty types.TypeId) Vec<I64> {
     } else if k == types.Kind.Named and t.HasBody(r) {
         dk := t.DeclKindOf(t.DeclOf(r))
         if dk == types.DeclKind.Struct {
-            fs := t.Items(t.Fields(r))
+            fs :~ t.Items(t.Fields(r))
             for i in range fs.Len() {
                 q := f.placeKey(r, i)
                 if q >= 0 and (f.owner[q] or f.arr[q]): addTo(out, q)
@@ -580,7 +580,7 @@ fn (f mut Free&) heldPlaces(ty types.TypeId) Vec<I64> {
 # lowering's freshCtor)
 fn (f mut Free&) freshCtor(c typed.Call&, b I64, within I64) Bool {
     if f.Bodies[b].Of != typed.BodyOf.Ctor or within < 0 or within >= f.Plans.Len(): return false
-    fr := f
+    fr :~ f
     return typed.FreshViews(f.Plans[within], c, f.viewsOf(b), fn(id typed.BodyId) I64 { return fr.viewsOf(I64(id)) }
                             fn(id typed.BodyId) Array<I64> { return fr.P.T.ScopeVarsOf(fr.Bodies[I64(id)].Ty) })
 }
@@ -597,7 +597,7 @@ fn (f Free&) viewsOf(b I64) I64 {
 # whether what a value of type ty holds, through fields, elements, payloads and references, has nothing an early free
 # cannot meet: no destructor (O15, condition 4), no function value, no any, no type variable
 fn (f mut Free&) safe(ty types.TypeId) Bool {
-    t := f.T()
+    t :~ f.T()
     r := t.Repr(ty)
     k := t.KindOf(r)
     if k == types.Kind.Func or k == types.Kind.Var or k == types.Kind.Any or k == types.Kind.Unknown: return false
@@ -644,7 +644,7 @@ fn (f mut Free&) safe(ty types.TypeId) Bool {
 
 # the candidate place of a struct type's field (i >= 0) or an array type's elements (i == -1): its index, -1 for none
 fn (f mut Free&) placeKey(ty types.TypeId, i I64) I64 {
-    t := f.T()
+    t :~ f.T()
     r := t.Plain(t.Repr(ty))
     k := pair.Pair(I64(r), i)
     asked := try f.typeAsked.Get(k) catch default 0
@@ -677,7 +677,7 @@ fn (f mut Free&) placeKey(ty types.TypeId, i I64) I64 {
             }
         }
     } else if t.KindOf(r) == types.Kind.Named and t.HasBody(r) and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Struct {
-        fs := t.Items(t.Fields(r))
+        fs :~ t.Items(t.Fields(r))
         if i < fs.Len() {
             vt = fs[i]
             cand = f.refCand(vt)
@@ -745,7 +745,7 @@ fn (f Free&) isNamed(k I64) Bool { return f.isOwnLocal(k) or f.isGlobal(k) }
 # whether a field or element type is a reference to a struct whose own destructor is all freeing cannot meet: a dtor
 # place's values, never freed by a let-go (O15)
 fn (f mut Free&) dtorCand(ty types.TypeId) Bool {
-    t := f.T()
+    t :~ f.T()
     if not t.IsRef(ty) or t.ForeignRef(ty) or t.IsAny(ty): return false
     r := t.Repr(t.Referent(ty))
     if t.KindOf(r) != types.Kind.Named or not t.HasBody(r) or t.DeclKindOf(t.DeclOf(r)) != types.DeclKind.Struct { return false }
@@ -769,7 +769,7 @@ fn (f mut Free&) placeOfPlace(p typed.Lvalue&) I64 {
 
 # the array type behind ty: ty's representation, or what a reference to one names
 fn (f mut Free&) arrayOf(ty types.TypeId) types.TypeId {
-    t := f.T()
+    t :~ f.T()
     r := t.Repr(ty)
     if t.IsRef(r): r = t.Repr(t.Referent(r))
     return r
@@ -778,7 +778,7 @@ fn (f mut Free&) arrayOf(ty types.TypeId) types.TypeId {
 # the candidate places inside a value of type ty held in place, through its by-value struct fields - a struct copied
 # whole copies them
 fn (f mut Free&) leaves(ty types.TypeId) Vec<leaf> {
-    t := f.T()
+    t :~ f.T()
     r := t.Plain(t.Repr(ty))
     out Vec<leaf>
     if t.KindOf(r) != types.Kind.Named or not t.HasBody(r) or t.DeclKindOf(t.DeclOf(r)) != types.DeclKind.Struct {
@@ -787,7 +787,7 @@ fn (f mut Free&) leaves(ty types.TypeId) Vec<leaf> {
     known := try f.leafAsked.Get(r) catch default Vec<leaf>()
     if f.leafAsked.Has(r): return known
     f.leafAsked.Put(r, out)          # (none while asked: a struct holds itself in place only through a reference - no cycle)
-    fs := t.Items(t.Fields(r))
+    fs :~ t.Items(t.Fields(r))
     for i in range fs.Len() {
         k := f.placeKey(r, i)
         if k >= 0 {
@@ -811,7 +811,7 @@ fn (f mut Free&) leaves(ty types.TypeId) Vec<leaf> {
 # ---- bodies: where their code is emitted, and whose it is ----
 
 fn (f mut Free&) bodyModule(b I64) I64 {
-    p := f.P
+    p :~ f.P
     return match f.Bodies[b].Of {
         case typed.BodyOf.Fn(i): -3 if p.InstanceArgs(i) != types.ListId(0) else p.FnModule(p.InstanceFn(i))
         case typed.BodyOf.Ctor(ty, twin): -3 if twin != types.ListId(0) else f.typeModule(ty)
@@ -827,7 +827,7 @@ fn (f mut Free&) bodyModule(b I64) I64 {
 
 # a type's module, -3 for an instance's (emitted with the root's)
 fn (f mut Free&) typeModule(ty types.TypeId) I64 {
-    t := f.T()
+    t :~ f.T()
     r := t.Repr(ty)
     if t.KindOf(r) != types.Kind.Named or t.Args(r) != types.ListId(0): return -3
     return t.DeclModule(t.DeclOf(r))
@@ -889,11 +889,11 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
         f.curBody = b
         f.candLoops = 0
         f.candDecl.Clear()
-        if f.Bodies[b].Root != null: f.findCands(f.Bodies[b].Root!)
+        if f.Bodies[b].Root is not null: f.findCands(f.Bodies[b].Root!)
     }
     if f.keyTy.Len() == 0: return
     for b in range n {
-        if f.Bodies[b].Root != null: f.findFeeds(b)
+        if f.Bodies[b].Root is not null: f.findFeeds(b)
     }
     t0 := time.Now()
     # the must-summaries, greatest fixed point - what the may-summaries' stores read (withinOf): every body once,
@@ -931,10 +931,10 @@ fn (f mut Free&) Decide(plans Vec<typed.Plan>, root I64) {
 # a line of the analysis' account, where it is asked for (f.Debug)
 # OLANG_FREEDUMP: each candidate place, decided sole or why it keeps
 fn (f mut Free&) dumpPlaces() {
-    d := f.P.L.Diags
+    d :~ f.P.L.Diags
     for k in range f.keyTy.Len() {
         r := f.why[k]
-        at := $d.Locate(r.File, I64(r.Sp.Start)) if r.File >= 0 else ""
+        at :~ $d.Locate(r.File, I64(r.Sp.Start)) if r.File >= 0 else ""
         f.debugOut($"place " + $k + " " + $f.P.T.Canon(f.keyTy[k]) + " field " + $f.keyField[k] + $(" sole" if f.Sole[k] else " keeps (" + $f.whyKind[k] + ") " + $at + " " + $r.Text) + "\n")
     }
 }
@@ -1062,7 +1062,7 @@ fn (f mut Free&) hiddenLetGo(b I64) {
 
 # whether a candidate place's values are references to a generational type, or it is a weak place
 fn (f mut Free&) genPlace(k I64) Bool {
-    t := f.T()
+    t :~ f.T()
     vt := f.valTy[k]
     if f.keyField[k] >= 0 and f.P.WeakField(f.keyTy[k], f.keyField[k]): return true
     return t.IsRef(vt) and f.P.Generational(t.Repr(t.Referent(vt)))
@@ -1084,7 +1084,7 @@ fn (f mut Free&) genKeeps() {
 # - a transfer genrefs 5.2 names included, recognized from round 4 on - is the type's reason not to; a weak place is no
 # owning place. OneHolder holds the reason by type ("" where it qualifies), and -memory's rows say it
 fn (f mut Free&) classifyHolders() {
-    t := f.T()
+    t :~ f.T()
     for st in f.stores {
         k := st.PlaceId
         if k < 0 or k >= f.keyTy.Len() or f.handle[k] or f.owner[k] or f.arr[k]: continue
@@ -1112,13 +1112,13 @@ fn (f mut Free&) declaredHere(r types.TypeId) Bool {
 # B18: -memory's rows of the one-holder rule, one a type, at its first store into an owning place
 fn (f mut Free&) holderRows() String {
     b := StringBuilder()
-    d := f.P.L.Diags
+    d :~ f.P.L.Diags
     for i in range f.holderTypes.Len() {
         r := f.holderTypes[i]
         st := f.holderAt[i]
         at := $d.Locate(st.File, f.lineStart(st.File, I64(st.Sp.Start)))
         why := try f.OneHolder.Get(r) catch default ""
-        name := f.T().Names.Text(f.T().DeclName(f.T().DeclOf(r)))
+        name :~ f.T().Names.Text(f.T().DeclName(f.T().DeclOf(r)))
         if why == "" {
             b.Push($at + ": memory: " + $name + " has one holder: every instance stored into an owning place is a new one\n")
             continue
@@ -1136,14 +1136,14 @@ fn (f mut Free&) reachTy(ty types.TypeId) I64 {
     r := f.gen.Reach(f.T(), ty)
     if r == mir.ReachNone: return -2
     if r == mir.ReachAny: return -1
-    t := f.T()
+    t :~ f.T()
     return I64(t.Repr(t.Referent(t.Repr(ty))))
 }
 
 # ...of a local's value: one holding owning references in place - any but a capture, a variable in MIR, or a parameter -
 # is an owning place, counted (lowering's countedLocal and holdParams), no reference in use
 fn (f mut Free&) localReach(l typed.Local&) I64 {
-    t := f.T()
+    t :~ f.T()
     if l.Kind != typed.LocalKind.Capture and not t.IsRef(t.Repr(l.Ty)) and not f.funcTy(l.Ty) {
         r := t.Repr(l.Ty)
         if not (t.KindOf(r) == types.Kind.Array and t.Length(r) == types.TypeId(0)) and t.KindOf(r) != types.Kind.Any: return -2
@@ -1181,8 +1181,8 @@ fn spanIn(a source.Span, b source.Span) Bool { return a.Start >= b.Start and a.E
 # its statement (or in a loop around it, or in deferred code), or a value its statement computes outside the call -
 # with the first reference reaching each
 fn (w mut walker&) genCalls() {
-    f := w.F
-    body := w.body()
+    f :~ w.F
+    body :~ w.body()
     nl := body.Locals.Len()
     reach := Array<I64>(nl, -2)
     for l in range nl: reach[l] = f.localReach(body.Locals[l])
@@ -1238,7 +1238,7 @@ fn (w mut walker&) genCalls() {
 # the locals of this body that may view an array a generational instance holds in place (mir.GenInfo.ViewOf), and the
 # uses of each
 fn (w mut walker&) viewLocals(views mut Vec<I64>&, viewUses mut Vec<mut Vec<I64>&>&) {
-    body := w.body()
+    body :~ w.body()
     nl := body.Locals.Len()
     for l in range nl {
         viewUses.Push(Vec<I64>())
@@ -1254,7 +1254,7 @@ fn (w mut walker&) viewLocals(views mut Vec<I64>&, viewUses mut Vec<mut Vec<I64>
 # statement, a value the statement computes outside the call - with their origins, judged once the parameters' are
 # known (bufDecide)
 fn (w mut walker&) viewsAcross(gi I64, st I64, csp source.Span, views Vec<I64>&, viewUses Vec<mut Vec<I64>&>&) {
-    f := w.F
+    f :~ w.F
     for l in views {
         u := w.inUseAcross(l, st, csp, viewUses[l])
         if u < 0 or not f.mayView(w.origins[l]): continue
@@ -1273,7 +1273,7 @@ fn (w mut walker&) viewsAcross(gi I64, st I64, csp source.Span, views Vec<I64>&,
 # a value computed in the final walk that may view an array a generational instance holds in place: in use across any
 # call its statement makes outside it (viewsAcross)
 fn (w mut walker&) noteView(x typed.Expr&, o Vec<I64>&) {
-    f := w.F
+    f :~ w.F
     if f.gen.ViewOf(w.T(), x.Type()) == mir.ViewNone or not f.mayView(o): return
     w.gvStmt.Push(w.cur)
     w.gvSp.Push(x.Span())
@@ -1306,7 +1306,7 @@ fn (f mut Free&) views(o Vec<I64>&, b I64) Bool {
 # type one, or a type one holds in place - so that its value is storage reclaiming may put back
 fn (f mut Free&) bufPlace(k I64) Bool {
     if k < 0 or k >= f.keyTy.Len() or f.keyField[k] < 0 or not (f.arr[k] or f.owner[k]): return false
-    t := f.T()
+    t :~ f.T()
     r := t.Repr(f.keyTy[k])
     return f.gen.IsGen(t, r) or f.gen.PartOfGen(t, r)
 }
@@ -1316,7 +1316,7 @@ fn (f mut Free&) bufPlace(k I64) Bool {
 fn (f mut Free&) bufNot(why String&, file I64, sp source.Span) {
     if f.bufNever: return
     f.bufNever = true
-    f.bufWhy = $f.P.L.Diags.Locate(file, I64(sp.Start)) + ": note: " + $why if file >= 0 else $"note: " + $why
+    f.bufWhy ~ $f.P.L.Diags.Locate(file, I64(sp.Start)) + ": note: " + $why if file >= 0 else $"note: " + $why
 }
 
 # the final step's decisions for the arrays (round 5): the parameters that may be views, to a fixed point over the
@@ -1363,7 +1363,7 @@ fn (f mut Free&) bufDecide() {
     if f.Debug {
         try io.PutErr($"buf never " + $f.bufNever + " " + $f.bufWhy + "\n") catch io.Error { }
         for b in range n {
-            if f.Bodies[b].Root != null and f.bufAll[b] { try io.PutErr($"buf all " + $f.fnName(b) + " by " + $f.bufBy[b] + " taintAll " + $f.taintAll[b] + "\n") catch io.Error { } }
+            if f.Bodies[b].Root is not null and f.bufAll[b] { try io.PutErr($"buf all " + $f.fnName(b) + " by " + $f.bufBy[b] + " taintAll " + $f.taintAll[b] + "\n") catch io.Error { } }
         }
     }
     if f.bufNever: return
@@ -1425,7 +1425,7 @@ fn (f mut Free&) genNeverText(ty I64, text String&) {
 # value or exported, a method a table may call or the language calls where no call is written ($, ==, a walk, an
 # operator) - a caller there may hold anything across the call
 fn (f mut Free&) hiddenCalls(b I64) Bool {
-    body := f.Bodies[b]
+    body :~ f.Bodies[b]
     if body.Gen: return true
     i := match body.Of {
         case typed.BodyOf.Fn(inst): inst
@@ -1436,17 +1436,17 @@ fn (f mut Free&) hiddenCalls(b I64) Bool {
     }
     if i == -2: return false
     if i < 0 or f.named[b]: return true
-    d := f.P.FnDecl(f.P.InstanceFn(i))
+    d :~ f.P.FnDecl(f.P.InstanceFn(i))
     if d.Export: return true
-    if d.Recv == null: return false
+    if d.Recv is null: return false
     if f.anyMethod(b): return true
-    nm := f.P.L.Names.Text(d.Name)
+    nm :~ f.P.L.Names.Text(d.Name)
     return protocolName(nm)
 }
 
 # whether method body b's receiver's type is stored in an "any" somewhere: a table may call it (T32b)
 fn (f mut Free&) anyMethod(b I64) Bool {
-    t := f.T()
+    t :~ f.T()
     ps := f.Bodies[b].Params
     if ps.Len() == 0 or f.P.AnyTables.Len() == 0: return false
     r := t.Repr(f.Bodies[b].Locals[I64(ps[0])].Ty)
@@ -1470,7 +1470,7 @@ fn protocolName(nm String&) Bool {
 
 # the generational types instance r holds through its own owning references, in place (r's closure, without r)
 fn (f mut Free&) holdsTypes(r types.TypeId, out mut Vec<I64>&, depth I64) {
-    t := f.T()
+    t :~ f.T()
     if depth > 32: return
     k := t.KindOf(r)
     if k == types.Kind.Ref {
@@ -1483,7 +1483,7 @@ fn (f mut Free&) holdsTypes(r types.TypeId, out mut Vec<I64>&, depth I64) {
         return
     }
     if mir.HasFields(t, r) {
-        fs := t.Items(mir.FieldsOf(t, r))
+        fs :~ t.Items(mir.FieldsOf(t, r))
         for i in range fs.Len() {
             if not f.gen.WeakField(t, r, i): f.holdsTypes(t.Repr(fs[i]), out, depth + 1)
         }
@@ -1500,7 +1500,7 @@ fn (f mut Free&) holdsTypes(r types.TypeId, out mut Vec<I64>&, depth I64) {
 # types a caller may hold across a call into each body, and so where reclaiming may run - (body, type) pairs, the
 # link-time constants the root's decisions object defines
 fn (f mut Free&) genDecide() {
-    t := f.T()
+    t :~ f.T()
     n := f.Bodies.Len()
     for i in range t.TypeCount() {
         x := types.TypeId(I32(i))
@@ -1539,7 +1539,7 @@ fn (f mut Free&) genDecide() {
     if f.Debug {
         for i in range f.genTys.Len() { try io.PutErr($"gen " + $t.Canon(f.genTys[i]) + " ok " + $f.genOkTy[i] + " " + $f.genWhy[i] + "\n") catch io.Error { } }
         for b in range n {
-            if f.Bodies[b].Root == null: continue
+            if f.Bodies[b].Root is null: continue
             try io.PutErr($"body " + $b + " " + $f.fnName(b) + " all " + $f.acrossAll[b] + " across " + $f.across[b].Len() + "\n") catch io.Error { }
         }
     }
@@ -1569,7 +1569,7 @@ fn (f mut Free&) genNeverAgain() {
 # body b's own reasons: a lambda's captures, a generator's locals - storage no count follows that may hold a reference
 # across the reclaiming of what it names
 fn (f mut Free&) genBodyNever(b I64) {
-    body := f.Bodies[b]
+    body :~ f.Bodies[b]
     lambda := match body.Of {
         case typed.BodyOf.Lambda(_): true
         case _: false
@@ -1577,7 +1577,7 @@ fn (f mut Free&) genBodyNever(b I64) {
     if not lambda and not body.Gen: return
     for l in body.Locals {
         if lambda and not body.Gen and l.Kind != typed.LocalKind.Capture: continue
-        why := "a generator holds a reference that may reach one across a yield" if body.Gen else "a lambda captures a reference that may reach one"
+        why :~ "a generator holds a reference that may reach one across a yield" if body.Gen else "a lambda captures a reference that may reach one"
         # (a function value captured is judged where it is made: what its own lambda captures)
         if f.funcTy(l.Ty): continue
         f.genNever(f.reachTy(l.Ty), why, body.File, l.Sp)
@@ -1586,7 +1586,7 @@ fn (f mut Free&) genBodyNever(b I64) {
 
 # whether ty is a function value's type (or a reference to one)
 fn (f mut Free&) funcTy(ty types.TypeId) Bool {
-    t := f.T()
+    t :~ f.T()
     r := t.Repr(ty)
     if t.IsRef(r): r = t.Repr(t.Referent(r))
     return t.KindOf(r) == types.Kind.Func
@@ -1611,7 +1611,7 @@ fn (f mut Free&) genAcross() {
     for b in range n {
         f.across.Push(Vec<I64>())
         f.acrossAll.Push(f.hiddenCalls(b))
-        if f.Debug and f.acrossAll[b] and f.Bodies[b].Root != null { try io.PutErr($"hidden " + $b + " " + $f.fnName(b) + " " + $f.P.L.Diags.Locate(f.Bodies[b].File, I64(f.Bodies[b].Sp.Start)) + "\n") catch io.Error { } }
+        if f.Debug and f.acrossAll[b] and f.Bodies[b].Root is not null { try io.PutErr($"hidden " + $b + " " + $f.fnName(b) + " " + $f.P.L.Diags.Locate(f.Bodies[b].File, I64(f.Bodies[b].Sp.Start)) + "\n") catch io.Error { } }
     }
     changed := true
     for changed {
@@ -1645,9 +1645,9 @@ fn (f mut Free&) genAcross() {
 # reference to one is in use across while its callee may let go of one - those it lets go of kept there
 fn (f mut Free&) genRows() String {
     b := StringBuilder()
-    t := f.T()
+    t :~ f.T()
     for i in range f.genTys.Len() {
-        nm := t.Names.Text(t.DeclName(t.DeclOf(f.genTys[i])))
+        nm :~ t.Names.Text(t.DeclName(t.DeclOf(f.genTys[i])))
         if f.genOkTy[i] {
             b.Push($"memory: a " + $nm + " is reclaimed where the last owning place holding it lets go of it, once no reference to one is in use\n")
             continue
@@ -1655,7 +1655,7 @@ fn (f mut Free&) genRows() String {
         b.Push($"memory: a " + $nm + " is kept until its scope closes, never reclaimed early\n" + $f.genWhy[i] + "\n")
     }
     lets := f.genLetsOf()
-    d := f.P.L.Diags
+    d :~ f.P.L.Diags
     for c in range f.gcFrom.Len() {
         a := f.gcFrom[c]
         to := f.gcTo[c]
@@ -1665,7 +1665,7 @@ fn (f mut Free&) genRows() String {
             ty := f.gcTypes[i]
             j := f.genIndex(ty)
             if j < 0 or not f.genOkTy[j] or not has(lets[to], ty): continue
-            nm := t.Names.Text(t.DeclName(t.DeclOf(f.genTys[j])))
+            nm :~ t.Names.Text(t.DeclName(t.DeclOf(f.genTys[j])))
             at := $d.Locate(f.gcFile[c], f.lineStart(f.gcFile[c], I64(f.gcSp[c].Start)))
             b.Push($at + ": memory: '" + $f.textOf(f.gcFile[c], f.gcSp[c]) + "' keeps the " + $nm + "s it lets go of until their scope closes\n")
             b.Push($d.Locate(f.gcFile[c], I64(f.gcWhy[i].Start)) + ": note: '" + $f.textOf(f.gcFile[c], f.gcWhy[i]) + "', a reference to a " + $nm + ", is in use across this call\n")
@@ -1689,10 +1689,10 @@ fn (f mut Free&) letsLeaves(tys Vec<I64>&) Bool {
 # keeps them in the callee
 fn (f mut Free&) bufRows(lets Vec<Vec<I64>>&) String {
     b := StringBuilder()
-    t := f.T()
+    t :~ f.T()
     for i in range f.genTys.Len() {
         if not f.genOkTy[i] or not f.gen.Leaves(t, f.genTys[i]): continue
-        nm := t.Names.Text(t.DeclName(t.DeclOf(f.genTys[i])))
+        nm :~ t.Names.Text(t.DeclName(t.DeclOf(f.genTys[i])))
         if f.bufNever {
             b.Push($"memory: the arrays a " + $nm + " holds in place are kept until their scope closes\n" + $f.bufWhy + "\n")
             continue
@@ -1700,7 +1700,7 @@ fn (f mut Free&) bufRows(lets Vec<Vec<I64>>&) String {
         b.Push($"memory: the arrays a " + $nm + " holds in place are put back with it, unless a view of one is in use\n")
     }
     if f.bufNever: return b.ToString()
-    d := f.P.L.Diags
+    d :~ f.P.L.Diags
     for i in range f.gvCall.Len() {
         c := f.gvCall[i]
         to := f.gcTo[c]
@@ -1802,8 +1802,8 @@ fn (f mut Free&) entry(b I64) Bool {
         case _: -1
     }
     if i < 0 or f.named[b]: return true
-    d := f.P.FnDecl(f.P.InstanceFn(i))
-    return d.Recv != null or d.Export or f.P.L.Names.Text(d.Name) == "main"
+    d :~ f.P.FnDecl(f.P.InstanceFn(i))
+    return d.Recv is not null or d.Export or f.P.L.Names.Text(d.Name) == "main"
 }
 
 # ---- Part C: destructors where their holders let go ----
@@ -1811,7 +1811,7 @@ fn (f mut Free&) entry(b I64) Bool {
 # body b as a destructor's (by its type), or as a constructor registering its instance (C11's reference-only
 # instance, registered where it lands - O16)
 fn (f mut Free&) noteDtor(b I64) {
-    t := f.T()
+    t :~ f.T()
     match f.Bodies[b].Of {
         case typed.BodyOf.Dtor(ty) { f.dtorOf.Put(I64(t.Repr(ty)), b) }
         case typed.BodyOf.Ctor(_, _) {
@@ -1851,14 +1851,14 @@ fn (f Free&) isDtor(b I64) Bool {
 # a Drop of a value of the type a gives (or refers to): a call of each destructor it runs - its own and its
 # parts', deep - with every let-go those bodies may do (Part C: so a destructor's let-goes are judged where it runs)
 fn (w mut walker&) dtorCalls(sp source.Span, a typed.Expr&) {
-    t := w.T()
+    t :~ w.T()
     ty := a.Type()
     w.dtorCallsOf(sp, t.Referent(ty) if t.IsRef(ty) else ty)
 }
 
 fn (w mut walker&) dtorCallsOf(sp source.Span, ty types.TypeId) {
-    f := w.F
-    t := w.T()
+    f :~ w.F
+    t :~ w.T()
     for p in t.ValueParts(ty) {
         b2 := try f.dtorOf.Get(I64(p)) catch default -1
         if b2 < 0: continue
@@ -1895,7 +1895,7 @@ fn (w mut walker&) closeAt(bl typed.Block&) {
 # a value with destructors to run given storage at site (a Promote, O16): registered with the scope the site builds
 # in - a block of this body, whose close runs them (closeAt); any other scope's close is no place of this body
 fn (w mut walker&) registeredAt(site typed.SiteId, ty types.TypeId) {
-    f := w.F
+    f :~ w.F
     sc := typed.Scope.Unset
     if w.Id < f.Plans.Len() and site >= typed.SiteId(0) and I64(site) < f.Plans[w.Id].Built.Len() { sc = f.Plans[w.Id].Built[I64(site)] }
     if sc != typed.Scope.Block {
@@ -1912,9 +1912,9 @@ fn (w mut walker&) registeredAt(site typed.SiteId, ty types.TypeId) {
 # for any other operation
 fn (w mut walker&) heldDrop(op typed.PrimOp, args Array<typed.Expr&>&) I64 {
     if op != typed.PrimOp.Drop or args.Len() != 1 or w.deferStack.Len() == 0: return -1
-    a := args[0]
+    a :~ args[0]
     if a != typed.Expr.Borrow: return -1
-    p := a.p
+    p :~ a.p
     if p != typed.Lvalue.Local: return -1
     return I64(p.id)
 }
@@ -1922,10 +1922,10 @@ fn (w mut walker&) heldDrop(op typed.PrimOp, args Array<typed.Expr&>&) I64 {
 # Part C: a holder whose storage the scope pass homed outside its block registers its value where that storage lives
 # instead of ending it (lowering's escapedHome)
 fn (w mut walker&) escapedHolder(d typed.Block&) {
-    b := w.body()
+    b :~ w.body()
     l := typed.DropHolder(b, d)
     if l < 0 or b.Locals[l].Kind == typed.LocalKind.Field or w.Id >= w.F.Plans.Len(): return
-    st := w.F.Plans[w.Id].Stored
+    st :~ w.F.Plans[w.Id].Stored
     if l >= st.Len(): return
     s := st[l]
     own := s == typed.Scope.Frame or s == typed.Scope.Unset or (s == typed.Scope.Block and s.b == b.Locals[l].In)
@@ -1944,8 +1944,8 @@ fn (f mut Free&) implicit(b I64) Bool {
     match f.Bodies[b].Of {
         case typed.BodyOf.Dtor(_) { return true }
         case typed.BodyOf.Fn(i) {
-            d := f.P.FnDecl(f.P.InstanceFn(i))
-            nm := f.P.L.Names.Text(d.Name)
+            d :~ f.P.FnDecl(f.P.InstanceFn(i))
+            nm :~ f.P.L.Names.Text(d.Name)
             return nm == "Str" or nm == "Eq" or nm == "Hash" or nm == "str" or nm == "eq" or nm == "hash"
         }
         case _ { return false }
@@ -1980,15 +1980,15 @@ fn (f mut Free&) findStmt(st typed.Stmt&) {
         case typed.Stmt.If(_, i) {
             f.findExpr(i.Test)
             f.findCands(i.Then)
-            if i.Else != null: f.findCands(i.Else!)
+            if i.Else is not null: f.findCands(i.Else!)
         }
         case typed.Stmt.Loop(_, body, post) {
             f.candLoops++
             f.findCands(body)
-            if post != null: f.findCands(post)
+            if post is not null: f.findCands(post)
             f.candLoops--
         }
-        case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x) { if x != null: f.findExpr(x) }
+        case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x) { if x is not null: f.findExpr(x) }
         case typed.Stmt.Block(_, b) { f.findCands(b) }
         case typed.Stmt.Defer(_, b) {
             f.candLoops++
@@ -2000,7 +2000,7 @@ fn (f mut Free&) findStmt(st typed.Stmt&) {
         # go of what the turn before stored - spawnLets)
         case typed.Stmt.Spawn(_, s) {
             for p in s.Targets {
-                if p == null: continue
+                if p is null: continue
                 l := match p {
                     case typed.Lvalue.Local(_, _, l): I64(l)
                     case _: -1
@@ -2021,7 +2021,7 @@ fn (f mut Free&) findStmt(st typed.Stmt&) {
 # known at its declaration - named no other way (assigned whole, escaping, a second name), its declaration's value
 # built where the local lives, and the copy going where the local lives or to the program's scope
 fn (f mut Free&) findFeeds(b I64) {
-    body := f.Bodies[b]
+    body :~ f.Bodies[b]
     if body.Gen: return
     last := typed.LastCopies(body, true)
     if last.Len() == 0: return
@@ -2041,11 +2041,11 @@ fn (f mut Free&) feedBlock(b I64, bl typed.Block&, last Map<I64, I64>&, u typed.
             }
             case typed.Stmt.If(_, i) {
                 f.feedBlock(b, i.Then, last, u)
-                if i.Else != null: f.feedBlock(b, i.Else!, last, u)
+                if i.Else is not null: f.feedBlock(b, i.Else!, last, u)
             }
             case typed.Stmt.Loop(_, body, post) {
                 f.feedBlock(b, body, last, u)
-                if post != null: f.feedBlock(b, post, last, u)
+                if post is not null: f.feedBlock(b, post, last, u)
             }
             case typed.Stmt.Block(_, inner) { f.feedBlock(b, inner, last, u) }
             case _ { }
@@ -2054,9 +2054,9 @@ fn (f mut Free&) feedBlock(b I64, bl typed.Block&, last Map<I64, I64>&, u typed.
 }
 
 fn (f mut Free&) feedStore(b I64, l I64, init typed.Expr&, cs I64, p typed.Lvalue&, u typed.LocalUses&) {
-    body := f.Bodies[b]
+    body :~ f.Bodies[b]
     loc := body.Locals[l]
-    t := f.T()
+    t :~ f.T()
     if loc.Kind != typed.LocalKind.Var or loc.Unset or t.IsRef(loc.Ty) or u.Whole[l] or u.EscHard[l]: return
     for a in u.AliasOf {
         if a == l: return
@@ -2068,7 +2068,7 @@ fn (f mut Free&) feedStore(b I64, l I64, init typed.Expr&, cs I64, p typed.Lvalu
         case _ { }
     }
     if k < 0 or not f.owner[k] or f.topSite(init) < 0: return
-    pl := f.Plans.Ref(b)
+    pl :~ f.Plans.Ref(b)
     at := f.siteScope(b, init)
     dest := pl.Built[cs]
     if not runs(at) or not runs(dest) or pl.Stored[l] != at and not (pl.Stored[l] == typed.Scope.Frame and isBlock(at)): return
@@ -2125,8 +2125,8 @@ fn (f mut Free&) feedFits(fc feedCall) Bool {
     if u < 0: return true
     at := f.Plans.Ref(fc.Body).Passed(typed.SiteId(I32(fc.Site)), u)
     if at != fd.At: return not fc.Writes
-    call := f.callAt(fc.Body, fc.Site)
-    if call == null: return not fc.Writes
+    call :~ f.callAt(fc.Body, fc.Site)
+    if call is null: return not fc.Writes
     return f.orVars(fc.Body, call, fc.Callee, at, u) >= 0 or not fc.Writes
 }
 
@@ -2136,15 +2136,15 @@ fn (f mut Free&) writeFeedCalls() {
     for fc in f.feedCalls {
         fd := f.feeds[fc.Feed]
         if fd.Site < 0 or f.decided[fc.Body] and not f.Sole[fd.PlaceId]: continue
-        pl := f.Plans.RefMut(fc.Body)
+        pl :~ f.Plans.RefMut(fc.Body)
         if pl.RegionKind[fd.Site] != 1: continue
         u := f.paramVar(fc.Callee, fc.Param)
         if u < 0: continue
         site := typed.SiteId(I32(fc.Site))
         at := pl.Passed(site, u)
         if at != fd.At: continue
-        call := f.callAt(fc.Body, fc.Site)
-        if call == null: continue
+        call :~ f.callAt(fc.Body, fc.Site)
+        if call is null: continue
         set := f.orVars(fc.Body, call, fc.Callee, at, u)
         if set < 0: continue
         region := typed.Scope.Region(typed.SiteId(I32(fd.Site)))
@@ -2154,7 +2154,7 @@ fn (f mut Free&) writeFeedCalls() {
         for j in range call.Args.Len() {
             v := f.paramVar(fc.Callee, j)
             if v < 0 or v >= 63 or (set & (I64(1) << v)) == 0 or v == u: continue
-            a := call.Args[j]
+            a :~ call.Args[j]
             t2 := f.topSite(a)
             if t2 >= 0 and (pl.RegionKind[t2] == 1 or pl.RegionKind[t2] == 3) {
                 if pl.RegionParent[t2] == at: pl.RegionParent[t2] = region
@@ -2254,23 +2254,23 @@ fn (f mut Free&) findExpr(x typed.Expr&) {
             for a in c.Args: f.findExpr(a)
         }
         case typed.Expr.Try(_, _, t) {
-            if t.X != null: f.findExpr(t.X!)
+            if t.X is not null: f.findExpr(t.X!)
             for c in t.Clauses {
-                if c.Code != null: f.findCands(c.Code!)
+                if c.Code is not null: f.findCands(c.Code!)
             }
         }
         case typed.Expr.Seq(_, _, q) {
             for st in q.Stmts: f.findStmt(st)
-            if q.X != null: f.findExpr(q.X!)
+            if q.X is not null: f.findExpr(q.X!)
         }
         case typed.Expr.Match(_, _, m) {
             for st in m.Held: f.findStmt(st)
             for a in m.Arms {
-                if a.Code != null: f.findCands(a.Code!)
-                if a.Value != null: f.findExpr(a.Value!)
+                if a.Code is not null: f.findCands(a.Code!)
+                if a.Value is not null: f.findExpr(a.Value!)
             }
-            if m.NoMatch != null {
-                if m.NoMatch!.Code != null: f.findCands(m.NoMatch!.Code!)
+            if m.NoMatch is not null {
+                if m.NoMatch!.Code is not null: f.findCands(m.NoMatch!.Code!)
             }
         }
         case typed.Expr.Collect(_, _, c) { f.findCands(c.Loop) }
@@ -2410,8 +2410,8 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
 }
 
 fn walker.newWalker(f mut Free&, b I64, final Bool) mut walker& {
-    if f.wk == null: f.wk = walker(f, b, final)
-    w := f.wk!
+    if f.wk is null: f.wk ~ walker(f, b, final)
+    w :~ f.wk!
     w.Id = b
     w.Final = final
     w.grew = false
@@ -2433,7 +2433,7 @@ fn walker.newWalker(f mut Free&, b I64, final Bool) mut walker& {
     w.copyExempt = -1
     w.copyRead = -1
     w.reset()
-    body := f.Bodies[b]
+    body :~ f.Bodies[b]
     n := body.Locals.Len()
     w.origins.Truncate(n)
     w.refView.Truncate(n)
@@ -2457,9 +2457,9 @@ fn walker.newWalker(f mut Free&, b I64, final Bool) mut walker& {
         w.params.Put(l, j)
         addTo(w.origins[l], orig(OPar, j))
     }
-    at := f.savedAt[b]
+    at :~ f.savedAt[b]
     if at.Len() == n + 1 {
-        sv := f.saved[b]
+        sv :~ f.saved[b]
         for l in range n {
             for i in range at[l], at[l + 1]: addTo(w.origins[l], sv[i])
         }
@@ -2495,10 +2495,10 @@ fn (f mut Free&) save(w walker&, b I64) {
 }
 
 fn (f mut Free&) walk(b I64, final Bool) {
-    body := f.Bodies[b]
-    if body.Root == null: return
+    body :~ f.Bodies[b]
+    if body.Root is null: return
     # a constructor of a type with a destructor registers its instance in its instance scope (O16)
-    t := f.T()
+    t :~ f.T()
     if t.Role(body.Ty) == types.RoleCtor and t.Results(body.Ty).Len() == 1 {
         r := t.Repr(t.Results(body.Ty)[0])
         if t.IsRef(r): r = t.Repr(t.Referent(r))
@@ -2613,7 +2613,7 @@ fn leaves(st typed.Stmt&) Bool {
 }
 
 fn (w mut walker&) holds(ty types.TypeId) Bool {
-    f := w.F
+    f :~ w.F
     i := I64(ty)
     if i < 0: return w.T().HoldsRefs(ty)
     for f.holdsOf.Len() <= i: f.holdsOf.Push(0)
@@ -2652,7 +2652,7 @@ fn (w mut walker&) untracked(ty types.TypeId, sp source.Span, how String&, made 
     # (O8f, gap 22: a copy stored whole into an owner place - judged once its store says whether it is made for the
     # place, ownerSettle)
     if made and site >= 0 and site == w.ownerSplit {
-        w.ownerHeld, w.ownerHeldSp, w.ownerHeldHow = ty, sp, how
+        w.ownerHeld, w.ownerHeldSp, w.ownerHeldHow ~ ty, sp, how
         return
     }
     fills := w.F.fillOwners(ty, block) if filled else Vec<I64>()
@@ -2713,17 +2713,17 @@ fn (w mut walker&) splitLetOf(l I64, x typed.Expr&) I64 {
     # (a field read into a local assigned again, `nm2 := v[j].n; nm2 = ...`: the call's copy split all the same - the
     # owner local keeps its first value by the rule, existing storage, and lets go of the ones made for it)
     if w.ownLocal(l) >= 0 {
-        tv := fieldTemp(x)
-        return tempCall(tv) if tv != null and initCall(x) == null and w.F.mapFree(tv.Type(), 0) else -1
+        tv :~ fieldTemp(x)
+        return tempCall(tv) if tv is not null and initCall(x) is null and w.F.mapFree(tv.Type(), 0) else -1
     }
-    c := initCall(x)
+    c :~ initCall(x)
     # (review5's o1, ov1: or a copy of a place's value, `w := v` - lower.make's ownersCopy)
-    site := I64(c.Site) if c != null else ownCopySite(x)
+    site := I64(c.Site) if c is not null else ownCopySite(x)
     # (review5's o2: or a view call's value the local is given a field of, `nm := v[0].n` - the call's value copied
     # whole, its own type judged at the copy: untracked)
     if site < 0 and x == typed.Expr.Read {
-        tv := fieldTemp(x)
-        return tempCall(tv) if tv != null and w.F.mapFree(tv.Type(), 0) else -1
+        tv :~ fieldTemp(x)
+        return tempCall(tv) if tv is not null and w.F.mapFree(tv.Type(), 0) else -1
     }
     if site < 0 or not w.F.PartsOnly(x.Type()) or w.T().RunsCopy(x.Type()): return -1
     return site
@@ -2731,7 +2731,7 @@ fn (w mut walker&) splitLetOf(l I64, x typed.Expr&) I64 {
 
 # whether a value of type ty holds no Map, by value, through structs and arrays (false past a depth)
 fn (f mut Free&) mapFree(ty types.TypeId, depth I64) Bool {
-    t := f.T()
+    t :~ f.T()
     r := t.Plain(t.Repr(ty))
     if depth > 6: return false
     d, _, _ := f.MapFields(r)
@@ -2765,7 +2765,7 @@ fn placeTemp(p typed.Lvalue&) typed.Expr?& {
 # part place's array in a part region of its own (lower.ownerCopy, OwnerSite), so that the owners it holds keep for that
 # alone (RSplit), freeing through their parts; -1 for none
 fn (w mut walker&) ownerSplitOf(k I64, x typed.Expr&) I64 {
-    f := w.F
+    f :~ w.F
     if k < 0 or not f.IsOwner(k) or f.PartPlace(k) or f.SlotPlace(k): return -1
     site := ownCopySite(x)
     if site < 0 or not f.PartsOnly(x.Type()) or w.T().RunsCopy(x.Type()): return -1
@@ -2781,12 +2781,12 @@ fn (w mut walker&) ownerSettle(k I64) {
     w.ownerSplit = -1
     w.ownerHeld = types.UnknownT
     if ty == types.UnknownT or not w.Final or w.quiet > 0: return
-    f := w.F
+    f :~ w.F
     fresh := false
     for i := f.stores.Len() - 1, i >= 0, i-- {
         st := f.stores[i]
         if st.PlaceId != k or st.Body != w.Id: continue
-        fresh = st.Kind == SFresh and st.X != null and f.topSite(st.X!) == site
+        fresh = st.Kind == SFresh and st.X is not null and f.topSite(st.X!) == site
         break
     }
     if not fresh {
@@ -2821,7 +2821,7 @@ fn (w mut walker&) blockFillOf(x typed.Expr&) I64 {
 
 # whether a value of type ty is a writable reference
 fn (w mut walker&) writable(ty types.TypeId) Bool {
-    t := w.T()
+    t :~ w.T()
     r := t.Repr(ty)
     return t.KindOf(r) == types.Kind.Ref and (t.PermOf(r) & types.Writable) != 0
 }
@@ -2842,7 +2842,7 @@ fn (w mut walker&) giveRefs(l I64, o Vec<I64>&, rv Vec<I64>&) {
 
 # whether local l's value is of a type holding a reference beyond its parts, held by value (refView kept)
 fn (w mut walker&) pathTyped(l I64) Bool {
-    b := w.body()
+    b :~ w.body()
     if l < 0 or l >= b.Locals.Len(): return false
     ty := b.Locals[l].Ty
     return ty != types.UnknownT and not w.T().IsRef(ty) and w.F.refsBeyondParts(ty)
@@ -2853,9 +2853,9 @@ fn (w mut walker&) pathTyped(l I64) Bool {
 # writable lend, no escape, so nothing points its references anywhere no give told
 fn (w mut walker&) pathsKnown(l I64) Bool {
     if not w.pathTyped(l) or w.params.Has(l) or w.fields.Has(l): return false
-    b := w.body()
+    b :~ w.body()
     if b.Locals[l].Kind != typed.LocalKind.Var: return false
-    fl := w.F.freshLocals[w.Id]
+    fl :~ w.F.freshLocals[w.Id]
     if l >= fl.Len() or not fl[l]: return false
     if not w.pathsAsked {
         w.pathsAsked = true
@@ -2880,8 +2880,8 @@ type refsError error {
 
 # refsOf's walk: Unknown where only all of the value's origins can be said
 fn (w mut walker&) refsIn(x typed.Expr&) Vec<I64> ? refsError.Unknown {
-    f := w.F
-    t := w.T()
+    f :~ w.F
+    t :~ w.T()
     out Vec<I64>
     if not f.refsBeyondParts(x.Type()): return out
     l := readLocalOf(unaway(x))
@@ -2906,8 +2906,8 @@ fn (w mut walker&) refsIn(x typed.Expr&) Vec<I64> ? refsError.Unknown {
         addAllTo(out, w.refView[l])
         return out
     }
-    c := typed.Call.Of(x)
-    if c == null or not w.plainCtor(typed.CalleeBody(c)): error refsError.Unknown
+    c :~ typed.Call.Of(x)
+    if c is null or not w.plainCtor(typed.CalleeBody(c)): error refsError.Unknown
     for a in c.Args: addAllTo(out, try w.refsIn(a))
     return out
 }
@@ -2943,9 +2943,9 @@ fn unaway(x typed.Expr&) typed.Expr& {
 # whether body b is a constructor whose every statement declares a field, each field holding a reference beyond its
 # parts given a parameter as it is: its instance's references refer into what its arguments do, nothing it built
 fn (w mut walker&) plainCtor(b I64) Bool {
-    f := w.F
-    if b < 0 or b >= f.Bodies.Len() or f.Bodies[b].Root == null: return false
-    bd := f.Bodies[b]
+    f :~ w.F
+    if b < 0 or b >= f.Bodies.Len() or f.Bodies[b].Root is null: return false
+    bd :~ f.Bodies[b]
     if w.T().Role(bd.Ty) != types.RoleCtor: return false
     match bd.Of {
         case typed.BodyOf.Ctor(_, _) { }
@@ -2996,9 +2996,9 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             if site >= 0 or fieldCopy: w.copyExempt = ownCopySite(x)
             # (O8f: a struct local given a constructor's instance viewing what it is given - the copy D9h makes is its
             # leaves' new value, made for them as a store into a struct held in place makes it, viewCtor)
-            lc := w.letCtorOf(I64(l), x)
+            lc :~ w.letCtorOf(I64(l), x)
             outerE, outerC := w.exemptSite, w.copiedCtor
-            if lc != null: w.exemptSite, w.copiedCtor = I64(lc.Site), I64(lc.Site)
+            if lc is not null: w.exemptSite, w.copiedCtor = I64(lc.Site), I64(lc.Site)
             # (D13d: one declared with no value holds zero bits until its first assignment - nothing made, nothing to
             # release, as null is)
             unset := w.body().Locals[I64(l)].Unset
@@ -3011,14 +3011,14 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             w.plainFill, w.splitLet = wasF, wasL
             w.copyExempt = exemptWas
             w.exemptSite, w.copiedCtor = outerE, outerC
-            if lc != null {
+            if lc is not null {
                 o = w.F.unowned(o)
                 w.viewCtor(w.F.leaves(x.Type()), lc, x, sp)
             }
             # (O8f, gap 18: a view call's value a local holds that lowering surely copies - written, assigned, stored or
             # lent to a body changing its parts, so never a view local - owns its parts anew: no value of the places the
             # view was of)
-            if lc == null and w.copiedView(I64(l), x): o = w.F.unowned(o)
+            if lc is null and w.copiedView(I64(l), x): o = w.F.unowned(o)
             if fieldCopy {
                 o = w.F.unowned(o)
                 w.copyLeaves(w.F.leaves(x.Type()), x, sp)
@@ -3047,7 +3047,7 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             w.block(i.Then)
             b := w.no - 1
             c := w.no
-            if i.Else != null: w.block(i.Else!)
+            if i.Else is not null: w.block(i.Else!)
             w.thenFrom.Push(a)
             w.thenTo.Push(b)
             w.elseFrom.Push(c)
@@ -3056,7 +3056,7 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
         case typed.Stmt.Loop(_, body, post) {
             w.loops++
             w.block(body)
-            if post != null: w.block(post)
+            if post is not null: w.block(post)
             w.loops--
             w.loopAt.Push(n)
             w.loopEnd.Push(w.no - 1)
@@ -3064,17 +3064,17 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
         # D18: a generator's yield (Suspend) gives its value as a return does - to the call of its Next - and the body goes
         # on after it, so it ends no path
         case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x) {
-            if x != null {
+            if x is not null {
                 # (O8f, gap 17: a constructor's instance viewing what it is given handed back - `return S(m)` - is copied
                 # where the result goes (D9h): that copy is its leaves' new value, as for a struct local given it -
                 # letCtorOf, lower.ownerCopy at the call's site)
-                rc := w.retCtorOf(st, x)
+                rc :~ w.retCtorOf(st, x)
                 outerE, outerC := w.exemptSite, w.copiedCtor
-                if rc != null: w.exemptSite, w.copiedCtor = I64(rc.Site), I64(rc.Site)
+                if rc is not null: w.exemptSite, w.copiedCtor = I64(rc.Site), I64(rc.Site)
                 o := w.expr(x)
                 w.exemptSite, w.copiedCtor = outerE, outerC
                 # (handed back as that local would be, `s := S(m); return s`: its leaves' values - readOf)
-                if rc != null {
+                if rc is not null {
                     o = w.F.unowned(o)
                     w.viewCtor(w.F.leaves(x.Type()), rc, x, st.Span())
                     for lf in w.F.leaves(x.Type()): addTo(o, orig(OPl, lf.PlaceId))
@@ -3091,9 +3091,9 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
         }
         case typed.Stmt.Assert(_, c, m) {
             w.expr(c)
-            if m != null: w.expr(m)
+            if m is not null: w.expr(m)
         }
-        case typed.Stmt.Exit(_, _, m) { if m != null: w.expr(m) }
+        case typed.Stmt.Exit(_, _, m) { if m is not null: w.expr(m) }
         case typed.Stmt.Block(_, b) { w.block(b) }
         case typed.Stmt.Defer(_, b) {
             if not w.Final: w.escapedHolder(b)
@@ -3112,23 +3112,23 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
             w.block(j.Code)
             if w.Final and w.quiet == 0: try w.inJoin.Pop() catch { }
             for c in j.Clauses {
-                if c.Code != null: w.block(c.Code!)
+                if c.Code is not null: w.block(c.Code!)
             }
         }
         case typed.Stmt.Spawn(_, s) {
             w.F.taskAt[w.Id] = true
-            tc := typed.Call.Of(taskCall(s.Task))
-            if tc != null and typed.CalleeBody(tc) >= 0: addTo(w.F.spawned, typed.CalleeBody(tc))
+            tc :~ typed.Call.Of(taskCall(s.Task))
+            if tc is not null and typed.CalleeBody(tc) >= 0: addTo(w.F.spawned, typed.CalleeBody(tc))
             # (a body no entry reaches never runs: its spawns start no task - O8f's condition 3 judges live ones)
             wasT := w.taskSite
-            w.taskSite = I64(tc.Site) if tc != null else -1
+            w.taskSite = I64(tc.Site) if tc is not null else -1
             o := w.expr(s.Task)
             w.taskSite = wasT
             for c in s.Clauses {
-                if c.Handler != null: w.expr(c.Handler!)
+                if c.Handler is not null: w.expr(c.Handler!)
             }
             for p in s.Targets {
-                if p != null: w.spawnLets(st.Span(), s, p, o, tc)
+                if p is not null: w.spawnLets(st.Span(), s, p, o, tc)
             }
             if w.Final and w.quiet == 0 and w.F.isLive(w.Id): w.spawnSite(s, tc)
         }
@@ -3152,7 +3152,7 @@ fn (w mut walker&) stmt(st typed.Stmt&) {
 
 # what a return gives: the result's origins (its views, its moves, its parameters'), and whether it is new
 fn (w mut walker&) result(o Vec<I64>&) {
-    f := w.F
+    f :~ w.F
     for x in o {
         if okind(x) == ONew: continue
         if addTo(f.resFrom[w.Id], x) > 0: f.changed = true
@@ -3167,8 +3167,8 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     wasO := w.ownerSplit
     w.ownerSplit = -1 if p == typed.Lvalue.Local else w.ownerSplitOf(w.F.placeOfPlace(p), x)
     wasW := w.widenLit
-    wm := w.F.WidenedMake(x)
-    w.widenLit = w.F.topSite(wm) if wm != null else -1
+    wm :~ w.F.WidenedMake(x)
+    w.widenLit = w.F.topSite(wm) if wm is not null else -1
     w.assignTo(sp, p, x)
     w.widenLit = wasW
     if w.ownerHeld != types.UnknownT: w.ownerSettle(-1)
@@ -3178,21 +3178,21 @@ fn (w mut walker&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
 fn (w mut walker&) assignTo(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     w.unfollowed(sp, p, x)
     w.targets.Push(p)
-    c0 := typed.Call.Of(x)
+    c0 :~ typed.Call.Of(x)
     outer := w.exemptSite
-    w.exemptSite = I64(c0.Site) if c0 != null and p != typed.Lvalue.Local else -1
+    w.exemptSite = I64(c0.Site) if c0 is not null and p != typed.Lvalue.Local else -1
     outerC := w.copiedCtor
     w.copiedCtor = w.copiedCtorOf(p, c0)
     # Part C: a copy of a value handed on stored into a part held in place - made for its leaves (copyInto)
-    cm := w.copyStored(p, x)
+    cm :~ w.copyStored(p, x)
     wasE, wasR := w.copyExempt, w.copyRead
-    if cm != null {
+    if cm is not null {
         w.copyExempt = ownCopySite(cm)
         w.copyRead = readLocalOf(x)
     }
     # (and one stored into a place of its own - check.writeBack's held value, `v[i].a = w.a`: the store's own copy, made
     # for the place, judged there - made)
-    if cm == null and w.F.placeOfPlace(p) >= 0 and w.heldCopy.Has(readLocalOf(x)): w.copyRead = readLocalOf(x)
+    if cm is null and w.F.placeOfPlace(p) >= 0 and w.heldCopy.Has(readLocalOf(x)): w.copyRead = readLocalOf(x)
     wasA, wasL := w.splitArr, w.splitLet
     w.splitArr = w.splitArrOf(p, x)
     # (an owner local given a field of a view call's value again, `nm2 = v[k].n`: that copy split as its declaration's)
@@ -3201,7 +3201,7 @@ fn (w mut walker&) assignTo(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     o := w.expr(x)
     w.splitArr, w.splitLet = wasA, wasL
     # (the copy, read out of its held local, is the value made for those leaves - no view of them)
-    if cm != null: o = w.F.unowned(o)
+    if cm is not null: o = w.F.unowned(o)
     w.copyExempt, w.copyRead = wasE, wasR
     w.exemptSite = outer
     w.copiedCtor = outerC
@@ -3330,12 +3330,12 @@ fn (w mut walker&) assignTo(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
 # whether local l, declared with x, holds a copy of a view call's value (D9h) that lowering surely makes: the call hands
 # back a view (not a constructor's instance viewing only what was made for it) and the local can be no view local
 fn (w mut walker&) copiedView(l I64, x typed.Expr&) Bool {
-    f := w.F
+    f :~ w.F
     if w.T().IsRef(w.body().Locals[l].Ty): return false
-    c := typed.Call.Of(x)
-    if c == null: return false
+    c :~ typed.Call.Of(x)
+    if c is null: return false
     b2 := typed.CalleeBody(c)
-    if b2 < 0 or f.Bodies[b2].Root == null or f.viewsOf(b2) == 0 or f.freshCtor(c, b2, w.Id): return false
+    if b2 < 0 or f.Bodies[b2].Root is null or f.viewsOf(b2) == 0 or f.freshCtor(c, b2, w.Id): return false
     return f.copiedLocals(w.Id)[l] or f.unheldViews(w.Id, l, c, b2)
 }
 
@@ -3347,8 +3347,8 @@ fn (w mut walker&) copiedView(l I64, x typed.Expr&) Bool {
 fn (f mut Free&) unheldViews(b I64, l I64, c typed.Call&, b2 I64) Bool {
     v := f.viewsOf(b2)
     if (v & typed.ViewOther) != 0: return false
-    t := f.T()
-    bd := f.Bodies[b]
+    t :~ f.T()
+    bd :~ f.Bodies[b]
     u := typed.LocalUses.Uses(t, bd)
     if u.Ret[l] or u.RetView[l] or u.RetRefs[l]: return false
     for k in range c.Args.Len().Min(typed.ViewBits) {
@@ -3360,7 +3360,7 @@ fn (f mut Free&) unheldViews(b I64, l I64, c typed.Call&, b2 I64) Bool {
         if r < 0 or bd.Locals[r].Kind == typed.LocalKind.Param or t.IsRef(bd.Locals[r].Ty): continue
         if u.WrOther[r] or u.Whole[r] or has(u.StoreAt, r): return true
         for j in range u.LendAt.Len() {
-            if u.LendAt[j] == r and f.Keeps != null and not f.Keeps!(u.LendBody[j], u.LendParam[j]): return true
+            if u.LendAt[j] == r and f.Keeps is not null and not f.Keeps!(u.LendBody[j], u.LendParam[j]): return true
         }
     }
     return false
@@ -3423,7 +3423,7 @@ fn (f mut Free&) copiedLocals(b I64) Array<Bool> {
     }
     for j in range u.LendAt.Len() {
         i := u.LendAt[j]
-        if i < 0 or i >= n or f.Keeps == null: continue
+        if i < 0 or i >= n or f.Keeps is null: continue
         if not f.Keeps!(u.LendBody[j], u.LendParam[j]): out[i] = true
     }
     f.copiedAt.Put(b, out)
@@ -3436,7 +3436,7 @@ fn (f mut Free&) copiedLocals(b I64) Array<Bool> {
 # copy lowering makes of it is made in that block - dead with the local, a loop turn's with the turn - never where the
 # callee's result would live (the collection's scope, a copy a turn kept until it closes): no store gives it a place
 fn (f mut Free&) BlockCopy(b I64, site I64) I64 {
-    if site < 0 or b < 0 or b >= f.Bodies.Len() or f.Bodies[b].Root == null: return -1
+    if site < 0 or b < 0 or b >= f.Bodies.Len() or f.Bodies[b].Root is null: return -1
     if not f.blockDone.Has(b): f.blockCopies(b)
     return try f.blockAt.Get(pair.Pair(b, site)) catch default -1
 }
@@ -3445,13 +3445,13 @@ fn (f mut Free&) blockCopies(b I64) {
     f.blockDone.Put(b, true)
     u := typed.LocalUses.Uses(f.T(), f.Bodies[b])
     for i in range f.Bodies[b].Locals.Len() {
-        x := u.Init[i]
-        if x == null: continue
-        k := initCall(x)
+        x :~ u.Init[i]
+        if x is null: continue
+        k :~ initCall(x)
         # (a reference local given storage for what the call hands back - `s Box& = Box(v[j].b)`, held as a trait
         # value too: the instance read through the local only, in its block)
-        if k == null and f.blockView(u, b, i): k = promotedCall(x)
-        if k == null: continue
+        if k is null and f.blockView(u, b, i): k ~ promotedCall(x)
+        if k is null: continue
         if f.blockView(u, b, i) or f.blockHolder(u, b, i): f.blockArgs(b, i, k, 0)
         if f.ownedHolder(b, i): f.resultArgs(b, i, k)
     }
@@ -3461,7 +3461,7 @@ fn (f mut Free&) blockCopies(b I64) {
 # no reference held beside the storage it holds by value - a copy lowering makes of a view call's result where it is
 # kept (D9h; a view held in place of the copy only of storage that outlives the local, lower.heldViews)
 fn (f mut Free&) ownedHolder(b I64, i I64) Bool {
-    t := f.T()
+    t :~ f.T()
     l := f.Bodies[b].Locals[i]
     if l.Kind != typed.LocalKind.Var and l.Kind != typed.LocalKind.Hidden: return false
     return not l.Unset and not t.IsRef(l.Ty) and not f.refsBeyondParts(l.Ty)
@@ -3472,16 +3472,16 @@ fn (f mut Free&) ownedHolder(b I64, i I64) Bool {
 # whose instance may hold its views in place of copies (D9h): what k hands back is the local's own copy, or no view of
 # them at all, so the copy of each lowering makes is dead with the local - made in its block (lower.blockCopy)
 fn (f mut Free&) resultArgs(b I64, i I64, k typed.Call&) {
-    t := f.T()
+    t :~ f.T()
     cb := typed.CalleeBody(k)
-    if cb < 0 or f.Bodies[cb].Root == null or t.Role(f.Bodies[cb].Ty) == types.RoleCtor: return
+    if cb < 0 or f.Bodies[cb].Root is null or t.Role(f.Bodies[cb].Ty) == types.RoleCtor: return
     if f.refsBeyondParts(t.Result(f.Bodies[cb].Ty)): return
-    ps := t.Items(t.Params(f.Bodies[cb].Ty))
+    ps :~ t.Items(t.Params(f.Bodies[cb].Ty))
     for j in range k.Args.Len().Min(ps.Len()) {
         if t.IsRef(ps[j]): continue
         s := f.viewCallSite(k.Args[j])
         if s < 0: continue
-        if (f.Keeps != null and f.Keeps!(cb, j)) or (f.Hands != null and f.Hands!(cb, j)): f.blockAt.Put(pair.Pair(b, s), i)
+        if (f.Keeps is not null and f.Keeps!(cb, j)) or (f.Hands is not null and f.Hands!(cb, j)): f.blockAt.Put(pair.Pair(b, s), i)
     }
 }
 
@@ -3489,22 +3489,22 @@ fn (f mut Free&) resultArgs(b I64, i I64, k typed.Call&) {
 # argument that is a call's value (`each(v[i].a.View())`), those that call lends: what the inner call hands back is
 # held by what k hands back, which the local holds in its own block
 fn (f mut Free&) blockArgs(b I64, i I64, k typed.Call&, depth I64) {
-    t := f.T()
+    t :~ f.T()
     if typed.CalleeBody(k) < 0 or depth > 3: return
-    ps := t.Items(t.Params(f.Bodies[typed.CalleeBody(k)].Ty))
+    ps :~ t.Items(t.Params(f.Bodies[typed.CalleeBody(k)].Ty))
     for j in range k.Args.Len().Min(ps.Len()) {
         if not t.IsRef(ps[j]) {
             # (a view call's value given as it is to a by-value parameter the callee only reads - its result may view it,
             # held by the local: `z := filled(v[j], 2)`)
             s := f.viewCallSite(k.Args[j])
-            if s >= 0 and f.Keeps != null and f.Keeps!(typed.CalleeBody(k), j): f.blockAt.Put(pair.Pair(b, s), i)
+            if s >= 0 and f.Keeps is not null and f.Keeps!(typed.CalleeBody(k), j): f.blockAt.Put(pair.Pair(b, s), i)
             continue
         }
         if (t.PermOf(ps[j]) & types.Writable) != 0: continue
         s := borrowedTemp(k.Args[j])
         if s >= 0: f.blockAt.Put(pair.Pair(b, s), i)
-        k2 := initCall(k.Args[j]) if s < 0 else null
-        if k2 != null and f.keptInResult(typed.CalleeBody(k), j): f.blockArgs(b, i, k2, depth + 1)
+        k2 :~ initCall(k.Args[j]) if s < 0 else null
+        if k2 is not null and f.keptInResult(typed.CalleeBody(k), j): f.blockArgs(b, i, k2, depth + 1)
     }
 }
 
@@ -3513,15 +3513,15 @@ fn (f mut Free&) blockArgs(b I64, i I64, k typed.Call&, depth I64) {
 # (D18, `return Generator(next)`) whose Next holds it in its own frame only - its local given the capture, keeping
 # nothing past its body (keepsNone) - and gives no element holding a reference
 fn (f mut Free&) keptInResult(cb I64, j I64) Bool {
-    t := f.T()
+    t :~ f.T()
     if f.refsKept.NoneKept(t, f.Bodies, cb, j): return true
-    r := f.Bodies[cb].Root
-    if r == null or r.Stmts.Len() == 0 or j >= f.Bodies[cb].Params.Len(): return false
+    r :~ f.Bodies[cb].Root
+    if r is null or r.Stmts.Len() == 0 or j >= f.Bodies[cb].Params.Len(): return false
     par := I64(f.Bodies[cb].Params[j])
     for st in r.Stmts {
         match st {
             case typed.Stmt.Let(_, l, _) { if f.Bodies[cb].Locals[I64(l)].Kind != typed.LocalKind.Hidden: return false }
-            case typed.Stmt.Return(_, x) { return x != null and f.genHolds(x, par) }
+            case typed.Stmt.Return(_, x) { return x is not null and f.genHolds(x, par) }
             case _ { return false }
         }
     }
@@ -3531,8 +3531,8 @@ fn (f mut Free&) keptInResult(cb I64, j I64) Bool {
 # whether x is a generator's value (D18: its Next a lambda, the constructor's one argument) whose Next keeps what
 # the capture of parameter local par names in its own frame only (keptInResult)
 fn (f mut Free&) genHolds(x typed.Expr&, par I64) Bool {
-    k := initCall(x)
-    if k == null or k.Args.Len() != 1: return false
+    k :~ initCall(x)
+    if k is null or k.Args.Len() != 1: return false
     return match k.Args[0] {
         case typed.Expr.Fn(_, _, fv): match fv {
             case typed.FnVal.Lambda(lb, caps, _): f.genFrameKeeps(I64(lb), caps, par)
@@ -3543,8 +3543,8 @@ fn (f mut Free&) genHolds(x typed.Expr&, par I64) Bool {
 }
 
 fn (f mut Free&) genFrameKeeps(lb I64, caps Array<typed.Capture&>&, par I64) Bool {
-    t := f.T()
-    if lb < 0 or lb >= f.Bodies.Len() or not f.Bodies[lb].Gen or f.Bodies[lb].Root == null: return false
+    t :~ f.T()
+    if lb < 0 or lb >= f.Bodies.Len() or not f.Bodies[lb].Gen or f.Bodies[lb].Root is null: return false
     el := t.Result(f.Bodies[lb].Ty)
     if t.IsRef(el) or t.HoldsRefs(el): return false
     u := typed.LocalUses.Uses(t, f.Bodies[lb])
@@ -3554,8 +3554,8 @@ fn (f mut Free&) genFrameKeeps(lb I64, caps Array<typed.Capture&>&, par I64) Boo
         if f.Bodies[lb].GenElem == c.Inner or not f.keepsNone(u, lb, ci, 0): return false
         # (the parameter's own local, given the capture as the body begins - check.genLambda)
         for l in range f.Bodies[lb].Locals.Len() {
-            x := u.Init[l]
-            if x == null or readsLocal(x) != ci: continue
+            x :~ u.Init[l]
+            if x is null or readsLocal(x) != ci: continue
             if not f.blockView(u, lb, l): return false
         }
         return true
@@ -3566,8 +3566,8 @@ fn (f mut Free&) genFrameKeeps(lb I64, caps Array<typed.Capture&>&, par I64) Boo
 # the site of the call a value is, through Away, where it hands back a view of its arguments alone (D9h, a value
 # holding storage: lower.viewCall), -1 for any other value
 fn (f mut Free&) viewCallSite(x typed.Expr&) I64 {
-    c := initCall(x)
-    if c == null or c.Site < typed.SiteId(0) or typed.CalleeBody(c) < 0 or f.T().IsRef(x.Type()): return -1
+    c :~ initCall(x)
+    if c is null or c.Site < typed.SiteId(0) or typed.CalleeBody(c) < 0 or f.T().IsRef(x.Type()): return -1
     v := f.viewsOf(typed.CalleeBody(c))
     return I64(c.Site) if v > 0 and (v & typed.ViewOther) == 0 else -1
 }
@@ -3594,8 +3594,8 @@ fn (f mut Free&) blockHolder(u typed.LocalUses&, b I64, i I64) Bool { return f.h
 # blockHolder, a copy of the value into another local holding it so in turn allowed - a for-in's hidden walk over a
 # generator local (`for y in g`, the Link of a Let reading it), declared in the local's block or one inside it
 fn (f mut Free&) holderIn(u typed.LocalUses&, b I64, i I64, depth I64) Bool {
-    t := f.T()
-    bd := f.Bodies[b]
+    t :~ f.T()
+    bd :~ f.Bodies[b]
     l := bd.Locals[i]
     if l.Kind != typed.LocalKind.Var and l.Kind != typed.LocalKind.Hidden: return false
     if depth > 3 or l.Unset or t.IsRef(l.Ty) or not t.HoldsRefs(l.Ty): return false
@@ -3606,7 +3606,7 @@ fn (f mut Free&) holderIn(u typed.LocalUses&, b I64, i I64, depth I64) Bool {
     for j in range u.LinkTo.Len() {
         m := u.LinkFrom[j]
         if u.LinkTo[j] != i: continue
-        if m < 0 or m >= bd.Locals.Len() or u.Init[m] == null or readsLocal(u.Init[m]!) != i: return false
+        if m < 0 or m >= bd.Locals.Len() or u.Init[m] is null or readsLocal(u.Init[m]!) != i: return false
         if not bd.Encloses(bd.Locals[i].In, bd.Locals[m].In) or not f.holderIn(u, b, m, depth + 1): return false
     }
     return f.keepsNone(u, b, i, 0, true)
@@ -3617,7 +3617,7 @@ fn (f mut Free&) holderIn(u typed.LocalUses&, b I64, i I64, depth I64) Bool {
 # made that may be kept (a value holding it linked to it), given only to bodies keeping nothing of it past the call
 # (typed.RefsKept.NoneKept)
 fn (f mut Free&) blockView(u typed.LocalUses&, b I64, i I64) Bool {
-    t := f.T()
+    t :~ f.T()
     l := f.Bodies[b].Locals[i]
     k := l.Kind
     if k != typed.LocalKind.Var and k != typed.LocalKind.Hidden and k != typed.LocalKind.Held: return false
@@ -3630,7 +3630,7 @@ fn (f mut Free&) blockView(u typed.LocalUses&, b I64, i I64) Bool {
 # past the call (typed.RefsKept.NoneKept) - and captured only by lambdas a value local of its block holds (holderStays)
 # whose bodies keep nothing of the capture in turn
 fn (f mut Free&) keepsNone(u typed.LocalUses&, b I64, i I64, depth I64, linked Bool = false) Bool {
-    t := f.T()
+    t :~ f.T()
     if u.EscBesides[i] or u.Ret[i] or u.WrOther[i] or u.Whole[i] or u.EscRefs[i]: return false
     for s in u.StoreAt {
         if s == i: return false
@@ -3647,7 +3647,7 @@ fn (f mut Free&) keepsNone(u typed.LocalUses&, b I64, i I64, depth I64, linked B
     for j in range u.HoldAt.Len() {
         if u.HoldAt[j] != i: continue
         lb := u.HoldBody[j]
-        if depth > 3 or lb < 0 or lb >= f.Bodies.Len() or f.Bodies[lb].Root == null: return false
+        if depth > 3 or lb < 0 or lb >= f.Bodies.Len() or f.Bodies[lb].Root is null: return false
         if not f.holderStays(u, b, i, u.HoldBy[j]): return false
         u2 := typed.LocalUses.Uses(t, f.Bodies[lb])
         if not f.keepsNone(u2, lb, u.HoldInner[j], depth + 1): return false
@@ -3659,7 +3659,7 @@ fn (f mut Free&) keepsNone(u typed.LocalUses&, b I64, i I64, depth I64, linked B
 # block or one inside it, never assigned again, stored, copied, handed back, given a call or captured itself - only
 # called
 fn (f Free&) holderStays(u typed.LocalUses&, b I64, i I64, h I64) Bool {
-    bd := f.Bodies[b]
+    bd :~ f.Bodies[b]
     if h < 0 or h >= bd.Locals.Len() or bd.Locals[h].Kind != typed.LocalKind.Var: return false
     if u.EscHard[h] or u.EscRefs[h] or u.Ret[h] or u.RetRefs[h] or u.Whole[h] or u.WrOther[h]: return false
     if has(u.StoreAt, h) or has(u.LinkTo, h) or has(u.GiveAt, h) or has(u.RefAt, h) or has(u.LendAt, h) or has(u.HoldAt, h): return false
@@ -3705,11 +3705,11 @@ fn borrowedTemp(a typed.Expr&) I64 {
 # place (viewCtor) - null for any other declaration
 fn (w mut walker&) letCtorOf(l I64, x typed.Expr&) typed.Call?& {
     if w.body().Locals[l].Kind != typed.LocalKind.Var or w.ownLocal(l) >= 0: return null
-    c0 := typed.Call.Of(x)
-    if c0 == null: return null
-    f := w.F
+    c0 :~ typed.Call.Of(x)
+    if c0 is null: return null
+    f :~ w.F
     b2 := typed.CalleeBody(c0)
-    if b2 < 0 or f.Bodies[b2].Root == null or w.T().Role(f.Bodies[b2].Ty) != types.RoleCtor or f.leaves(x.Type()).Len() == 0: return null
+    if b2 < 0 or f.Bodies[b2].Root is null or w.T().Role(f.Bodies[b2].Ty) != types.RoleCtor or f.leaves(x.Type()).Len() == 0: return null
     vs := f.viewsOf(b2)
     if vs == 0 or (vs & typed.ViewOther) != 0 or typed.ViewsMoved(c0, vs) or f.freshCtor(c0, b2, w.Id): return null
     return c0
@@ -3720,11 +3720,11 @@ fn (w mut walker&) letCtorOf(l I64, x typed.Expr&) typed.Call?& {
 # for any other
 fn (w mut walker&) retCtorOf(st typed.Stmt&, x typed.Expr&) typed.Call?& {
     if st != typed.Stmt.Return: return null
-    c0 := typed.Call.Of(x)
-    if c0 == null: return null
-    f := w.F
+    c0 :~ typed.Call.Of(x)
+    if c0 is null: return null
+    f :~ w.F
     b2 := typed.CalleeBody(c0)
-    if b2 < 0 or f.Bodies[b2].Root == null or w.T().Role(f.Bodies[b2].Ty) != types.RoleCtor or f.leaves(x.Type()).Len() == 0: return null
+    if b2 < 0 or f.Bodies[b2].Root is null or w.T().Role(f.Bodies[b2].Ty) != types.RoleCtor or f.leaves(x.Type()).Len() == 0: return null
     vs := f.viewsOf(b2)
     if vs == 0 or (vs & typed.ViewOther) != 0 or typed.ViewsMoved(c0, vs) or f.freshCtor(c0, b2, w.Id): return null
     return c0
@@ -3733,9 +3733,9 @@ fn (w mut walker&) retCtorOf(st typed.Stmt&, x typed.Expr&) typed.Call?& {
 # the site of call c0 where it is a constructor viewing what it is given whose instance is copied into struct place p
 # held in place (copyInto's viewCtor), -1 for any other
 fn (w mut walker&) copiedCtorOf(p typed.Lvalue&, c0 typed.Call?&) I64 {
-    if c0 == null or (p != typed.Lvalue.Field and p != typed.Lvalue.Elem): return -1
-    f := w.F
-    t := w.T()
+    if c0 is null or (p != typed.Lvalue.Field and p != typed.Lvalue.Elem): return -1
+    f :~ w.F
+    t :~ w.T()
     b2 := typed.CalleeBody(c0)
     if b2 < 0 or f.placeOfPlace(p) >= 0 or f.leaves(p.Type()).Len() == 0 or t.Role(f.Bodies[b2].Ty) != types.RoleCtor: return -1
     vs := f.viewsOf(b2)
@@ -3753,7 +3753,7 @@ fn (w mut walker&) viewCopied(c typed.Call&, b2 I64, j I64) Bool {
 # a unique value moved out of a parameter (movedPar, no copy cm) stored whole into a struct held in place: the
 # parameter's argument is what the place's leaves are given, judged at each call (parWhole, wholeArg)
 fn (w mut walker&) storedWhole(x typed.Expr&, cm typed.Expr?&) Bool {
-    if cm != null: return false
+    if cm is not null: return false
     j := w.movedPar(x)
     if j < 0: return false
     if not w.Final and addTo(w.F.parWhole[w.Id], j) > 0: w.F.changed = true
@@ -3765,9 +3765,9 @@ fn (w mut walker&) storedWhole(x typed.Expr&, cm typed.Expr?&) Bool {
 # any other value - a copy, a call's result - gives each leaf a value not made for it (condition 1)
 fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mut Vec<I64>&, sp source.Span
                             cm typed.Expr?& = null) Vec<I64> {
-    f := w.F
-    t := w.T()
-    if cm != null {
+    f :~ w.F
+    t :~ w.T()
+    if cm is not null {
         w.copyLeaves(lvs, cm, sp)
         return o
     }
@@ -3775,8 +3775,8 @@ fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mu
     # TakeAt's `v.data[k].occupy(v.data[k + 1].vacate())` - takes each leaf's value with it: moved out of the same leaf
     # place, as made()'s SMove. What it was moved out of, if it goes on, is a dropped or ended value - DroppedLeaves,
     # EndsMoved - or a gap the report names, movedGaps)
-    tk := takenOf(x)
-    if tk != null and f.placeOfPlace(tk) < 0 and t.Same(t.Repr(tk.Type()), t.Repr(ty)) {
+    tk :~ takenOf(x)
+    if tk is not null and f.placeOfPlace(tk) < 0 and t.Same(t.Repr(tk.Type()), t.Repr(ty)) {
         if w.Final and w.quiet == 0 {
             for lf in lvs {
                 if not f.PartPlace(lf.PlaceId): f.stores.Push(store(lf.PlaceId, w.Id, w.body().File, sp, SMove, lf.PlaceId, -1, x, null))
@@ -3784,9 +3784,9 @@ fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mu
         }
         return o
     }
-    c := typed.Call.Of(x)
-    b2 := typed.CalleeBody(c) if c != null else -1
-    if b2 >= 0 and f.Bodies[b2].Root != null and t.Role(f.Bodies[b2].Ty) == types.RoleCtor and
+    c :~ typed.Call.Of(x)
+    b2 := typed.CalleeBody(c) if c is not null else -1
+    if b2 >= 0 and f.Bodies[b2].Root is not null and t.Role(f.Bodies[b2].Ty) == types.RoleCtor and
        t.Results(f.Bodies[b2].Ty).Len() == 1 and t.Same(t.Repr(t.Results(f.Bodies[b2].Ty)[0]), t.Repr(ty)) {
         # (an instance viewing only unique values moved out of parameters holds them whole, no copy: what their leaves
         # are given is judged at the call, by the constructor's parWhole)
@@ -3802,7 +3802,7 @@ fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mu
     # (review 1125b finding 6: a function handing back only new values of the type - `S2.mk(i)` returning `S2(a, b)` -
     # gives the leaves values its own stores made, judged in it as a constructor's are (retCtorOf, letCtorOf, its
     # copies' untracked): no store here, as for a constructor's call)
-    if b2 >= 0 and f.Bodies[b2].Root != null and f.resFresh[b2] and t.Results(f.Bodies[b2].Ty).Len() == 1 and
+    if b2 >= 0 and f.Bodies[b2].Root is not null and f.resFresh[b2] and t.Results(f.Bodies[b2].Ty).Len() == 1 and
        t.Same(t.Repr(t.Results(f.Bodies[b2].Ty)[0]), t.Repr(ty)) {
         out Vec<I64>
         w.quiet++
@@ -3853,14 +3853,14 @@ fn (w mut walker&) movedGaps(st typed.Stmt&) {
 # whether call c hands back a value moved out of a place, holding leaves
 fn (f mut Free&) movedCall(c typed.Call&, ty types.TypeId) Bool {
     b2 := typed.CalleeBody(c)
-    if b2 < 0 or f.Bodies[b2].Root == null: return false
+    if b2 < 0 or f.Bodies[b2].Root is null: return false
     m := f.mustRes[b2]
     return m >= MovBase or (m == MovLeaves and f.leaves(ty).Len() > 0)
 }
 
 # the moved values expression x makes that nothing lets go of - x itself let go of where it is (top) - each a gap row
 fn (w mut walker&) movedIn(x typed.Expr?&, top Bool) {
-    if x == null: return
+    if x is null: return
     match x {
         case typed.Expr.Call(sp, ty, c) {
             if not top and w.F.movedCall(c, ty): w.gap(sp, "moves a value out of its collection that nothing here lets go of: drop it, or hold it in a local to its block's end")
@@ -3987,7 +3987,7 @@ fn ownCopySite(x typed.Expr&) I64 {
 # region would hold them all, so none is made for any. A leaf of another kind (a reference the copy shares) is given
 # existing storage
 fn (w mut walker&) copyLeaves(lvs Vec<leaf>&, cm typed.Expr&, sp source.Span) {
-    f := w.F
+    f :~ w.F
     if not w.Final or w.quiet > 0: return
     owners Vec<I64>
     for lf in lvs {
@@ -4075,7 +4075,7 @@ fn (f mut Free&) ownersIn(k I64, out mut Vec<I64>&, depth I64) {
 # O8f (gap 22): whether a fill of fixed array type ty can have each element's parts split (lower.fill's ownersCopy): its
 # element a struct whose every owner leaf ownersSplit takes, holding no other place a copy would make values of
 fn (f mut Free&) fillParted(ty types.TypeId) Bool {
-    t := f.T()
+    t :~ f.T()
     r := t.Plain(f.arrayOf(ty))
     if t.KindOf(r) != types.Kind.Array or t.Length(r) == types.TypeId(0): return false
     el := t.Elem(r)
@@ -4170,11 +4170,11 @@ fn (f Free&) leafAt(lvs Vec<leaf>&, i I64) I64 {
 
 # whether every field of struct type ty owning storage by value is one of idx, or field but (-1: none)
 fn (f mut Free&) onlyOwning(ty types.TypeId, idx Vec<I64>&, but I64) Bool {
-    t := f.T()
+    t :~ f.T()
     r := t.Plain(t.Repr(ty))
     if t.KindOf(r) != types.Kind.Named or not t.HasBody(r) or t.DeclKindOf(t.DeclOf(r)) != types.DeclKind.Struct: return false
     if t.DeclaresCopy(r): return false
-    fs := t.Items(t.Fields(r))
+    fs :~ t.Items(t.Fields(r))
     for i in range fs.Len() {
         if i == but or idx.Has(i) or t.IsRef(fs[i]): continue
         if t.OwnedPart(fs[i]) or t.OwnsParts(fs[i]): return false
@@ -4183,20 +4183,20 @@ fn (f mut Free&) onlyOwning(ty types.TypeId, idx Vec<I64>&, but I64) Bool {
 }
 
 fn (f mut Free&) splitPath(ty types.TypeId, path Array<I64>&, depth I64) Bool {
-    t := f.T()
+    t :~ f.T()
     r := t.Plain(t.Repr(ty))
     if depth >= path.Len() or t.KindOf(r) != types.Kind.Named or not t.HasBody(r) or t.DeclKindOf(t.DeclOf(r)) != types.DeclKind.Struct: return false
     if t.DeclaresCopy(r): return false
-    fs := t.Items(t.Fields(r))
+    fs :~ t.Items(t.Fields(r))
     if path[depth] >= fs.Len(): return false
     return depth + 1 >= path.Len() or f.splitPath(fs[path[depth]], path, depth + 1)
 }
 
 fn (f mut Free&) onlyPath(ty types.TypeId, path Array<I64>&, depth I64) Bool {
-    t := f.T()
+    t :~ f.T()
     r := t.Plain(t.Repr(ty))
     if depth >= path.Len() or t.KindOf(r) != types.Kind.Named or not t.HasBody(r) or t.DeclKindOf(t.DeclOf(r)) != types.DeclKind.Struct: return false
-    fs := t.Items(t.Fields(r))
+    fs :~ t.Items(t.Fields(r))
     for i in range fs.Len() {
         if i == path[depth] {
             if depth + 1 < path.Len() and not f.onlyPath(fs[i], path, depth + 1): return false
@@ -4215,7 +4215,7 @@ fn (f mut Free&) onlyPath(ty types.TypeId, path Array<I64>&, depth I64) Bool {
 # array leaves are given that copy's arrays too: a part place's is made, any other keeps for that gap (round sec8r2,
 # from the drop-order round's notes: "when in doubt, keep")
 fn (w mut walker&) viewCtor(lvs Vec<leaf>&, c typed.Call&, x typed.Expr&, sp source.Span) {
-    f := w.F
+    f :~ w.F
     if not w.Final or w.quiet > 0: return
     owners Vec<I64>
     arrs Vec<I64>
@@ -4312,30 +4312,30 @@ fn (w mut walker&) freshRoot(p typed.Lvalue&) I64 {
         case _ { return -1 }
     }
     if w.params.Has(l) or w.fields.Has(l): return -1
-    fl := w.F.freshLocals[w.Id]
+    fl :~ w.F.freshLocals[w.Id]
     return l if l < fl.Len() and fl[l] else -1
 }
 
 # the parameter every storage a place's container is reached through is reached from, -1 for none (a must-fact)
 fn (w mut walker&) withinOf(p typed.Lvalue&) I64 {
-    b := baseOf(p)
-    if b == null: return -1
+    b :~ baseOf(p)
+    if b is null: return -1
     v := w.F.withinPlace(w.Id, b)
     return v if v >= 0 and v < MovBase else -1
 }
 
 # the place every value a place's container is reached through is a value of, -1 for none (a must-fact)
 fn (w mut walker&) insidePlace(p typed.Lvalue&) I64 {
-    r := derefRoot(p)
-    if r == null: return -1
+    r :~ derefRoot(p)
+    if r is null: return -1
     return w.rootPlace(r)
 }
 
 # whether a value stored into place p is reached through the reference p's container is reached through - the same
 # value, read in one statement with nothing evaluated on the way that could change either (pure paths)
 fn (w mut walker&) sameValue(x typed.Expr&, p typed.Lvalue&) Bool {
-    r := derefRoot(p)
-    if r == null: return false
+    r :~ derefRoot(p)
+    if r is null: return false
     return reachedThrough(x, r)
 }
 
@@ -4437,22 +4437,22 @@ fn (w mut walker&) eval(sp source.Span, x typed.Expr&) {
         }
         case _ { }
     }
-    c := typed.Call.Of(x)
-    if c == null: return
+    c :~ typed.Call.Of(x)
+    if c is null: return
     for y in o {
         if okind(y) == OMov: w.go(oval(y), LDrop, x.Span(), receiverSpan(c), typed.CalleeBody(c))
     }
     # (a value of a type holding no reference - text popped from a Vec<String> - carries no origins: the callee's
     # must-fact names the place it was moved out of, released whole as DroppedMove's)
     b2 := typed.CalleeBody(c)
-    if w.holds(x.Type()) or b2 < 0 or w.F.Bodies[b2].Root == null or w.F.mustRes[b2] < MovBase: return
+    if w.holds(x.Type()) or b2 < 0 or w.F.Bodies[b2].Root is null or w.F.mustRes[b2] < MovBase: return
     w.go(w.F.mustRes[b2] - MovBase, LDrop, x.Span(), receiverSpan(c), b2)
 }
 
 # the call an expression is, under a try, null for none
 # an array place's elements hold no reference and own nothing (arrayCand): none can reach into an array's own region
 fn (f mut Free&) plainElems(k I64) Bool {
-    t := f.T()
+    t :~ f.T()
     el := t.Elem(t.Repr(f.valTy[k]))
     return not t.HoldsRefs(el) and not t.OwnsParts(el)
 }
@@ -4463,7 +4463,7 @@ fn (f mut Free&) plainElems(k I64) Bool {
 fn movesOnly(x typed.Expr&) Bool {
     return match x {
         case typed.Expr.Collect(_, _, c): yieldsMoved(c.Loop)
-        case typed.Expr.Seq(_, _, q): q.X != null and movesOnly(q.X!)
+        case typed.Expr.Seq(_, _, q): q.X is not null and movesOnly(q.X!)
         case typed.Expr.Away(_, _, y): movesOnly(y)
         case _: false
     }
@@ -4482,9 +4482,9 @@ fn stmtMoves(st typed.Stmt&) Bool {
             case typed.Expr.Take(_, _, _), typed.Expr.Read(_, _, _, _): true
             case _: false
         }
-        case typed.Stmt.Loop(_, body, post): yieldsMoved(body) and (post == null or yieldsMoved(post))
+        case typed.Stmt.Loop(_, body, post): yieldsMoved(body) and (post is null or yieldsMoved(post))
         case typed.Stmt.Block(_, b): yieldsMoved(b)
-        case typed.Stmt.If(_, i): yieldsMoved(i.Then) and (i.Else == null or yieldsMoved(i.Else!))
+        case typed.Stmt.If(_, i): yieldsMoved(i.Then) and (i.Else is null or yieldsMoved(i.Else!))
         case _: true
     }
 }
@@ -4503,7 +4503,7 @@ fn inElement(p typed.Lvalue&) Bool {
 # none of what its elements reach (movesOnly) - so its place is dropped from the origins
 fn (w mut walker&) elemRead(p typed.Lvalue&, o mut Vec<I64>&) {
     if not inElement(p): return
-    f := w.F
+    f :~ w.F
     n := 0
     for i in range o.Len() {
         if okind(o[i]) == OPl and f.arr[oval(o[i])]: continue
@@ -4517,7 +4517,7 @@ fn (w mut walker&) elemRead(p typed.Lvalue&, o mut Vec<I64>&) {
 fn copiedStore(x typed.Expr&) Bool {
     return match x {
         case typed.Expr.Read(_, _, _, _), typed.Expr.Slice(_, _, _): true
-        case typed.Expr.Cond(_, _, k): (k.A != null and copiedStore(k.A!)) or copiedStore(k.B)
+        case typed.Expr.Cond(_, _, k): (k.A is not null and copiedStore(k.A!)) or copiedStore(k.B)
         case typed.Expr.Away(_, _, y): copiedStore(y)
         case _: false
     }
@@ -4543,7 +4543,7 @@ fn (w mut walker&) goParts(k I64, sp source.Span) {
 # dropped, or a call
 fn (w mut walker&) go(k I64, kind I64, sp source.Span, recv source.Span, callee I64, viewsOnly Bool = false
                       via I64 = WalkNone, walkTy types.TypeId = types.UnknownT) {
-    f := w.F
+    f :~ w.F
     if viewsOnly and w.quiet > 0: return
     if not w.Final {
         # a body that may let go of any place lists none
@@ -4593,7 +4593,7 @@ fn (w mut walker&) go(k I64, kind I64, sp source.Span, recv source.Span, callee 
 # O8f: a let-go in the program's own code that runs again which early freeing does not follow - kept until its scope
 # closes for no condition of the rule's: a row of the report (gapRows), which -check fails on (B18)
 fn (w mut walker&) gap(sp source.Span, what String&) {
-    f := w.F
+    f :~ w.F
     if not w.Final or w.quiet > 0 or not f.programCode[w.Id] or not (w.loops > 0 or w.runsAgain()): return
     row := $f.P.L.Diags.Locate(w.body().File, I64(sp.Start)) + ": memory: '" + $w.text(sp) + "' " + $what + " - kept until its scope closes: a let-go early freeing does not follow (O8f)\n"
     if row not in f.gapRows: f.gapRows.Push(row)
@@ -4602,7 +4602,7 @@ fn (w mut walker&) gap(sp source.Span, what String&) {
 # whether a value of type ty owns storage a let-go of it could reclaim: an array of a run-time length held by value, or
 # a value holding one (QCE)
 fn (w mut walker&) ownsStorage(ty types.TypeId) Bool {
-    t := w.T()
+    t :~ w.T()
     return t.OwnedPart(ty) or t.OwnsParts(ty)
 }
 
@@ -4611,8 +4611,8 @@ fn (w mut walker&) unfollowed(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
     if not w.ownsStorage(p.Type()): return
     # (gap 19: a call's value its callee copies at its return - built where the result goes as a copy is, in no region
     # of its own, which no let-go of the place releases)
-    c := typed.Call.Of(x)
-    if c != null and w.F.copiedRet(typed.CalleeBody(c)) { w.gap(p.Span(), "keeps the copy '" + $w.F.fnName(typed.CalleeBody(c)) + "' makes of the value it returns, which no let-go releases") }
+    c :~ typed.Call.Of(x)
+    if c is not null and w.F.copiedRet(typed.CalleeBody(c)) { w.gap(p.Span(), "keeps the copy '" + $w.F.fnName(typed.CalleeBody(c)) + "' makes of the value it returns, which no let-go releases") }
     # (keptlast2: a fixed array of text no place follows - an element of an array of them, a field holding one - given
     # another value whole: a let-go of its text place, each element's slot put back by lowering (releases, FixedText); a
     # fill builds the new value's text in slots, as that place's stores do (makeStores), anything else - a copy of
@@ -4681,7 +4681,7 @@ fn (w mut walker&) storeField(k I64, x typed.Expr&, o Vec<I64>&, sp source.Span)
 # parameter's value stored so is kept by the body (parEsc). What is stored into storage reached through the parameter
 # itself, or through a value of the place itself, stays where it was (inside, j and q - -1 for none, must-facts)
 fn (w mut walker&) escape(o Vec<I64>&, sp source.Span, where String&, heap Bool, inside I64 = -1, q I64 = -1) {
-    f := w.F
+    f :~ w.F
     for y in o {
         k := okind(y)
         if k == OParC and not w.Final and oval(y) != inside and addTo(f.parEscC[w.Id], oval(y)) > 0: f.changed = true
@@ -4723,8 +4723,8 @@ fn (w mut walker&) paramOf(x typed.Expr&) I64 {
 fn (w mut walker&) movedPar(x typed.Expr&) I64 {
     match x {
         case typed.Expr.Seq(_, _, q) {
-            if not q.Gone or q.X == null: return -1
-            y := q.X!
+            if not q.Gone or q.X is null: return -1
+            y :~ q.X!
             j := try w.params.Get(readLocalOf(y)) catch default -1
             if j < 0 or w.T().IsRef(y.Type()) or not w.T().Unique(y.Type()): return -1
             return j
@@ -4750,7 +4750,7 @@ fn (w mut walker&) wholeField(k I64, x typed.Expr&) {
 # own moved parameter passes the requirement on; anything else is judged as the value of a struct held in place is
 # (copyInto) - a constructor of its type stores into its leaves itself, any other value gives them one not made for them
 fn (w mut walker&) wholeArg(a typed.Expr&, o Vec<I64>&, sp source.Span) {
-    f := w.F
+    f :~ w.F
     j := w.movedPar(a)
     if j >= 0 {
         if not w.Final and addTo(f.parWhole[w.Id], j) > 0: f.changed = true
@@ -4758,7 +4758,7 @@ fn (w mut walker&) wholeArg(a typed.Expr&, o Vec<I64>&, sp source.Span) {
     }
     lvs := f.leaves(a.Type())
     if lvs.Len() == 0: return
-    cm := a if ownCopySite(a) >= 0 else null
+    cm :~ a if ownCopySite(a) >= 0 else null
     oo Vec<I64> = o
     w.copyInto(lvs, a.Type(), a, oo, sp, cm)
 }
@@ -4791,7 +4791,7 @@ fn (w mut walker&) viewRead(o Vec<I64>&, by I64 = -1) {
 # what the storage of a place is part of: the origins of the value or reference it is reached through, and - where a
 # candidate place is passed through on the way - that place's own value (a field of what it holds is a view of it)
 fn (w mut walker&) reach(p typed.Lvalue&) Vec<I64> {
-    f := w.F
+    f :~ w.F
     match p {
         case typed.Lvalue.Local(lsp, _, l) {
             w.use(I64(l), lsp)
@@ -4864,7 +4864,7 @@ fn (w mut walker&) reachTo(p typed.Lvalue&) Vec<I64> {
 # a place's value read: what its storage is part of, its own value a view of the place, and the candidate places a
 # struct held in place copies with it
 fn (w mut walker&) readOf(p typed.Lvalue&, ty types.TypeId) Vec<I64> {
-    f := w.F
+    f :~ w.F
     if p == typed.Lvalue.Local and I64(p.id) != w.copyRead and w.heldCopy.Has(I64(p.id)) { w.untracked(ty, p.Span(), "a copy of a value holding it", true) }
     # (O8f, 2.4: a value owning nothing read out of a view call's temporary, `v[i].n` - the temporary only read where it
     # stands, or copied into the statement's innermost scope, lower.readOut: no value a store gives a place)
@@ -4901,7 +4901,7 @@ fn (w mut walker&) movedRead(p typed.Lvalue&, ty types.TypeId) Bool {
 # a place's storage borrowed: what it is part of - the places passed through on the way, read - but not the places a
 # struct held there holds: a reference to the container reaches their current values, never an old one
 fn (w mut walker&) borrowOf(p typed.Lvalue&) Vec<I64> {
-    f := w.F
+    f :~ w.F
     k := f.placeOfPlace(p)
     # (a field of a temporary a reference local holding it in its own block is declared with, BlockCopy, is no place's
     # value: the temporary's own, copied into that block, or storage nothing in the body changes)
@@ -4936,7 +4936,7 @@ fn (w mut walker&) tempReach(p typed.Lvalue&) Vec<I64> {
 
 # a place vacated: its value moved out - no longer a view of the place, a value moved out of it
 fn (w mut walker&) takeOf(p typed.Lvalue&, ty types.TypeId) Vec<I64> {
-    f := w.F
+    f :~ w.F
     o := w.reachTo(p)
     w.elemRead(p, o)
     k := f.placeOfPlace(p)
@@ -4995,12 +4995,12 @@ fn (w mut walker&) exprOf(x typed.Expr&) Vec<I64> {
         case typed.Expr.Call(sp, ty, c) { out = w.call(c, ty, sp) }
         case typed.Expr.Make(sp, ty, m) { out = w.makeOf(sp, ty, m) }
         case typed.Expr.Collect(_, ty, c) {
-            if c.Reserve != null: w.expr(c.Reserve!)
+            if c.Reserve is not null: w.expr(c.Reserve!)
             w.yieldTo.Push(w.F.placeKey(w.F.arrayOf(ty), -1))
             w.yieldOrig.Push(Vec<I64>())
             w.block(c.Loop)
             try w.yieldTo.Pop() catch { }
-            ys := try w.yieldOrig.Pop() catch default Vec<I64>()
+            ys :~ try w.yieldOrig.Pop() catch default Vec<I64>()
             addAllTo(out, ys)
             addTo(out, orig(ONew, I64(c.Site)))
         }
@@ -5036,7 +5036,7 @@ fn (w mut walker&) exprOf(x typed.Expr&) Vec<I64> {
         }
         case typed.Expr.Cond(_, _, c) {
             w.expr(c.C)
-            if c.A != null: addAllTo(out, w.expr(c.A!))
+            if c.A is not null: addAllTo(out, w.expr(c.A!))
             addAllTo(out, w.expr(c.B))
         }
         case typed.Expr.Seq(_, _, q) {
@@ -5044,18 +5044,18 @@ fn (w mut walker&) exprOf(x typed.Expr&) Vec<I64> {
             # (Part C: a unique value handed on - T13b, O15 - is the callee's from here, moved: the caller holds no view of
             # it in use during the call)
             if q.Gone: w.handing++
-            if q.X != null: out = w.expr(q.X!)
+            if q.X is not null: out = w.expr(q.X!)
             if q.Gone: w.handing--
         }
         case typed.Expr.Match(_, _, m) {
             for st in m.Held: w.stmt(st)
             for a in m.Arms: addAllTo(out, w.arm(a))
-            if m.NoMatch != null: addAllTo(out, w.arm(m.NoMatch!))
+            if m.NoMatch is not null: addAllTo(out, w.arm(m.NoMatch!))
         }
         case typed.Expr.Try(_, _, t) {
-            if t.X != null: out = w.expr(t.X!)
+            if t.X is not null: out = w.expr(t.X!)
             for c in t.Clauses {
-                if c.Code != null: w.block(c.Code!)
+                if c.Code is not null: w.block(c.Code!)
                 for d in c.Defaults: addAllTo(out, w.expr(d))
             }
         }
@@ -5122,7 +5122,7 @@ fn (w mut walker&) makeOf(sp source.Span, ty types.TypeId, m typed.Make&) Vec<I6
     }
     if readFill or readCopy: w.copying--
     w.exemptSite = outerE
-    if m.Length != null: w.expr(m.Length!)
+    if m.Length is not null: w.expr(m.Length!)
     if m.Site >= typed.SiteId(0): addTo(out, orig(ONew, I64(m.Site)))
     # (a copy makes what it owns anew, deep through values: no view of the source's owner or array leaves)
     if m.Kind == typed.MakeKind.Copy: out = w.F.unowned(out)
@@ -5196,9 +5196,9 @@ fn (w mut walker&) arm(a typed.Arm&) Vec<I64> {
         w.expr(alt.Test)
         for bd in alt.Binds: w.give(I64(bd.To), w.expr(bd.From))
     }
-    if a.Guard != null: w.expr(a.Guard!)
-    if a.Code != null: w.block(a.Code!)
-    if a.Value != null: out = w.expr(a.Value!)
+    if a.Guard is not null: w.expr(a.Guard!)
+    if a.Code is not null: w.block(a.Code!)
+    if a.Value is not null: out = w.expr(a.Value!)
     return out
 }
 
@@ -5215,7 +5215,7 @@ fn (w mut walker&) wholeItem(it typed.Expr&) Bool {
 }
 
 fn (w mut walker&) makeStores(m typed.Make&, ty types.TypeId, sp source.Span, block Bool = false) {
-    f := w.F
+    f :~ w.F
     if m.Kind != typed.MakeKind.Array and m.Kind != typed.MakeKind.Fill: return
     e := f.placeKey(f.arrayOf(ty), -1)
     if e < 0: return
@@ -5243,7 +5243,7 @@ fn (w mut walker&) storeOne(k I64, x typed.Expr&, sp source.Span, multi Bool) {
 
 # a call: its arguments' origins, what the callee stores, keeps and lets go of, and what its result may refer into
 fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64> {
-    f := w.F
+    f :~ w.F
     out Vec<I64>
     b2 := -1
     unknown := true
@@ -5254,7 +5254,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
     match c.Target {
         case typed.Callee.Body(id) {
             b2 = I64(id)
-            unknown = f.Bodies[b2].Root == null and not f.isCase(b2)
+            unknown = f.Bodies[b2].Root is null and not f.isCase(b2)
             # (O8f: a collection's element given a value owning storage - x[i] = v through SetAt - lets go of the old
             # one in the library's code, where an element store never lets go)
             if c.Args.Len() > 0 and not f.programCode[b2] and f.fnName(b2) == "SetAt" and w.ownsStorage(c.Args[c.Args.Len() - 1].Type()) {
@@ -5283,20 +5283,20 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         case typed.Callee.Extern(fi) {
             foreign = true
             # (the runtime's own and the C library's input and output, text, memory and time functions call nothing back)
-            nm := f.P.L.Names.Text(f.P.FnDecl(fi).Name)
+            nm :~ f.P.L.Names.Text(f.P.FnDecl(fi).Name)
             calls = not nm.StartsWith("__olang_") and not typed.NoCallbackExtern(nm)
             sync = nm == "__olang_run_on_stack"
         }
         case _ { }
     }
     args Vec<Vec<I64>>
-    ps := w.T().Items(w.T().Params(f.Bodies[b2].Ty)) if b2 >= 0 else Array<types.TypeId>(0)
+    ps :~ w.T().Items(w.T().Params(f.Bodies[b2].Ty)) if b2 >= 0 else Array<types.TypeId>(0)
     # (a call itself lent for reading, `$v[i].name`: its value read where it stands only where nothing writes what it
     # views until it is dead, else copied into the statement's innermost scope (lower.readHere) - what its arguments
     # read is in use at no let-go, as a view call's value given to a by-value parameter (viewArg))
     lentCall := c.Site >= typed.SiteId(0) and I64(c.Site) == w.readArg
     for j in range c.Args.Len() {
-        a := c.Args[j]
+        a :~ c.Args[j]
         wasRead := w.readArg
         # (lent only where the call's own value holds no reference: one that may hand back a view of the temporary -
         # `v[i].a.View()` kept in a local - has lowering keep its copy (D9h) where the view may live)
@@ -5318,7 +5318,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         # lower.unviewedArg: the result is storage of its own, `v[i] = plus(v[i], 1)`)
         unviewed := j < typed.ViewBits and (f.viewsOf(b2) & (I64(1) << j)) == 0 and not f.refsBeyondParts(ty) if b2 >= 0 else false
         viewArg := not copied and not unknown and b2 >= 0 and (not w.holds(ty) or unviewed) and I64(c.Site) != w.taskSite and j < ps.Len()
-        viewArg = viewArg and not w.T().IsRef(ps[j]) and argCall(a) >= 0 and f.Keeps != null and f.Keeps!(b2, j)
+        viewArg = viewArg and not w.T().IsRef(ps[j]) and argCall(a) >= 0 and f.Keeps is not null and f.Keeps!(b2, j)
         # (O8f, condition 3: or a task's, which lowering always copies beside the spawner (lower.args' task) where the
         # scope pass makes it last until the join - a copy no let-go releases where it is built in no region, checked
         # once the regions are written: taskCopied)
@@ -5329,7 +5329,7 @@ fn (w mut walker&) call(c typed.Call&, ty types.TypeId, sp source.Span) Vec<I64>
         # handed back nowhere - is let go through no place: the callee's parameter is all that holds it, until the scope
         # it was built in closes; what the callee copies out of it is judged where that copy goes)
         wasP, wasE := w.preservedArg, w.exemptSite
-        if copied and f.Keeps != null and f.Keeps!(b2, j): w.preservedArg = copySiteOf(a)
+        if copied and f.Keeps is not null and f.Keeps!(b2, j): w.preservedArg = copySiteOf(a)
         if viewArg: w.exemptSite = argCall(a)
         # (or one a value local holding the call's value in its own block is declared with: lowering copies it into
         # that block, dead with the local - BlockCopy - no value a store gives a place, no view of the collection's)
@@ -5504,7 +5504,7 @@ fn isVar(sc typed.Scope) Bool {
 # whether a type is, or is a reference to, one whose values have destructors to run - a struct declaring one, or a value
 # holding one by value (O15)
 fn (f mut Free&) destructs(ty types.TypeId) Bool {
-    t := f.T()
+    t :~ f.T()
     r := t.Repr(ty)
     if t.IsRef(r): r = t.Repr(t.Referent(r))
     return t.NeedsDrop(r)
@@ -5513,7 +5513,7 @@ fn (f mut Free&) destructs(ty types.TypeId) Bool {
 # whether a call passes one of body b's scope variables for one of its callee's
 fn (f mut Free&) passesVar(b I64, c typed.Call&, b2 I64) Bool {
     if c.Site < typed.SiteId(0): return false
-    pl := f.Plans.Ref(b)
+    pl :~ f.Plans.Ref(b)
     for i in range f.Bodies[b2].Vars.Len() {
         if isVar(pl.Passed(c.Site, i)): return true
     }
@@ -5533,7 +5533,7 @@ fn (f mut Free&) mayRegister(x typed.Expr&) Bool {
             for it in m.Items {
                 if f.mayRegister(it): return true
             }
-            return m.Length != null and f.mayRegister(m.Length!)
+            return m.Length is not null and f.mayRegister(m.Length!)
         }
         case typed.Expr.Text(_, _, tx) { return f.textMayRegister(tx) }
         case typed.Expr.Call(_, _, c) {
@@ -5551,7 +5551,7 @@ fn (f mut Free&) mayRegister(x typed.Expr&) Bool {
         }
         case typed.Expr.Away(_, _, y) { return f.mayRegister(y) }
         case typed.Expr.Cond(_, _, c) {
-            return f.mayRegister(c.C) or (c.A != null and f.mayRegister(c.A!)) or f.mayRegister(c.B)
+            return f.mayRegister(c.C) or (c.A is not null and f.mayRegister(c.A!)) or f.mayRegister(c.B)
         }
         case typed.Expr.Try(_, _, t) { return f.tryMayRegister(t) }
         case typed.Expr.Fn(_, _, fv) {
@@ -5565,10 +5565,10 @@ fn (f mut Free&) mayRegister(x typed.Expr&) Bool {
         # kind not walked here taken to register (F6 of the second bulk review)
         case typed.Expr.Seq(_, _, sq) {
             if f.stmtsMayRegister(sq.Stmts): return true
-            return sq.X != null and f.mayRegister(sq.X!)
+            return sq.X is not null and f.mayRegister(sq.X!)
         }
         case typed.Expr.Collect(_, _, cl) {
-            if cl.Reserve != null and f.mayRegister(cl.Reserve!): return true
+            if cl.Reserve is not null and f.mayRegister(cl.Reserve!): return true
             return f.stmtsMayRegister(cl.Loop.Stmts)
         }
         # statements inside a match: not walked here
@@ -5589,7 +5589,7 @@ fn (f mut Free&) calleeMayRegister(t typed.Callee&) Bool {
     match t {
         case typed.Callee.Body(id) {
             b2 := I64(id)
-            if not f.isCase(b2) and (f.Bodies[b2].Root == null or f.regOut[b2]): return true
+            if not f.isCase(b2) and (f.Bodies[b2].Root is null or f.regOut[b2]): return true
         }
         case typed.Callee.Helper(_, _), typed.Callee.Extern(_) { }
         case _ { return true }
@@ -5599,9 +5599,9 @@ fn (f mut Free&) calleeMayRegister(t typed.Callee&) Bool {
 
 # mayRegister's try: its value, or a clause - one with code taken to
 fn (f mut Free&) tryMayRegister(t typed.Try&) Bool {
-    if t.X != null and f.mayRegister(t.X!): return true
+    if t.X is not null and f.mayRegister(t.X!): return true
     for cl in t.Clauses {
-        if cl.Code != null: return true
+        if cl.Code is not null: return true
         for d in cl.Defaults {
             if f.mayRegister(d): return true
         }
@@ -5622,11 +5622,11 @@ fn (f mut Free&) stmtsMayRegister(sts Array<typed.Stmt&>&) Bool {
             }
             case typed.Stmt.If(_, i) {
                 if f.mayRegister(i.Test) or f.stmtsMayRegister(i.Then.Stmts): return true
-                if i.Else != null and f.stmtsMayRegister(i.Else!.Stmts): return true
+                if i.Else is not null and f.stmtsMayRegister(i.Else!.Stmts): return true
             }
             case typed.Stmt.Loop(_, b, post) {
                 if f.stmtsMayRegister(b.Stmts): return true
-                if post != null and f.stmtsMayRegister(post.Stmts): return true
+                if post is not null and f.stmtsMayRegister(post.Stmts): return true
             }
             case typed.Stmt.Block(_, b) {
                 if f.stmtsMayRegister(b.Stmts): return true
@@ -5669,7 +5669,7 @@ CalleeViaGiven I64 = -5
 # promises "pure" and no argument may write: nothing (effects are never followed past a type's words, T22b). Its
 # result may be any argument's (out)
 fn (w mut walker&) valueCall(c typed.Call&, v typed.Expr&, args Vec<Vec<I64>>&, sp source.Span, out mut Vec<I64>&) {
-    f := w.F
+    f :~ w.F
     for a in args: addAllTo(out, a)
     addTo(out, orig(OUnk, 0))
     recs := f.Sc.ValueRecsAt(w.Id, I64(c.Site)) if c.Site >= typed.SiteId(0) else Array<I64>(0)
@@ -5694,7 +5694,7 @@ fn (w mut walker&) valueCall(c typed.Call&, v typed.Expr&, args Vec<Vec<I64>>&, 
 # os.RunOnStack's __olang_run_on_stack(bytes, f): f runs on a thread of its own while the call waits, nothing beside it,
 # so it is the call f() would be (O8d's condition 3) - a call through f with no arguments
 fn (w mut walker&) syncCall(c typed.Call&, sp source.Span) {
-    v := c.Args[c.Args.Len() - 1]
+    v :~ c.Args[c.Args.Len() - 1]
     fty := w.T().Repr(v.Type())
     p := w.fixedParam(v)
     none Vec<Vec<I64>>
@@ -5722,7 +5722,7 @@ fn (f Free&) cGiven(x typed.Expr&) I64 {
 # a call through a value judged as a direct call of body rb (an adapter's Call where shift is 1: its instance the first
 # parameter, no argument of the call) - what it stores, keeps and lets go of; its result is any argument's (valueCall)
 fn (w mut walker&) asRecord(c typed.Call&, rb I64, shift I64, args Vec<Vec<I64>>&, sp source.Span) {
-    f := w.F
+    f :~ w.F
     if rb < 0 or rb >= f.Bodies.Len(): return
     if not w.Final: addTo(f.callers[rb], w.Id)
     for e in f.parStored[rb] {
@@ -5752,15 +5752,15 @@ fn (w mut walker&) asRecord(c typed.Call&, rb I64, shift I64, args Vec<Vec<I64>>
 # through to a value holding no reference (2.4's fourth gap: `make(ps[0])` given a Vec's element to read), the callee
 # writing through no parameter and reaching no global and no code not followed (effects.Facts, through its callees)
 fn (w mut walker&) ownGoes(c typed.Call&, b2 I64) Bool {
-    f := w.F
-    t := w.T()
-    body := f.Bodies[b2]
+    f :~ w.F
+    t :~ w.T()
+    body :~ f.Bodies[b2]
     for j in range c.Args.Len() {
         ty := c.Args[j].Type()
         if j < body.Params.Len() and w.readOnly(body.Locals[I64(body.Params[j])].Ty): continue
         if t.IsRef(ty) or t.HoldsRefs(ty) or t.OwnedPart(ty) or t.OwnsParts(ty): return false
     }
-    if f.fx == null: f.fx = effects.Effects(f.P, f.Bodies)
+    if f.fx is null: f.fx ~ effects.Effects(f.P, f.Bodies)
     fs := f.fx!.Of(b2)
     if fs.Unknown or fs.Back or fs.Through or fs.Unchecked or fs.Calls != 0 or fs.Spawns or fs.Writes != 0 or fs.Impure: return false
     return not (fs.ReadsGlobals or fs.RefGlobals or fs.WritesGlobals or fs.WritesOut)
@@ -5769,7 +5769,7 @@ fn (w mut walker&) ownGoes(c typed.Call&, b2 I64) Bool {
 # whether a parameter of type ty is a reference its body cannot write through, to a value holding no reference beyond
 # its own parts' arrays
 fn (w mut walker&) readOnly(ty types.TypeId) Bool {
-    t := w.T()
+    t :~ w.T()
     r := t.Repr(ty)
     return t.IsRef(r) and (t.PermOf(r) & types.Writable) == 0 and not w.F.refsBeyondParts(t.Referent(r))
 }
@@ -5795,7 +5795,7 @@ fn pastAway(x typed.Expr&) typed.Expr& {
 # each call gives p keeps it (escVia), anything else is kept; it lets go of what each call's p lets go of (letsVia) - in
 # the body's own walk, of anything, where it lets go at all
 fn (w mut walker&) throughParam(c typed.Call&, fty types.TypeId, p I64, args Vec<Vec<I64>>&, sp source.Span) {
-    f := w.F
+    f :~ w.F
     for q in range args.Len() {
         for y in args[q] {
             k := okind(y)
@@ -5820,7 +5820,7 @@ fn (w mut walker&) throughParam(c typed.Call&, fty types.TypeId, p I64, args Vec
 # a lambda's Capture local holding a function value it never assigns (capVia), else -1
 fn (w mut walker&) fixedCapture(v typed.Expr&) I64 {
     l := readLocalOf(pastAway(v))
-    body := w.body()
+    body :~ w.body()
     if l < 0 or body.Gen or l >= body.Locals.Len() or body.Locals[l].Kind != typed.LocalKind.Capture: return -1
     if w.T().KindOf(w.T().Repr(v.Type())) != types.Kind.Func or w.F.Sc.AssignedLocal(w.Id, l): return -1
     return l
@@ -5829,7 +5829,7 @@ fn (w mut walker&) fixedCapture(v typed.Expr&) I64 {
 # a call through Capture local l (fixedCapture) that may let go: composed where the lambda is written (capsThrough) -
 # in the lambda's own walk, of anything
 fn (w mut walker&) throughCapture(l I64, writes Bool, sp source.Span) {
-    f := w.F
+    f :~ w.F
     if w.Final {
         w.go(AnyPlace, LCall, sp, source.Span(0, 0), CalleeVia)
         return
@@ -5845,17 +5845,17 @@ fn (w mut walker&) throughCapture(l I64, writes Bool, sp source.Span) {
 # this body - gives those captures: a parameter of this body's, or a capture of its own, never assigned; whether every
 # one was composed so (else the caller judges rb as letting go of anything)
 fn (w mut walker&) capsThrough(a typed.Expr&, rb I64, sp source.Span) Bool {
-    f := w.F
-    caps := lambdaCaps(a, rb)
-    if caps == null: return false
+    f :~ w.F
+    caps :~ lambdaCaps(a, rb)
+    if caps is null: return false
     for e in f.capVia[rb] {
         l := e & ((I64(1) << 40) - 1)
         writes := (e >> 40) != 0
         outer typed.Expr?& = null
         for cp in caps {
-            if I64(cp.Inner) == l: outer = cp.Outer
+            if I64(cp.Inner) == l: outer ~ cp.Outer
         }
-        if outer == null: return false
+        if outer is null: return false
         if not writes and w.pureValue(outer): continue
         p := w.fixedParam(outer)
         ol := w.fixedCapture(outer) if p < 0 else -1
@@ -5884,7 +5884,7 @@ fn lambdaCaps(a typed.Expr&, rb I64) Array<typed.Capture&>?& {
 
 # this body's parameter p given a call through it that may let go (writes: given an argument that may write)
 fn (w mut walker&) via(p I64, writes Bool) {
-    f := w.F
+    f :~ w.F
     bit := I64(1) << p
     if (f.letsVia[w.Id] & bit) == 0 {
         f.letsVia[w.Id] = f.letsVia[w.Id] | bit
@@ -5899,12 +5899,12 @@ fn (w mut walker&) via(p I64, writes Bool) {
 # a call of body b2 (shift 1: an adapter's Call, its first parameter no argument): its calls through the function
 # parameters it is given, each judged by the function value this call gives it
 fn (w mut walker&) viaCall(c typed.Call&, b2 I64, shift I64, args Vec<Vec<I64>>&, sp source.Span) {
-    f := w.F
+    f :~ w.F
     lv := f.letsVia[b2]
     if lv == 0 and f.escVia[b2].Len() == 0: return
     # (a lambda's calls through what it captured, not written here: anything)
     if (lv & CapBit) != 0: w.goAll(sp, c, b2)
-    ps := w.T().Items(w.T().Params(f.Bodies[b2].Ty))
+    ps :~ w.T().Items(w.T().Params(f.Bodies[b2].Ty))
     for p in range shift, 62 {
         if (lv & (I64(1) << p)) == 0 or p - shift >= c.Args.Len(): continue
         pty := ps[p] if p < ps.Len() else types.UnknownT
@@ -5926,7 +5926,7 @@ fn writtenRecs(a typed.Expr&) Vec<I64> ? NotWritten {
     match a {
         case typed.Expr.Away(_, _, y) { return try writtenRecs(y) }
         case typed.Expr.Cond(_, _, k) {
-            if k.A == null: error NotWritten
+            if k.A is null: error NotWritten
             out := try writtenRecs(k.A!)
             for r in try writtenRecs(k.B): addTo(out, r)
             return out
@@ -5957,7 +5957,7 @@ fn fnRecOf(fv typed.FnVal&) I64 {
 # that may write): by the bodies it is, where written at the call; composed into this body's own where it is one of
 # its parameters; else by its type - nothing where it promises "pure" and no argument may write
 fn (w mut walker&) letsThrough(c typed.Call&, a typed.Expr&, pty types.TypeId, writes Bool, sp source.Span) {
-    f := w.F
+    f :~ w.F
     recs := try writtenRecs(a) catch default Vec<I64>()
     if recs.Len() > 0 {
         for r in recs {
@@ -5990,7 +5990,7 @@ fn (w mut walker&) letsThrough(c typed.Call&, a typed.Expr&, pty types.TypeId, w
 
 # whether a function value's type promises "pure" - before a conversion to a type promising less (T22)
 fn (w mut walker&) pureValue(a typed.Expr&) Bool {
-    t := w.T()
+    t :~ w.T()
     if t.PromisesPure(t.Repr(a.Type())): return true
     return match a {
         case typed.Expr.Away(_, _, y): w.pureValue(y)
@@ -6002,7 +6002,7 @@ fn (w mut walker&) pureValue(a typed.Expr&) Bool {
 # what a function value a given a call keeps of its parameter q given value o: by the bodies it is, where written at
 # the call; composed into this body's own where it is one of its parameters; else kept
 fn (w mut walker&) escThrough(a typed.Expr&, q I64, o Vec<I64>&, sp source.Span) {
-    f := w.F
+    f :~ w.F
     recs := try writtenRecs(a) catch default Vec<I64>()
     if recs.Len() > 0 {
         for r in recs {
@@ -6041,7 +6041,7 @@ fn (f mut Free&) recKeeps(rb I64, q I64) Bool {
 
 # whether a call gives an argument that may write: a writable reference, or a value holding a reference
 fn (w mut walker&) mayWrite(c typed.Call&) Bool {
-    t := w.T()
+    t :~ w.T()
     for a in c.Args {
         ty := t.Repr(a.Type())
         if t.IsRef(ty) and (t.PermOf(ty) & types.Writable) != 0: return true
@@ -6052,7 +6052,7 @@ fn (w mut walker&) mayWrite(c typed.Call&) Bool {
 
 # a call that may let go of any place
 fn (w mut walker&) goAll(sp source.Span, c typed.Call&, callee I64) {
-    f := w.F
+    f :~ w.F
     if not w.Final {
         if not f.letsAll[w.Id] {
             f.letsAll[w.Id] = true
@@ -6088,7 +6088,7 @@ fn (f mut Free&) isCase(b I64) Bool {
 # a value stored into candidate place k (store, or through a callee's parameter): views in it kept elsewhere, a
 # parameter's value a summary's store, and - in the final walk - whether it was made for the place
 fn (w mut walker&) storeAs(k I64, x typed.Expr&, o Vec<I64>&, sp source.Span, where String&, multi Bool, contained Bool = false) {
-    f := w.F
+    f :~ w.F
     # (round 5: a view of an array a generational instance holds in place, stored - kept where no site sees it)
     # (a parameter's value is judged where it is passed - the callers' stores; a constructor's field its own place's)
     if w.Final and f.bufOn and w.quiet == 0 and w.paramOf(x) < 0 {
@@ -6145,7 +6145,7 @@ fn (w mut walker&) storeAs(k I64, x typed.Expr&, o Vec<I64>&, sp source.Span, wh
 # from the walk's stores of parameters' values: a parameter stored at two statements not in two branches of one if,
 # or at a statement in a loop, is stored more than once on a path - its argument cannot be made for one place
 fn (w mut walker&) paramPaths() {
-    f := w.F
+    f :~ w.F
     for a in range w.parSite.Len() {
         j := w.parSite[a]
         s := w.parSiteAt[a]
@@ -6194,7 +6194,7 @@ fn (w mut walker&) text(sp source.Span) String { return w.F.textOf(w.body().File
 
 fn (f mut Free&) textOf(file I64, sp source.Span) String {
     if file < 0: return ""
-    t := f.P.L.Diags.TextOf(file)
+    t :~ f.P.L.Diags.TextOf(file)
     a := I64(sp.Start)
     b := I64(sp.End)
     if a < 0 or b > t.Len() or a >= b: return ""
@@ -6213,7 +6213,7 @@ fn receiverSpan(c typed.Call&) source.Span {
 # where the store is - a temporary, a constructor, a call whose result is new and all its own (O13) - is built in a
 # region of its own; a value moved out of the same place moves its region; anything else is not made for the place
 fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
-    f := w.F
+    f :~ w.F
     file := w.body().File
     kind := SFail
     of := -1
@@ -6236,21 +6236,21 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
     }
     # (2.4's first gap: a fixed fill or literal widened to the place's run-time array, `rows := Array<I64>(4)` (T7c), is
     # the Make's store - lowering widens it into the region its site is given, lower.widenAt)
-    wm := f.WidenedMake(x)
+    wm :~ f.WidenedMake(x)
     # (a global's initializer copies a widened fill or literal into a region of its own in the program's scope,
     # lower.storeHome - not its site's, regionMade: a later let-go of the global releases that region, the initializer
     # itself letting go of nothing)
-    if wm != null and w.body().Of == typed.BodyOf.Global {
+    if wm is not null and w.body().Of == typed.BodyOf.Global {
         f.stores.Push(store(k, w.Id, file, sp, SOk, of, site, x, null))
         return
     }
-    if wm != null {
+    if wm is not null {
         w.made(k, wm, sp, multi)
         return
     }
     # (a literal one of whose items is not built for it - a local's value, held outside its region: kept, and said)
-    wa := f.widened(x)
-    if wa != null {
+    wa :~ f.widened(x)
+    if wa is not null {
         f.stores.Push(store(k, w.Id, file, sp, SFail, of, site, x, null))
         f.keep(k, RMade, file, sp, "its new value is an array literal one of whose items is not built for it: '" + $w.text(wa.Span()) + "'; build each item in the literal, or the array with a fill")
         return
@@ -6273,7 +6273,7 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
         }
         # (statements before the value - grown()'s hidden locals - build nothing of it)
         case typed.Expr.Seq(_, _, q) {
-            if q.X != null {
+            if q.X is not null {
                 w.made(k, q.X!, sp, multi)
                 return
             }
@@ -6283,7 +6283,7 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
         # (but constant text an arm gives a place of text that may change: lowering copies the conditional's value where
         # its scope is, no region a let-go may release - review: tools' migrateMarkdown, `fence = "a" if c else "b"`)
         case typed.Expr.Cond(_, _, c) {
-            if c.A != null and not (ConstRead(c.A!) or ConstRead(c.B)) {
+            if c.A is not null and not (ConstRead(c.A!) or ConstRead(c.B)) {
                 w.made(k, c.A!, sp, multi)
                 w.made(k, c.B, sp, multi)
                 return
@@ -6291,7 +6291,7 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
             why = $"its new value is existing storage: '" + $w.text(x.Span()) + "'; give it new storage - a constructor call, '$...', 'Copy()'"
         }
         case typed.Expr.Try(_, _, t) {
-            plain := t.X != null
+            plain := t.X is not null
             for c in t.Clauses {
                 if c.Defaults.Len() > 0: plain = false
             }
@@ -6317,9 +6317,9 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
                 kind = SFresh
             } else if why == "" {
                 # a call handing out a value moved out of the place
-                c := typed.Call.Of(x)
-                b2 := typed.CalleeBody(c) if c != null else -1
-                if b2 >= 0 and f.Bodies[b2].Root != null and f.mustRes[b2] == MovBase + k {
+                c :~ typed.Call.Of(x)
+                b2 := typed.CalleeBody(c) if c is not null else -1
+                if b2 >= 0 and f.Bodies[b2].Root is not null and f.mustRes[b2] == MovBase + k {
                     kind = SMove
                     of = k
                 }
@@ -6361,7 +6361,7 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
 # builds its result where the place's storage is, no copy of it: kept, and said
 fn (f mut Free&) copyStore(k I64, x typed.Expr&) Bool {
     if not f.isOwnLocal(k) or not f.arr[k] or f.owner[k] or not f.P.Immut(f.valTy[k]): return false
-    t := f.T()
+    t :~ f.T()
     r := t.Repr(f.valTy[k])
     if t.KindOf(r) != types.Kind.Array or t.HoldsRefs(t.Elem(r)) or t.OwnsParts(t.Elem(r)) or t.IsRef(x.Type()): return false
     return copiedRead(x) or f.viewCallSite(x) >= 0
@@ -6389,8 +6389,8 @@ fn (f Free&) CopyStore(b I64, at I64) I64 {
 # elements each its item's copy made there, a literal's items moved in where each was built - its element place's stores
 # (review9: copied out of that region into the statement's scope, a literal's let-go released storage no region held)
 fn (f mut Free&) WidenedMake(x typed.Expr&) typed.Expr?& {
-    a := f.widened(x)
-    if a == null or not f.builtItems(a): return null
+    a :~ f.widened(x)
+    if a is null or not f.builtItems(a): return null
     return a
 }
 
@@ -6407,11 +6407,11 @@ fn (f mut Free&) builtItems(a typed.Expr&) Bool {
 
 # the fixed fill or literal a conversion widens to an array of a run-time length of its element, null for any other
 fn (f mut Free&) widened(x typed.Expr&) typed.Expr?& {
-    t := f.T()
+    t :~ f.T()
     match x {
         case typed.Expr.Prim(_, pt, op, _, args) {
             if not isConversion(op, args): return null
-            a := args[0]
+            a :~ args[0]
             m := match a {
                 case typed.Expr.Make(_, _, mk): mk.Kind == typed.MakeKind.Fill or mk.Kind == typed.MakeKind.Array
                 case _: false
@@ -6430,8 +6430,8 @@ fn (f mut Free&) widened(x typed.Expr&) typed.Expr?& {
 # the site a value made for a place is built at, and - where it is not new - why: a temporary given storage, an
 # array, a text, a comprehension, a constructor, a call whose result is built (O13) and new
 fn (w mut walker&) freshSite(x typed.Expr&) I64, String {
-    f := w.F
-    t := w.T()
+    f :~ w.F
+    t :~ w.T()
     match x {
         case typed.Expr.Promote(_, _, pr) { return I64(pr.Site), "" }
         case typed.Expr.Make(_, _, m) { return I64(m.Site), "" }
@@ -6440,15 +6440,15 @@ fn (w mut walker&) freshSite(x typed.Expr&) I64, String {
         case typed.Expr.Call(_, _, c) {
             b2 := typed.CalleeBody(c)
             if b2 < 0 or c.Site < typed.SiteId(0): return -1, ""
-            body := f.Bodies[b2]
-            if body.Root == null: return -1, ""
+            body :~ f.Bodies[b2]
+            if body.Root is null: return -1, ""
             if t.Role(body.Ty) == types.RoleCtor: return I64(c.Site), ""
             if t.Results(body.Ty).Len() != 1: return -1, ""
             e := t.ResultFrom(body.Ty, 0)
             if e >= 0 or e == types.FromTypeVar {
                 # a borrowed result: its new value lives where the old one does (the tree's sharing version, 2.7)
                 if e >= 0 and e < body.Params.Len() {
-                    pn := f.P.L.Names.Text(body.Locals[I64(body.Params[e])].Name)
+                    pn :~ f.P.L.Names.Text(body.Locals[I64(body.Params[e])].Name)
                     f.noteAt = b2
                     f.noteFile = body.File
                     f.noteSp = source.Span(body.Sp.Start, body.Sp.Start)
@@ -6474,14 +6474,14 @@ fn (f mut Free&) fnName(b I64) String {
 
 # a reference result type as a built result writes it: the referent and a bare "&"
 fn (f mut Free&) builtSpell(ty types.TypeId) String {
-    t := f.T()
-    if not t.IsRef(ty) or f.Sc.Spell == null: return "T&"
+    t :~ f.T()
+    if not t.IsRef(ty) or f.Sc.Spell is null: return "T&"
     return $f.Sc.Spell!(t.Referent(ty)) + "&"
 }
 
 # what a value of a reference type is called in a note: a tree where it is an enum holding its own kind
 fn (f mut Free&) what(ty types.TypeId) String {
-    t := f.T()
+    t :~ f.T()
     if not t.IsRef(ty): return "value"
     r := t.Plain(t.Repr(t.Referent(ty)))
     if t.KindOf(r) != types.Kind.Named or not t.HasBody(r) or t.DeclKindOf(t.DeclOf(r)) != types.DeclKind.Enum {
@@ -6512,7 +6512,7 @@ fn (f Free&) unkept(k I64) Bool { return f.whyKind[k] == RNone or f.whyKind[k] =
 # all it holds for a type holding no reference beyond its parts; for one holding some, those no reference it holds
 # may refer into, where that is known (pathsKnown) - its own storage, which a store into it gives new storage
 fn (w mut walker&) ownLeaves(l I64, ty types.TypeId) Vec<I64> {
-    f := w.F
+    f :~ w.F
     if ty == types.UnknownT: return Vec<I64>()
     if not f.refsBeyondParts(ty): return f.heldPlaces(ty)
     out Vec<I64>
@@ -6527,8 +6527,8 @@ fn (w mut walker&) ownLeaves(l I64, ty types.TypeId) Vec<I64> {
 # lets go of k - after it, in a loop around both, or in deferred code - or a view read in the statement itself (other
 # than the value an assignment stores) keeps k. The first one found is the report's note
 fn (w mut walker&) views() {
-    f := w.F
-    body := w.body()
+    f :~ w.F
+    body :~ w.body()
     # what each local holds a view of (or a value moved out of), and each local's uses - indexed once
     viewed Vec<mut Vec<I64>&>
     usesOf Vec<mut Vec<I64>&>
@@ -6622,7 +6622,7 @@ fn (w mut walker&) views() {
             if kind == LCall and w.goEnd[g] < 0 and w.declLet[l] and w.declAt[l] == s: continue
             u := w.usedAfter(l, s, usesOf[l])
             if u < 0: continue
-            name := f.P.L.Names.Text(body.Locals[l].Name)
+            name :~ f.P.L.Names.Text(body.Locals[l].Name)
             line := f.P.L.Diags.LineAt(body.File, I64(body.Locals[l].Sp.Start))
             gl := f.P.L.Diags.LineAt(body.File, I64(w.goSp[g].Start))
             # a local of the program's own is said by its name; a hidden one - what a for-in walks - by what it holds
@@ -6657,7 +6657,7 @@ fn (w mut walker&) views() {
 fn (w mut walker&) walkBufs(g I64) Vec<I64> {
     out Vec<I64>
     if w.goVia[g] == WalkNone: return out
-    f := w.F
+    f :~ w.F
     if w.goVia[g] == WalkCall {
         for q in range f.arr.Len() {
             if f.arr[q]: out.Push(q)
@@ -6675,7 +6675,7 @@ fn (w mut walker&) walkBufs(g I64) Vec<I64> {
 fn (f mut Free&) bufReach(q I64) Vec<I64> {
     if q < 0 or q >= f.arr.Len() or not f.arr[q]: return Vec<I64>()
     if f.bufReachAt.Has(q): return try f.bufReachAt.Get(q) catch default Vec<I64>()
-    t := f.T()
+    t :~ f.T()
     r := t.Plain(f.arrayOf(f.valTy[q]))
     out Vec<I64>
     if t.KindOf(r) == types.Kind.Array {
@@ -6752,7 +6752,7 @@ fn (w mut walker&) removes(k I64, g I64) String {
         r := w.F.textOf(w.body().File, w.goRecv[e])
         at := r.Len() - 1
         for at >= 0 and (r[at].IsLetter() or r[at].IsDigit() or r[at] == '_'): at--
-        nm := r[at + 1:]
+        nm :~ r[at + 1:]
         if nm.Len() > 0: return $"removes " + $nm
     }
     return "lets go of it"
@@ -6825,7 +6825,7 @@ fn (w mut walker&) instRoots(viewers Vec<I64>&, names mut Map<I64, Vec<String>>&
 # a root: a local declared in the body's text, by value, holding storage of its own and no reference
 fn (w mut walker&) instCand(l I64) Bool {
     loc := w.body().Locals[l]
-    t := w.T()
+    t :~ w.T()
     if loc.Kind != typed.LocalKind.Var or t.IsRef(loc.Ty) or t.SharesRefs(loc.Ty): return false
     return t.OwnsParts(loc.Ty) or t.OwnedPart(loc.Ty)
 }
@@ -6838,7 +6838,7 @@ fn (w mut walker&) instOf(u typed.LocalUses&, memo mut Array<I64>&, l I64, depth
         memo[l] = l
         return l
     }
-    if w.body().Locals[l].Kind == typed.LocalKind.Param or u.Whole[l] or has(u.StoreAt, l) or u.Init[l] == null: return InstNone
+    if w.body().Locals[l].Kind == typed.LocalKind.Param or u.Whole[l] or has(u.StoreAt, l) or u.Init[l] is null: return InstNone
     memo[l] = w.instRoot(u, memo, u.Init[l]!, depth + 1)
     return memo[l]
 }
@@ -6847,7 +6847,7 @@ fn (w mut walker&) instOf(u typed.LocalUses&, memo mut Array<I64>&, l I64, depth
 # local whose value views it, a call of a body reaching nothing but what it is given whose every argument holding a
 # reference views the same root
 fn (w mut walker&) instRoot(u typed.LocalUses&, memo mut Array<I64>&, x typed.Expr&, depth I64) I64 {
-    t := w.T()
+    t :~ w.T()
     ty := x.Type()
     if not t.IsRef(ty) and not t.SharesRefs(ty): return InstPlain
     if depth > 8: return InstNone
@@ -6888,10 +6888,10 @@ fn (w mut walker&) instHeld(u typed.LocalUses&, memo mut Array<I64>&, p typed.Lv
 # a call's result: a body reaching no global, no code not followed and no task refers into what its arguments reach,
 # or into storage it builds
 fn (w mut walker&) instCall(u typed.LocalUses&, memo mut Array<I64>&, c typed.Call&, depth I64) I64 {
-    f := w.F
+    f :~ w.F
     cb := typed.CalleeBody(c)
     if cb < 0: return InstNone
-    if f.fx == null: f.fx = effects.Effects(f.P, f.Bodies)
+    if f.fx is null: f.fx ~ effects.Effects(f.P, f.Bodies)
     fs := f.fx!.Of(cb)
     if fs.Unknown or fs.Back or fs.Through or fs.Unchecked or fs.Calls != 0 or fs.Spawns: return InstNone
     if fs.ReadsGlobals or fs.RefGlobals or fs.WritesOut: return InstNone
@@ -6922,8 +6922,8 @@ fn (w mut walker&) instGiven() Vec<String> {
 # local (through a reference, a global), r is never moved out (D9i) and holds its own storage, and every second name a
 # let-go could go through (one it may write through) has a name. Reached otherwise
 fn (w mut walker&) instNames(u typed.LocalUses&, r I64, given Vec<String>&) Vec<String> ? instError.Reached {
-    body := w.body()
-    t := w.T()
+    body :~ w.body()
+    t :~ w.T()
     n := body.Locals.Len()
     if u.EscHard[r] or u.EscOwn[r] or not w.instKept(u, r) or not w.instOwn(u, r): error instError.Reached
     last := typed.LastCopies(body)
@@ -6979,8 +6979,8 @@ fn wordsIn(text String&, words Vec<String>&) Bool {
 # whether every call local l (or a reference to its storage) is given keeps nothing of it past the call, and no value
 # made of it is kept elsewhere or held by a lambda
 fn (w mut walker&) instKept(u typed.LocalUses&, l I64) Bool {
-    f := w.F
-    t := w.T()
+    f :~ w.F
+    t :~ w.T()
     for j in range u.LendAt.Len() {
         if u.LendAt[j] == l and not f.refsKept.NoneKept(t, f.Bodies, u.LendBody[j], u.LendParam[j]): return false
     }
@@ -7000,8 +7000,8 @@ fn (w mut walker&) instKept(u typed.LocalUses&, l I64) Bool {
 # into (never a view local, lower.viewCand); else its declaration's value is built for it
 fn (w mut walker&) instOwn(u typed.LocalUses&, r I64) Bool {
     if u.WrOther[r] or u.Whole[r] or has(u.StoreAt, r): return true
-    x := u.Init[r]
-    return x == null or w.instFresh(x)
+    x :~ u.Init[r]
+    return x is null or w.instFresh(x)
 }
 
 fn (w mut walker&) instFresh(x typed.Expr&) Bool {
@@ -7052,8 +7052,8 @@ fn wordChar(c Char) Bool { return c.IsLetter() or c.IsDigit() or c == '_' }
 # a body's returns and its locals' values: what each local's every value is (a value of one place, or moved out of
 # one), what every result is, and whether every result is new
 fn (f mut Free&) mustOf(b I64) {
-    body := f.Bodies[b]
-    if body.Root == null: return
+    body :~ f.Bodies[b]
+    if body.Root is null: return
     m mut mustW& = mustW(f, b)
     for _ in range body.Locals.Len() {
         m.must.Push(MustTop)
@@ -7086,10 +7086,10 @@ fn (f mut Free&) mustOf(b I64) {
         }
         if not found: break
     }
-    wl := f.withinLocals[b]
+    wl :~ f.withinLocals[b]
     wl.Clear()
     for x in m.within: wl.Push(x)
-    co := f.copiedOut[b]
+    co :~ f.copiedOut[b]
     co.Clear()
     for _ in range body.Locals.Len(): co.Push(false)
     for x in m.values {
@@ -7115,10 +7115,10 @@ fn (f mut Free&) mustOf(b I64) {
         f.resFresh[b] = false
         f.changed = true
     }
-    ml := f.mustLocals[b]
+    ml :~ f.mustLocals[b]
     ml.Clear()
     for x in m.must: ml.Push(x)
-    fl := f.freshLocals[b]
+    fl :~ f.freshLocals[b]
     fl.Clear()
     for l in range body.Locals.Len(): fl.Push(m.freshLocal(l))
 }
@@ -7191,14 +7191,14 @@ fn (m mut mustW&) stmt(st typed.Stmt&) {
         case typed.Stmt.If(_, i) {
             m.expr(i.Test)
             m.block(i.Then)
-            if i.Else != null: m.block(i.Else!)
+            if i.Else is not null: m.block(i.Else!)
         }
         case typed.Stmt.Loop(_, body, post) {
             m.block(body)
-            if post != null: m.block(post)
+            if post is not null: m.block(post)
         }
         case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x) {
-            if x != null {
+            if x is not null {
                 m.returned.Push(x)
                 m.expr(x)
             }
@@ -7223,30 +7223,30 @@ fn (m mut mustW&) expr(x typed.Expr&) {
     match x {
         case typed.Expr.Seq(_, _, q) {
             for st in q.Stmts: m.stmt(st)
-            if q.X != null: m.expr(q.X!)
+            if q.X is not null: m.expr(q.X!)
         }
         case typed.Expr.Match(_, _, mt) {
             for st in mt.Held: m.stmt(st)
             for a in mt.Arms {
                 for alt in a.Alts: m.binds(alt)
-                if a.Code != null: m.block(a.Code!)
-                if a.Value != null: m.expr(a.Value!)
+                if a.Code is not null: m.block(a.Code!)
+                if a.Value is not null: m.expr(a.Value!)
             }
-            if mt.NoMatch != null {
-                if mt.NoMatch!.Code != null: m.block(mt.NoMatch!.Code!)
+            if mt.NoMatch is not null {
+                if mt.NoMatch!.Code is not null: m.block(mt.NoMatch!.Code!)
             }
         }
         case typed.Expr.Try(_, _, t) {
-            if t.X != null: m.expr(t.X!)
+            if t.X is not null: m.expr(t.X!)
             for c in t.Clauses {
-                if c.Code != null: m.block(c.Code!)
+                if c.Code is not null: m.block(c.Code!)
             }
         }
         case typed.Expr.Call(_, _, c) {
             for a in c.Args: m.expr(a)
         }
         case typed.Expr.Cond(_, _, c) {
-            if c.A != null: m.expr(c.A!)
+            if c.A is not null: m.expr(c.A!)
             m.expr(c.B)
         }
         case _ { }
@@ -7255,7 +7255,7 @@ fn (m mut mustW&) expr(x typed.Expr&) {
 
 # what every value of an expression is
 fn (m mut mustW&) exprMust(x typed.Expr&) I64 {
-    f := m.F
+    f :~ m.F
     return match x {
         case typed.Expr.Lit(_, _, _): MustTop
         case typed.Expr.Read(_, _, p, _): m.placeMust(p)
@@ -7290,12 +7290,12 @@ fn (m mut mustW&) placeMust(p typed.Lvalue&) I64 {
 
 fn (m mut mustW&) callMust(c typed.Call&) I64 {
     b2 := typed.CalleeBody(c)
-    if b2 < 0 or m.F.Bodies[b2].Root == null: return MustNone
+    if b2 < 0 or m.F.Bodies[b2].Root is null: return MustNone
     return m.F.mustRes[b2]
 }
 
 fn (m mut mustW&) tryMust(t typed.Try&) I64 {
-    if t.X == null: return MustNone
+    if t.X is null: return MustNone
     v := m.exprMust(t.X!)
     for c in t.Clauses {
         for d in c.Defaults: v = meet(v, m.exprMust(d))
@@ -7314,8 +7314,8 @@ fn (m mut mustW&) assignedFresh(l I64, depth I64) Bool {
 }
 
 fn (m mut mustW&) fresh(x typed.Expr&, depth I64) Bool {
-    f := m.F
-    t := f.T()
+    f :~ m.F
+    t :~ f.T()
     if depth > 8: return false
     match x {
         case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _) { return true }
@@ -7324,8 +7324,8 @@ fn (m mut mustW&) fresh(x typed.Expr&, depth I64) Bool {
         }
         case typed.Expr.Call(_, _, c) {
             b2 := typed.CalleeBody(c)
-            if b2 < 0 or f.Bodies[b2].Root == null: return false
-            body := f.Bodies[b2]
+            if b2 < 0 or f.Bodies[b2].Root is null: return false
+            body :~ f.Bodies[b2]
             if t.Role(body.Ty) == types.RoleCtor: return true
             if t.Results(body.Ty).Len() != 1: return false
             e := t.ResultFrom(body.Ty, 0)
@@ -7339,7 +7339,7 @@ fn (m mut mustW&) fresh(x typed.Expr&, depth I64) Bool {
             }
         }
         case typed.Expr.Try(_, _, tr) {
-            if tr.X == null or not m.fresh(tr.X!, depth + 1): return false
+            if tr.X is null or not m.fresh(tr.X!, depth + 1): return false
             for c in tr.Clauses {
                 for d in c.Defaults {
                     if not m.fresh(d, depth + 1): return false
@@ -7368,7 +7368,7 @@ fn derefRoot(p typed.Lvalue&) typed.Expr?& {
 }
 
 fn (w mut walker&) rootOf(x typed.Expr&) typed.Expr?& {
-    t := w.T()
+    t :~ w.T()
     match x {
         case typed.Expr.Read(_, ty, p, _) {
             match p {
@@ -7385,8 +7385,8 @@ fn (w mut walker&) rootOf(x typed.Expr&) typed.Expr?& {
 # the place every value of a root reference is a value of (a view or a value moved out), -1 for none: only a local or
 # a place read, with nothing evaluated on the way that could change it
 fn (w mut walker&) rootPlace(r typed.Expr&) I64 {
-    f := w.F
-    t := w.T()
+    f :~ w.F
+    t :~ w.T()
     if not t.IsRef(r.Type()) or t.ArrayRef(r.Type()): return -1
     v := MustNone
     match r {
@@ -7425,8 +7425,8 @@ fn pureBase(p typed.Lvalue&) Bool {
 fn (w mut walker&) orCallOf(c typed.Call&, b2 I64) {
     if c.Site < typed.SiteId(0): return
     for j in range c.Args.Len() {
-        r := w.rootOf(c.Args[j])
-        if r == null: continue
+        r :~ w.rootOf(c.Args[j])
+        if r is null: continue
         q := w.rootPlace(r)
         if q < 0: continue
         # (O8f, condition 3: never in a task's call, whose scopes are stand-ins a task builds into on its own thread)
@@ -7441,8 +7441,8 @@ fn (w mut walker&) orCallOf(c typed.Call&, b2 I64) {
 
 # a store into a field reached through a value of a sole place: the value's parts built where that value is
 fn (w mut walker&) orStoreOf(p typed.Lvalue&, x typed.Expr&) {
-    r := derefRoot(p)
-    if r == null: return
+    r :~ derefRoot(p)
+    if r is null: return
     q := w.rootPlace(r)
     if q < 0: return
     w.F.orStores.Push(orStore(w.Id, q, x, r))
@@ -7482,7 +7482,7 @@ fn (f mut Free&) decide() {
         }
     }
     for oc in f.ors {
-        if not f.dtorVal[oc.PlaceId] and (f.Bodies[oc.Callee].Root == null or f.regOut[oc.Callee]) {
+        if not f.dtorVal[oc.PlaceId] and (f.Bodies[oc.Callee].Root is null or f.regOut[oc.Callee]) {
             f.keep(oc.PlaceId, RDtor, -1, source.Span(0, 0), "a call building into what it holds may register an instance whose destructor is still to run (O16)")
         }
     }
@@ -7553,7 +7553,7 @@ fn (f mut Free&) decide() {
 # whether place a is where an anchor of an owner of type ty is (types.Anchors): storage the owner's release finds its
 # one region through
 fn (f mut Free&) anchorPlace(ty types.TypeId, a I64) Bool {
-    t := f.T()
+    t :~ f.T()
     for path in t.Anchors(ty) {
         cur := t.Plain(t.Repr(ty))
         for j in range path.Len() - 1: cur = t.Plain(t.Repr(t.Items(t.Fields(cur))[path[j]]))
@@ -7580,7 +7580,7 @@ fn (f Free&) outerFirst() Vec<I64> {
     out.Sort(fn(a I64, b I64) Bool {
         x, y := f.stores[a], f.stores[b]
         if x.Body != y.Body: return x.Body < y.Body
-        if x.X == null or y.X == null: return a < b
+        if x.X is null or y.X is null: return a < b
         p, q := x.X!.Span(), y.X!.Span()
         if p.Start != q.Start: return p.Start < q.Start
         if p.End != q.End: return p.End > q.End
@@ -7592,7 +7592,7 @@ fn (f Free&) outerFirst() Vec<I64> {
 # the scope a site is built in, as the plan says: a temporary's, an array's, a text's, a comprehension's (Built) - a
 # call's built result or a constructor's instance (Passed, its result variable)
 fn (f mut Free&) siteScope(b I64, x typed.Expr&) typed.Scope {
-    pl := f.Plans.Ref(b)
+    pl :~ f.Plans.Ref(b)
     return match x {
         case typed.Expr.Promote(_, _, pr): pl.Built[I64(pr.Site)]
         case typed.Expr.Make(_, _, m): pl.Built[I64(m.Site)] if m.Site >= typed.SiteId(0) else typed.Scope.Unset
@@ -7600,7 +7600,7 @@ fn (f mut Free&) siteScope(b I64, x typed.Expr&) typed.Scope {
         case typed.Expr.Collect(_, _, c): pl.Built[I64(c.Site)]
         case typed.Expr.Call(_, _, c): pl.Passed(c.Site, f.resultVar(typed.CalleeBody(c))) if c.Site >= typed.SiteId(0) else typed.Scope.Unset
         case typed.Expr.Away(_, _, y): f.siteScope(b, y)
-        case typed.Expr.Seq(_, _, sq): f.siteScope(b, sq.X!) if sq.X != null else typed.Scope.Unset
+        case typed.Expr.Seq(_, _, sq): f.siteScope(b, sq.X!) if sq.X is not null else typed.Scope.Unset
         case _: typed.Scope.Unset
     }
 }
@@ -7620,7 +7620,7 @@ fn (f mut Free&) resultVar(b I64) I64 {
 
 # a parameter's scope variable's index in a body's Vars, -1 for none
 fn (f mut Free&) paramVar(b I64, j I64) I64 {
-    body := f.Bodies[b]
+    body :~ f.Bodies[b]
     if j >= body.Params.Len(): return -1
     want := body.Params[j]
     for i in range body.Vars.Len() {
@@ -7643,16 +7643,16 @@ fn runs(sc typed.Scope) Bool {
 # whether a store's fresh value can be built in a region of its own: its scope exists at run time, and - for a call -
 # the callee's obligations ask nothing that is built where its result is to outlive what is not (2.4 item 5)
 fn (f mut Free&) placeable(st store) Bool {
-    x := st.X!
+    x :~ st.X!
     if not runs(f.siteScope(st.Body, x)): return false
-    c := typed.Call.Of(x)
+    c :~ typed.Call.Of(x)
     match x {
-        case typed.Expr.Promote(_, _, pr) { c = ctorCall(pr.X) }
+        case typed.Expr.Promote(_, _, pr) { c ~ ctorCall(pr.X) }
         case typed.Expr.Away(_, _, y) { return f.placeable(store(st.PlaceId, st.Body, st.File, st.Sp, st.Kind, st.Of, st.Site, y, null)) }
         case typed.Expr.Call(_, _, _) { }
         case _ { return true }
     }
-    if c == null: return true
+    if c is null: return true
     b2 := typed.CalleeBody(c)
     if b2 < 0: return true
     return f.varsFit(st.Body, c, b2, f.siteScope(st.Body, x), f.resultVar(b2)) >= 0
@@ -7665,8 +7665,8 @@ fn (f mut Free&) placeable(st store) Bool {
 fn (f mut Free&) copiedPlain(c typed.Call&, b2 I64) Bool {
     vs := f.viewsOf(b2)
     if vs == 0 or (vs & typed.ViewOther) != 0 or typed.ViewsMoved(c, vs): return false
-    body := f.Bodies[b2]
-    if f.T().Role(body.Ty) != types.RoleCtor or body.Root == null: return false
+    body :~ f.Bodies[b2]
+    if f.T().Role(body.Ty) != types.RoleCtor or body.Root is null: return false
     for st in body.Root!.Stmts {
         match st {
             case typed.Stmt.Let(_, _, typed.Expr.Read(_, _, typed.Lvalue.Local(_, _, id), _)) {
@@ -7692,7 +7692,7 @@ fn ctorCall(x typed.Expr&) typed.Call?& {
 fn (f mut Free&) varsFit(b I64, c typed.Call&, b2 I64, at typed.Scope, v I64) I64 {
     if v < 0 or v >= 63: return -1
     if f.copiedPlain(c, b2): return I64(1) << v
-    pl := f.Plans.Ref(b)
+    pl :~ f.Plans.Ref(b)
     set := I64(1) << v
     for j in range c.Args.Len() {
         u := f.paramVar(b2, j)
@@ -7709,7 +7709,7 @@ fn (f mut Free&) varsFit(b I64, c typed.Call&, b2 I64, at typed.Scope, v I64) I6
 # whatever region takes it in), the scope that region is made in
 fn (f mut Free&) builtAt(b I64, x typed.Expr&) typed.Scope {
     top := f.topSite(x)
-    pl := f.Plans.Ref(b)
+    pl :~ f.Plans.Ref(b)
     if top >= 0 and (pl.RegionKind[top] == 1 or pl.RegionKind[top] == 3): return pl.RegionParent[top]
     return f.siteScope(b, x)
 }
@@ -7739,7 +7739,7 @@ fn (f mut Free&) writePlans() {
     for st in f.stores: ok.Push(st.Kind == SFresh and f.placeable(st))
     # (O8f, gap 22: each value made for an owner place, whatever its decision - a copy among them has its parts split)
     for st in f.stores {
-        if st.Kind != SFresh or st.X == null or not f.owner[st.PlaceId]: continue
+        if st.Kind != SFresh or st.X is null or not f.owner[st.PlaceId]: continue
         top := f.topSite(st.X!)
         if top >= 0: f.ownerAt.Put(pair.Pair(st.Body, top), st.PlaceId)
     }
@@ -7748,10 +7748,10 @@ fn (f mut Free&) writePlans() {
         st := f.stores[i]
         k := st.PlaceId
         if f.decided[st.Body] and not f.Sole[k]: continue
-        x := st.X!
+        x :~ st.X!
         top := f.topSite(x)
         if top < 0: continue
-        pl := f.Plans.Ref(st.Body)
+        pl :~ f.Plans.Ref(st.Body)
         if pl.RegionKind[top] != 0: continue
         at := f.siteScope(st.Body, x)
         # O29: a value built where its place's storage is found at run time is built there, never in a region of its own
@@ -7769,12 +7769,12 @@ fn (f mut Free&) writePlans() {
         if f.decided[os.Body] and not f.Sole[os.PlaceId] or f.SlotPlace(os.PlaceId): continue
         top := f.topSite(os.X)
         if top < 0: continue
-        pl := f.Plans.Ref(os.Body)
+        pl :~ f.Plans.Ref(os.Body)
         at := f.siteScope(os.Body, os.X)
         if not runs(at) and pl.RegionKind[top] == 0: continue
         if pl.RegionKind[top] == 1 {
-            if pl.RegionRoot[top] == null {
-                pl.RegionRoot[top] = os.Root
+            if pl.RegionRoot[top] is null {
+                pl.RegionRoot[top] ~ os.Root
                 pl.RootGuard[top] = f.guard(os.Body, os.PlaceId)
             }
             continue
@@ -7782,7 +7782,7 @@ fn (f mut Free&) writePlans() {
         if pl.RegionKind[top] != 0: continue
         pl.RegionKind[top] = 2
         pl.RegionParent[top] = at
-        pl.RegionRoot[top] = os.Root
+        pl.RegionRoot[top] ~ os.Root
         pl.RegionGuard[top] = f.guard(os.Body, os.PlaceId)
         pl.RootGuard[top] = f.guard(os.Body, os.PlaceId)
         f.redirect(os.Body, os.X, top, at, true)
@@ -7791,20 +7791,20 @@ fn (f mut Free&) writePlans() {
     # (never one of a slot place's: its value's word before it names no region)
     for oc in f.ors {
         if f.decided[oc.Body] and not f.Sole[oc.PlaceId] or f.SlotPlace(oc.PlaceId): continue
-        pl := f.Plans.RefMut(oc.Body)
+        pl :~ f.Plans.RefMut(oc.Body)
         if pl.RegionKind[oc.Site] != 0: continue
         v := f.paramVar(oc.Callee, oc.Param)
         if v < 0: continue
         site := typed.SiteId(I32(oc.Site))
         at := pl.Passed(site, v)
         if not runs(at): continue
-        call := f.callAt(oc.Body, oc.Site)
-        if call == null: continue
+        call :~ f.callAt(oc.Body, oc.Site)
+        if call is null: continue
         set := f.orVars(oc.Body, call, oc.Callee, at, v)
         if set < 0: continue
         pl.RegionKind[oc.Site] = 2
         pl.RegionParent[oc.Site] = at
-        pl.RegionRoot[oc.Site] = oc.Root
+        pl.RegionRoot[oc.Site] ~ oc.Root
         pl.RegionGuard[oc.Site] = f.guard(oc.Body, oc.PlaceId)
         pl.RootGuard[oc.Site] = f.guard(oc.Body, oc.PlaceId)
         for u in range 63 {
@@ -7813,7 +7813,7 @@ fn (f mut Free&) writePlans() {
         for j in range call.Args.Len() {
             u := f.paramVar(oc.Callee, j)
             if u < 0 or u >= 63 or (set & (I64(1) << u)) == 0 or j == oc.Param: continue
-            a := call.Args[j]
+            a :~ call.Args[j]
             t2 := f.topSite(a)
             if t2 >= 0 and (pl.RegionKind[t2] == 1 or pl.RegionKind[t2] == 3) {
                 pl.RegionParent[t2] = typed.Scope.Region(site)
@@ -7829,7 +7829,7 @@ fn (f mut Free&) writePlans() {
 # - -1 where the callee's obligations ask more
 fn (f mut Free&) orVars(b I64, c typed.Call&, b2 I64, at typed.Scope, v I64) I64 {
     if v < 0 or v >= 63: return -1
-    pl := f.Plans.Ref(b)
+    pl :~ f.Plans.Ref(b)
     set := I64(1) << v
     for j in range c.Args.Len() {
         u := f.paramVar(b2, j)
@@ -7844,15 +7844,15 @@ fn (f mut Free&) orVars(b I64, c typed.Call&, b2 I64, at typed.Scope, v I64) I64
 
 # the call at a site of a body, found by walking it
 fn (f mut Free&) callAt(b I64, site I64) typed.Call?& {
-    body := f.Bodies[b]
-    if body.Root == null: return null
+    body :~ f.Bodies[b]
+    if body.Root is null: return null
     return findCallBlock(body.Root!, site)
 }
 
 fn findCallBlock(bl typed.Block&, site I64) typed.Call?& {
     for st in bl.Stmts {
-        c := findCallStmt(st, site)
-        if c != null: return c
+        c :~ findCallStmt(st, site)
+        if c is not null: return c
     }
     return null
 }
@@ -7860,11 +7860,11 @@ fn findCallBlock(bl typed.Block&, site I64) typed.Call?& {
 fn findCallStmt(st typed.Stmt&, site I64) typed.Call?& {
     return match st {
         case typed.Stmt.Let(_, _, x): findCall(x, site)
-        case typed.Stmt.Assign(_, p, x): findCall(x, site) if findCall(x, site) != null else findCallPlace(p, site)
+        case typed.Stmt.Assign(_, p, x): findCall(x, site) if findCall(x, site) is not null else findCallPlace(p, site)
         case typed.Stmt.Eval(_, x): findCall(x, site)
         case typed.Stmt.If(_, i): findIf(i, site)
-        case typed.Stmt.Loop(_, body, post): findCallBlock(body, site) if findCallBlock(body, site) != null else (findCallBlock(post, site) if post != null else null)
-        case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x): findCall(x, site) if x != null else null
+        case typed.Stmt.Loop(_, body, post): findCallBlock(body, site) if findCallBlock(body, site) is not null else (findCallBlock(post, site) if post is not null else null)
+        case typed.Stmt.Return(_, x), typed.Stmt.Suspend(_, x): findCall(x, site) if x is not null else null
         case typed.Stmt.Block(_, b): findCallBlock(b, site)
         case typed.Stmt.Defer(_, b): findCallBlock(b, site)
         case _: null
@@ -7872,11 +7872,11 @@ fn findCallStmt(st typed.Stmt&, site I64) typed.Call?& {
 }
 
 fn findIf(i typed.If&, site I64) typed.Call?& {
-    c := findCall(i.Test, site)
-    if c != null: return c
-    c = findCallBlock(i.Then, site)
-    if c != null: return c
-    if i.Else != null: return findCallBlock(i.Else!, site)
+    c :~ findCall(i.Test, site)
+    if c is not null: return c
+    c ~ findCallBlock(i.Then, site)
+    if c is not null: return c
+    if i.Else is not null: return findCallBlock(i.Else!, site)
     return null
 }
 
@@ -7884,7 +7884,7 @@ fn findCallPlace(p typed.Lvalue&, site I64) typed.Call?& {
     return match p {
         case typed.Lvalue.Deref(_, _, r): findCall(r, site)
         case typed.Lvalue.Field(_, _, b, _): findCallPlace(b, site)
-        case typed.Lvalue.Elem(_, _, e): findCallPlace(e.Base, site) if findCallPlace(e.Base, site) != null else findCall(e.Index, site)
+        case typed.Lvalue.Elem(_, _, e): findCallPlace(e.Base, site) if findCallPlace(e.Base, site) is not null else findCall(e.Index, site)
         case _: null
     }
 }
@@ -7894,8 +7894,8 @@ fn findCall(x typed.Expr&, site I64) typed.Call?& {
         case typed.Expr.Call(_, _, c) {
             if I64(c.Site) == site: return c
             for a in c.Args {
-                d := findCall(a, site)
-                if d != null: return d
+                d :~ findCall(a, site)
+                if d is not null: return d
             }
             match c.Target {
                 case typed.Callee.Value(v) { return findCall(v, site) }
@@ -7908,36 +7908,36 @@ fn findCall(x typed.Expr&, site I64) typed.Call?& {
         case typed.Expr.Borrow(_, _, p) { return findCallPlace(p, site) }
         case typed.Expr.Make(_, _, m) {
             for a in m.Items {
-                d := findCall(a, site)
-                if d != null: return d
+                d :~ findCall(a, site)
+                if d is not null: return d
             }
             return null
         }
         case typed.Expr.Prim(_, _, _, _, args) {
             for a in args {
-                d := findCall(a, site)
-                if d != null: return d
+                d :~ findCall(a, site)
+                if d is not null: return d
             }
             return null
         }
         case typed.Expr.Try(_, _, t) {
-            if t.X != null: return findCall(t.X!, site)
+            if t.X is not null: return findCall(t.X!, site)
             return null
         }
         case typed.Expr.Seq(_, _, q) {
             for st in q.Stmts {
-                d := findCallStmt(st, site)
-                if d != null: return d
+                d :~ findCallStmt(st, site)
+                if d is not null: return d
             }
-            if q.X != null: return findCall(q.X!, site)
+            if q.X is not null: return findCall(q.X!, site)
             return null
         }
         case typed.Expr.Cond(_, _, c) {
-            d := findCall(c.C, site)
-            if d != null: return d
-            if c.A != null {
-                d = findCall(c.A!, site)
-                if d != null: return d
+            d :~ findCall(c.C, site)
+            if d is not null: return d
+            if c.A is not null {
+                d ~ findCall(c.A!, site)
+                if d is not null: return d
             }
             return findCall(c.B, site)
         }
@@ -7957,7 +7957,7 @@ fn (f mut Free&) topSite(x typed.Expr&) I64 {
         case typed.Expr.Away(_, _, y): f.topSite(y)
         # a sequence's value (a lane operation's result, E39): its statements run where it stands, its value built at
         # its own site
-        case typed.Expr.Seq(_, _, sq): f.topSite(sq.X!) if sq.X != null else -1
+        case typed.Expr.Seq(_, _, sq): f.topSite(sq.X!) if sq.X is not null else -1
         case _: -1
     }
 }
@@ -7966,7 +7966,7 @@ fn (f mut Free&) topSite(x typed.Expr&) I64 {
 # through a temporary's value, an array's items, a constructor's arguments - so the region holds them; never through
 # a branch or a call that is not a constructor's
 fn (f mut Free&) redirect(b I64, x typed.Expr&, top I64, at typed.Scope, self Bool, copied Bool = false) {
-    pl := f.Plans.RefMut(b)
+    pl :~ f.Plans.RefMut(b)
     region := typed.Scope.Region(typed.SiteId(I32(top)))
     # a part with a region of its own (another place's value, written first) is a kid of this one
     ps := f.topSite(x)
@@ -7991,7 +7991,7 @@ fn (f mut Free&) redirect(b I64, x typed.Expr&, top I64, at typed.Scope, self Bo
         }
         case typed.Expr.Call(_, _, c) {
             b2 := typed.CalleeBody(c)
-            if b2 < 0 or c.Site < typed.SiteId(0) or f.Bodies[b2].Root == null: return
+            if b2 < 0 or c.Site < typed.SiteId(0) or f.Bodies[b2].Root is null: return
             rv := f.resultVar(b2)
             # a constructor's instance is part of the value; a call's result copied by a promotion is garbage in it
             ctor := f.T().Role(f.Bodies[b2].Ty) == types.RoleCtor
@@ -8010,11 +8010,11 @@ fn (f mut Free&) redirect(b I64, x typed.Expr&, top I64, at typed.Scope, self Bo
         case typed.Expr.Away(_, _, y) { f.redirect(b, y, top, at, self, copied) }
         # a try whose clauses give no default (`h.last = f()!`) is its call's value (lower's freshCall)
         case typed.Expr.Try(_, _, tr) {
-            if tr.X != null and tr.X! == typed.Expr.Call and noDefaults(tr): f.redirect(b, tr.X!, top, at, self, copied)
+            if tr.X is not null and tr.X! == typed.Expr.Call and noDefaults(tr): f.redirect(b, tr.X!, top, at, self, copied)
         }
         # a sequence's value is built in the region, its statements where they stand
         case typed.Expr.Seq(_, _, sq) {
-            if sq.X != null: f.redirect(b, sq.X!, top, at, self, copied)
+            if sq.X is not null: f.redirect(b, sq.X!, top, at, self, copied)
         }
         case _ { }
     }
@@ -8139,7 +8139,7 @@ fn (f mut Free&) ConstLocal(b I64, l I64, init typed.Expr&) Bool {
 # a task's call, its "!" taken off (E35)
 fn taskCall(x typed.Expr&) typed.Expr& {
     return match x {
-        case typed.Expr.Try(_, _, t): t.X! if t.Ends and t.X != null else x
+        case typed.Expr.Try(_, _, t): t.X! if t.Ends and t.X is not null else x
         case _: x
     }
 }
@@ -8155,11 +8155,11 @@ fn (f Free&) Spawned() Vec<I64> { return f.spawned }
 # Recorded, where record, for taskCopied: built in no region
 fn (w mut walker&) taskCopy(c typed.Call&, b2 I64, unknown Bool, copied Bool, j I64, ps Array<types.TypeId>&, a typed.Expr&
                             record Bool = true) Bool {
-    f := w.F
+    f :~ w.F
     if I64(c.Site) != w.taskSite or c.Site < typed.SiteId(0) or copied or unknown or b2 < 0 or j >= ps.Len(): return false
     ref := w.T().IsRef(ps[j])
     if ref: return w.taskRefCopy(b2, j, ps, a, record)
-    if argCall(a) < 0 or f.Keeps == null or not f.Keeps!(b2, j): return false
+    if argCall(a) < 0 or f.Keeps is null or not f.Keeps!(b2, j): return false
     if record and w.Final and w.quiet == 0 {
         f.taskCopies.Push(pair.Pair(w.Id, argCall(a)))
         f.taskCopyCallee.Push(argCallee(a))
@@ -8171,10 +8171,10 @@ fn (w mut walker&) taskCopy(c typed.Call&, b2 I64, unknown Bool, copied Bool, j 
 # `v[j].a`): lowering makes its copy in the join's scope too (lower's promotedSite), so it is recorded for taskCopied;
 # judged as before otherwise - what the task reaches through it stays its reach (false)
 fn (w mut walker&) taskRefCopy(b2 I64, j I64, ps Array<types.TypeId>&, a typed.Expr&, record Bool) Bool {
-    f := w.F
-    if (w.T().PermOf(ps[j]) & types.Writable) != 0 or f.Keeps == null or not f.Keeps!(b2, j): return false
-    x := taskRefCall(a)
-    if x == null or argCall(x) < 0: return false
+    f :~ w.F
+    if (w.T().PermOf(ps[j]) & types.Writable) != 0 or f.Keeps is null or not f.Keeps!(b2, j): return false
+    x :~ taskRefCall(a)
+    if x is null or argCall(x) < 0: return false
     if record and w.Final and w.quiet == 0 {
         f.taskCopies.Push(pair.Pair(w.Id, argCall(x)))
         f.taskCopyCallee.Push(argCallee(x))
@@ -8205,7 +8205,7 @@ fn taskRefPlace(p typed.Lvalue&) typed.Expr?& {
 # on a thread of its own; what its arguments refer into - a by-value one's but its owned parts, a copy taskCopy judged
 # but itself - is what it may reach (taskReach)
 fn (w mut walker&) taskArgs(c typed.Call&, b2 I64, unknown Bool, args Vec<Vec<I64>>&, ps Array<types.TypeId>&, sp source.Span) {
-    f := w.F
+    f :~ w.F
     file := w.body().File
     if b2 < 0 or unknown {
         if f.taskAll == "": f.taskAll = "a task calls through a function value, or code not known"
@@ -8229,7 +8229,7 @@ fn (w mut walker&) taskArgs(c typed.Call&, b2 I64, unknown Bool, args Vec<Vec<I6
         f.keep(e & ((I64(1) << 32) - 1), RTask, file, sp, "a task stores into it, on a thread of its own: '" + $w.text(sp) + "'")
     }
     for j in range args.Len() {
-        a := c.Args[j]
+        a :~ c.Args[j]
         o := args[j]
         if j < ps.Len() and not w.T().IsRef(ps[j]): o = f.unowned(args[j])
         own := argCall(a) if w.taskCopy(c, b2, unknown, false, j, ps, a, false) else -1
@@ -8247,7 +8247,7 @@ fn (w mut walker&) taskArgs(c typed.Call&, b2 I64, unknown Bool, args Vec<Vec<I6
 # the caller (taskLets, taskWalkLets) - not what a spawn of its own lets go of on the task's thread, judged at that spawn,
 # nor a call of a body letting go only of what it builds (ownBody)
 fn (w mut walker&) callTaskLets(b2 I64) {
-    f := w.F
+    f :~ w.F
     for k in f.taskLets[b2] {
         if addTo(f.taskLets[w.Id], k) > 0: f.changed = true
     }
@@ -8270,8 +8270,8 @@ fn (f mut Free&) ownBody(b I64) Bool {
 }
 
 fn (f mut Free&) ownJudged(b I64) Bool {
-    t := f.T()
-    body := f.Bodies[b]
+    t :~ f.T()
+    body :~ f.Bodies[b]
     if body.Of == typed.BodyOf.Lambda: return false
     for j in range body.Params.Len() {
         ty := body.Locals[I64(body.Params[j])].Ty
@@ -8279,7 +8279,7 @@ fn (f mut Free&) ownJudged(b I64) Bool {
         if t.IsRef(r) and (t.PermOf(r) & types.Writable) == 0 and not f.refsBeyondParts(t.Referent(r)): continue
         if t.IsRef(ty) or t.HoldsRefs(ty) or t.OwnedPart(ty) or t.OwnsParts(ty): return false
     }
-    if f.fx == null: f.fx = effects.Effects(f.P, f.Bodies)
+    if f.fx is null: f.fx ~ effects.Effects(f.P, f.Bodies)
     fs := f.fx!.Of(b)
     if fs.Unknown or fs.Back or fs.Through or fs.Unchecked or fs.Calls != 0 or fs.Spawns or fs.Writes != 0: return false
     if fs.Impure or fs.WritesOut: return false
@@ -8310,7 +8310,7 @@ fn (w mut walker&) spawnLets(sp source.Span, s typed.Spawn&, p typed.Lvalue&, o 
     }
     ol := w.ownLocal(l)
     if ol < 0: return
-    f := w.F
+    f :~ w.F
     why := "a task's result is stored into it, made on the task's thread: '" + $w.text(p.Span()) + "'"
     lets := f.SpawnLets(w.Id, l)
     if not lets or w.Final and w.quiet == 0 and not w.handedAtWait(s, p, tc): f.keep(ol, RTask, w.body().File, p.Span(), why)
@@ -8325,10 +8325,10 @@ fn (w mut walker&) spawnLets(sp source.Span, s typed.Spawn&, p typed.Lvalue&, o 
 # a spawn: a task not known keeps everything; its targets stored into on the task's thread (P1g) - the places they
 # are, and those a result made there holds, keep; one not a plain local is storage the task reaches
 fn (w mut walker&) spawnSite(s typed.Spawn&, tc typed.Call?&) {
-    f := w.F
-    if (tc == null or typed.CalleeBody(tc) < 0) and f.taskAll == "": f.taskAll = "a task runs a lambda or calls through a function value"
+    f :~ w.F
+    if (tc is null or typed.CalleeBody(tc) < 0) and f.taskAll == "": f.taskAll = "a task runs a lambda or calls through a function value"
     for p in s.Targets {
-        if p == null: continue
+        if p is null: continue
         ty := p.Type()
         if f.refsBeyondParts(ty) and f.taskAll == "": f.taskAll = "a task hands back a reference"
         why := "a task's result is stored into it, made on the task's thread: '" + $w.text(p.Span()) + "'"
@@ -8365,16 +8365,16 @@ fn (w mut walker&) spawnSite(s typed.Spawn&, tc typed.Call?&) {
 # the result is): for one target its storage, for several the scope the call's result is given, a block's or a scope
 # variable's (defaultHanded)
 fn (w mut walker&) handedAtWait(s typed.Spawn&, p typed.Lvalue&, tc typed.Call?&) Bool {
-    if w.inJoin.Len() == 0 or tc == null or tc.Site < typed.SiteId(0) or w.Id >= w.F.Plans.Len(): return false
+    if w.inJoin.Len() == 0 or tc is null or tc.Site < typed.SiteId(0) or w.Id >= w.F.Plans.Len(): return false
     for c in s.Clauses {
-        if c.Handler == null or not w.F.handlerBuilds(c.Handler!): continue
+        if c.Handler is null or not w.F.handlerBuilds(c.Handler!): continue
         if not w.F.ownDefault(c.Handler!) or not w.defaultHanded(s, tc): return false
     }
     match p {
         case typed.Lvalue.Local(_, _, _) { }
         case _ { return false }
     }
-    pl := w.F.Plans.Ref(w.Id)
+    pl :~ w.F.Plans.Ref(w.Id)
     b2 := typed.CalleeBody(tc)
     if b2 < 0: return false
     n := w.T().ScopeVarsOf(w.F.Bodies[b2].Ty).Len()
@@ -8411,14 +8411,14 @@ fn (f mut Free&) handlerBuilds(h typed.Expr&) Bool {
         case _: -1
     }
     if b < 0 or b >= f.Bodies.Len(): return true
-    if f.fx == null: f.fx = effects.Effects(f.P, f.Bodies)
+    if f.fx is null: f.fx ~ effects.Effects(f.P, f.Bodies)
     return f.fx!.Of(b).Holds(effects.Fact.Allocates)
 }
 
 # B18a: whether body b hands back only closures it makes - lambdas capturing something, whose environments (their copies
 # of what they captured) it builds where its result goes - directly or through a local given only such values
 fn (f mut Free&) ClosureResult(b I64) Bool {
-    if b < 0 or b >= f.Bodies.Len() or f.Bodies[b].Root == null: return false
+    if b < 0 or b >= f.Bodies.Len() or f.Bodies[b].Root is null: return false
     m mut mustW& = mustW(f, b)
     m.block(f.Bodies[b].Root!)
     if m.returned.Len() == 0: return false
@@ -8457,7 +8457,7 @@ fn (f mut Free&) ownDefault(h typed.Expr&) Bool {
         case _ { }
     }
     if lb < 0 or lb >= f.Bodies.Len(): return false
-    if f.fx == null: f.fx = effects.Effects(f.P, f.Bodies)
+    if f.fx is null: f.fx ~ effects.Effects(f.P, f.Bodies)
     fs := f.fx!.Of(lb)
     if fs.Unknown or fs.Back or fs.Through or fs.Unchecked or fs.Calls != 0 or fs.Spawns: return false
     if fs.Writes != 0 or fs.Impure or fs.WritesOut: return false
@@ -8492,7 +8492,7 @@ fn (f mut Free&) taskKeeps() {
         return
     }
     if not f.tasks and not f.cThreads: return
-    if f.fx == null: f.fx = effects.Effects(f.P, f.Bodies)
+    if f.fx is null: f.fx ~ effects.Effects(f.P, f.Bodies)
     roots Vec<I64>
     for b in f.taskRoots: roots.Push(b)
     if f.cThreads: f.cRoots(roots)
@@ -8680,7 +8680,7 @@ fn (f mut Free&) onlyGlobal(b I64, m I64, nm source.NameId) Bool {
 # the types a value of ty reaches, into reachTys (and refTys where through a reference, ref) - only the containers where
 # only: false where one is not known
 fn (f mut Free&) globTy(ty types.TypeId, ref Bool, only Bool, depth I64) Bool {
-    t := f.T()
+    t :~ f.T()
     r := t.Plain(t.Repr(ty))
     k := t.KindOf(r)
     if t.ForeignRef(r) or depth > 64: return depth <= 64
@@ -8700,7 +8700,7 @@ fn (f mut Free&) globTy(ty types.TypeId, ref Bool, only Bool, depth I64) Bool {
 # the types a value of type r (plain) holds directly: an array's elements, a struct's fields, an enum's payloads (0 for
 # none), a tuple's or record's parts, what a type over another is
 fn (f mut Free&) partsOf(r types.TypeId) Vec<types.TypeId> {
-    t := f.T()
+    t :~ f.T()
     k := t.KindOf(r)
     out Vec<types.TypeId>
     if k == types.Kind.Array: out.Push(t.Elem(r))
@@ -8720,7 +8720,7 @@ fn addTys(out mut Vec<types.TypeId>&, tys Array<types.TypeId>&) {
 
 # whether a value of ty may hold a writable reference, or a type not known
 fn (f mut Free&) writableIn(ty types.TypeId, depth I64) Bool {
-    t := f.T()
+    t :~ f.T()
     r := t.Plain(t.Repr(ty))
     k := t.KindOf(r)
     if t.ForeignRef(r): return false
@@ -8748,7 +8748,7 @@ fn (f mut Free&) holdsRefTy(ty types.TypeId) Bool {
 
 # the types a value of ty holds by value, itself included, into asked
 fn (f mut Free&) byValue(ty types.TypeId, asked mut Map<I64, Bool>&) {
-    t := f.T()
+    t :~ f.T()
     r := t.Plain(t.Repr(ty))
     ri := I64(r)
     if asked.Has(ri) or t.KindOf(r) == types.Kind.Ref: return
@@ -8776,11 +8776,11 @@ fn (f mut Free&) failsIntoJoin(s typed.Spawn&) Bool {
         case typed.Expr.Try(_, _, tr) { if tr.Ends: return false }
         case _ { }
     }
-    tc := typed.Call.Of(taskCall(s.Task))
-    if tc == null: return true
+    tc :~ typed.Call.Of(taskCall(s.Task))
+    if tc is null: return true
     b2 := typed.CalleeBody(tc)
     if b2 < 0: return true
-    t := f.T()
+    t :~ f.T()
     for e in t.Items(t.Errors(f.Bodies[b2].Ty)) {
         if not f.clausesTake(s, e): return true
     }
@@ -8789,7 +8789,7 @@ fn (f mut Free&) failsIntoJoin(s typed.Spawn&) Bool {
 
 # whether a spawned call's clauses take error type e: one taking every error, or one naming e whole (lowering's)
 fn (f mut Free&) clausesTake(s typed.Spawn&, e types.TypeId) Bool {
-    t := f.T()
+    t :~ f.T()
     for cl in s.Clauses {
         if cl.All: return true
         for it in cl.Items {
@@ -8802,7 +8802,7 @@ fn (f mut Free&) clausesTake(s typed.Spawn&, e types.TypeId) Bool {
 # whether no clause of spawn s gives its targets a default that could be existing storage (plainDefault)
 fn (f mut Free&) plainClauses(s typed.Spawn&) Bool {
     for c in s.Clauses {
-        if c.Handler != null and not f.plainDefault(c.Handler!): return false
+        if c.Handler is not null and not f.plainDefault(c.Handler!): return false
     }
     return true
 }
@@ -8815,7 +8815,7 @@ fn (f mut Free&) plainDefault(h typed.Expr&) Bool {
             match fv {
                 case typed.FnVal.Lambda(lb, caps, _) {
                     if caps.Len() > 0 or I64(lb) < 0 or I64(lb) >= f.Bodies.Len(): return false
-                    if f.fx == null: f.fx = effects.Effects(f.P, f.Bodies)
+                    if f.fx is null: f.fx ~ effects.Effects(f.P, f.Bodies)
                     fs := f.fx!.Of(I64(lb))
                     if fs.Unknown or fs.Back or fs.Through or fs.Unchecked or fs.Calls != 0: return false
                     return not (fs.Holds(effects.Fact.Allocates) or fs.ReadsGlobals or fs.RefGlobals)
@@ -8830,7 +8830,7 @@ fn (f mut Free&) plainDefault(h typed.Expr&) Bool {
 # whether what is built at site of body b - a call's value, or what its callee cb builds where the call passes - is in a
 # region early freeing made, or in a scope found while the program runs (taskCopied)
 fn (f mut Free&) regionAt(b I64, site I64, cb I64) Bool {
-    pl := f.Plans.Ref(b)
+    pl :~ f.Plans.Ref(b)
     if site < 0 or site >= pl.RegionKind.Len() or pl.RegionKind[site] != 0: return true
     if inRegion(pl.Built[site]): return true
     if cb < 0: return true
@@ -8902,7 +8902,7 @@ fn (f mut Free&) RefsBeyond(ty types.TypeId) Bool { return f.refsBeyondParts(ty)
 # storage lives where its container's references do) - a reference, a function value, an any, a type variable, through
 # fields, elements and payloads. A type met again while asked holds nothing new
 fn (f mut Free&) refsBeyondParts(ty types.TypeId) Bool {
-    t := f.T()
+    t :~ f.T()
     r := t.Plain(t.Repr(ty))
     k := t.KindOf(r)
     if t.ForeignRef(r): return false
@@ -8941,7 +8941,7 @@ fn (f mut Free&) SlotPlace(k I64) Bool {
     if k < 0 or k >= f.keyField.Len() or f.keyField[k] < -1 or not f.arr[k] or f.owner[k] or f.handle[k]: return false
     # (an array's text elements: by their type alone, every array of it)
     if f.keyField[k] == -1: return f.slotText(f.valTy[k])
-    t := f.T()
+    t :~ f.T()
     r := t.Plain(t.Repr(f.keyTy[k]))
     if t.KindOf(r) != types.Kind.Named: return false
     m := t.DeclModule(t.DeclOf(r))
@@ -8970,7 +8970,7 @@ fn (f mut Free&) PartPlace(k I64) Bool {
 # in a part region (PartPlace), its elements' parts split as an element's copy builds them, so that a let-go of the
 # element, or a walk of its Vec's live elements, releases its elements' parts, then that array alone
 fn (f mut Free&) elemArray(ty types.TypeId) Bool {
-    t := f.T()
+    t :~ f.T()
     r := t.Repr(ty)
     if t.KindOf(r) != types.Kind.Array or not t.OwnedPart(ty) or f.slotText(ty): return false
     el := t.Elem(r)
@@ -8985,7 +8985,7 @@ fn (f mut Free&) elemArray(ty types.TypeId) Bool {
 # arrays (an element array, a split field) is let go of by a walk by its length putting each element's slot back, guarded
 # by the text place's decision as a Vec of text's walk is (TextBuffer), then its own part region
 fn (f mut Free&) TextArray(ty types.TypeId) I64 {
-    t := f.T()
+    t :~ f.T()
     r := t.Repr(ty)
     if t.KindOf(r) != types.Kind.Array or t.Length(r) != types.TypeId(0) or not t.OwnedPart(ty) or f.slotText(ty): return -1
     el := t.Elem(r)
@@ -9009,7 +9009,7 @@ fn (f mut Free&) SplitField(k I64) Bool {
 fn (f mut Free&) splitInside(k I64) Vec<I64> {
     out Vec<I64>
     if k < 0 or k >= f.arr.Len() or not (f.SplitField(k) or f.SplitLocal(k) or (f.keyField[k] == -1 and f.PartPlace(k))): return out
-    t := f.T()
+    t :~ f.T()
     r := t.Repr(f.valTy[k])
     if t.KindOf(r) != types.Kind.Array: return out
     et := t.Elem(r)
@@ -9031,7 +9031,7 @@ fn (f mut Free&) SplitLocal(k I64) Bool {
 # one given by value to a call (D9b) or of a call's value (D9h) is built split, each element's parts in part regions
 # (lower.arraysCopy); never one kept elsewhere, whose part regions would only cost
 fn (f mut Free&) partsArray(ty types.TypeId) Bool {
-    t := f.T()
+    t :~ f.T()
     r := t.Repr(ty)
     if t.KindOf(r) != types.Kind.Array or t.Length(r) != types.TypeId(0): return false
     return f.PartsOnly(t.Elem(r)) and f.elemArray(ty)
@@ -9050,7 +9050,7 @@ fn (f mut Free&) arrayBuffer(r types.TypeId, i I64) Bool {
 # element of an array holding such values given another frees what the old one owned by releasing those parts, the
 # Vecs' live elements' first (gap 17): a struct whose by-value fields own storage only so, through any depth of structs
 fn (f mut Free&) PartsOnly(ty types.TypeId) Bool {
-    t := f.T()
+    t :~ f.T()
     r := t.Plain(t.Repr(ty))
     if t.KindOf(r) != types.Kind.Named or not t.HasBody(r) or t.DeclKindOf(t.DeclOf(r)) != types.DeclKind.Struct: return false
     if not t.OwnsParts(r) or not f.safe(r): return false
@@ -9062,7 +9062,7 @@ fn (f mut Free&) PartsOnly(ty types.TypeId) Bool {
     f.partsAsked.Put(r, true)
     f.partsNew.Push(r)
     ok := true
-    fs := t.Items(t.Fields(r))
+    fs :~ t.Items(t.Fields(r))
     for i in range fs.Len() {
         if ok and not f.partsField(r, i, fs[i]): ok = false
     }
@@ -9075,7 +9075,7 @@ fn (f mut Free&) PartsOnly(ty types.TypeId) Bool {
 # kids Vec<T>}`) - its copy splitting its parts and its let-go releasing them recurse at run time, one helper of the
 # type's calling itself (lowering's Split and Release helpers), never written out level by level
 fn (f mut Free&) SelfHolding(ty types.TypeId) Bool {
-    t := f.T()
+    t :~ f.T()
     r := t.Plain(t.Repr(ty))
     if f.selfAsked.Has(r): return try f.selfAsked.Get(r) catch default false
     f.holdSeen.Clear()
@@ -9087,7 +9087,7 @@ fn (f mut Free&) SelfHolding(ty types.TypeId) Bool {
 # whether a value of type ty holds a value of type r by value - through struct fields and the arrays they own - each type
 # looked into once (holdSeen)
 fn (f mut Free&) holds(ty types.TypeId, r types.TypeId) Bool {
-    t := f.T()
+    t :~ f.T()
     for ft in f.ownedIn(ty) {
         q := t.Plain(t.Repr(ft))
         if q == r: return true
@@ -9100,7 +9100,7 @@ fn (f mut Free&) holds(ty types.TypeId, r types.TypeId) Bool {
 
 # the types a value of type ty holds by value one level down: a struct's fields but its references, an array's element
 fn (f mut Free&) ownedIn(ty types.TypeId) Vec<types.TypeId> {
-    t := f.T()
+    t :~ f.T()
     out Vec<types.TypeId>
     r := t.Plain(t.Repr(ty))
     if t.KindOf(r) == types.Kind.Array {
@@ -9117,7 +9117,7 @@ fn (f mut Free&) ownedIn(ty types.TypeId) Vec<types.TypeId> {
 # whether field i of struct type r, of type ft, owns storage only as PartsOnly asks: none, a part place's array of plain
 # elements or a Vec's buffer of text or of PartsOnly values (walkBuffer), or a struct that is PartsOnly in turn
 fn (f mut Free&) partsField(r types.TypeId, i I64, ft types.TypeId) Bool {
-    t := f.T()
+    t :~ f.T()
     if t.IsRef(ft) or not (t.OwnedPart(ft) or t.OwnsParts(ft)): return true
     if t.OwnedPart(ft) {
         el := t.Elem(t.Repr(ft))
@@ -9133,7 +9133,7 @@ fn (f mut Free&) partsField(r types.TypeId, i I64, ft types.TypeId) Bool {
 # only as EntryOnly asks: its let-go releases each live entry's parts - an entry in use, not one a removal emptied - before
 # the slots go
 fn (f mut Free&) entryBuffer(r types.TypeId, i I64) Bool {
-    t := f.T()
+    t :~ f.T()
     d, _, _ := f.MapFields(r)
     if d != i: return false
     return f.EntryOnly(t.Elem(t.Repr(t.Items(t.Fields(r))[i])))
@@ -9143,7 +9143,7 @@ fn (f mut Free&) entryBuffer(r types.TypeId, i I64) Bool {
 # (SlotPlace: a String key or value, built in a slot by the split copy that makes an entry, gap 10) and as partsField asks
 # of any other field (a Vec value's buffer) - what its removal's vacate releases, and nothing else
 fn (f mut Free&) EntryOnly(ty types.TypeId) Bool {
-    t := f.T()
+    t :~ f.T()
     r := t.Plain(t.Repr(ty))
     if t.KindOf(r) != types.Kind.Named or not t.HasBody(r) or t.DeclKindOf(t.DeclOf(r)) != types.DeclKind.Struct: return false
     if not f.safe(r): return false
@@ -9152,7 +9152,7 @@ fn (f mut Free&) EntryOnly(ty types.TypeId) Bool {
     for lf in f.leaves(r) {
         if lf.Path.Len() != 1 and not f.PartPlace(lf.PlaceId) and not f.SlotPlace(lf.PlaceId): return false
     }
-    fs := t.Items(t.Fields(r))
+    fs :~ t.Items(t.Fields(r))
     for j in range fs.Len() {
         if t.IsRef(fs[j]) or not (t.OwnedPart(fs[j]) or t.OwnsParts(fs[j])): continue
         if f.slotText(fs[j]) and f.SlotPlace(f.placeKey(r, j)): continue
@@ -9164,7 +9164,7 @@ fn (f mut Free&) EntryOnly(ty types.TypeId) Bool {
 # O8f (gap 17): whether field i of struct type r is the prelude Vec's buffer of PartsOnly values (a Vec<Vec<I64>>'s):
 # its let-go releases each live element's parts before the buffer goes
 fn (f mut Free&) nestedBuffer(r types.TypeId, i I64) Bool {
-    t := f.T()
+    t :~ f.T()
     d, _ := f.VecFields(r)
     if d != i: return false
     return f.PartsOnly(t.Elem(t.Repr(t.Items(t.Fields(r))[i])))
@@ -9174,10 +9174,10 @@ fn (f mut Free&) nestedBuffer(r types.TypeId, i I64) Bool {
 # the text element place (SlotPlace) - that place, else -1. The Vec's count says which of its elements are live (the
 # rest is room, or what a removal vacated), so its let-go walks them and puts each slot back before the buffer goes
 fn (f mut Free&) textBuffer(r types.TypeId, i I64) I64 {
-    t := f.T()
+    t :~ f.T()
     d, _ := f.VecFields(r)
     if d != i: return -1
-    fs := t.Items(t.Fields(r))
+    fs :~ t.Items(t.Fields(r))
     el := t.Elem(t.Repr(fs[i]))
     if not f.slotText(el): return -1
     q := f.placeKey(t.Array(el, types.TypeId(0)), -1)
@@ -9187,7 +9187,7 @@ fn (f mut Free&) textBuffer(r types.TypeId, i I64) I64 {
 # the fields of the prelude Map holding its entries, the count of the slots used and each slot's link (an emptied
 # slot's below -1), by name ("ents", "n", "next"); -1, -1, -1 for any other type
 fn (f mut Free&) MapFields(ty types.TypeId) I64, I64, I64 {
-    t := f.T()
+    t :~ f.T()
     r := t.Plain(t.Repr(ty))
     if t.KindOf(r) != types.Kind.Named: return -1, -1, -1
     decl := t.DeclOf(r)
@@ -9195,7 +9195,7 @@ fn (f mut Free&) MapFields(ty types.TypeId) I64, I64, I64 {
     names := f.P.FieldNames(r)
     d, n, x := -1, -1, -1
     for j in range names.Len() {
-        nm := f.P.L.Names.Text(names[j])
+        nm :~ f.P.L.Names.Text(names[j])
         if nm == "ents": d = j
         if nm == "n": n = j
         if nm == "next": x = j
@@ -9205,7 +9205,7 @@ fn (f mut Free&) MapFields(ty types.TypeId) I64, I64, I64 {
 
 # the fields of the prelude Vec holding its buffer and its count, by name ("data", "n"); -1, -1 for any other type
 fn (f mut Free&) VecFields(ty types.TypeId) I64, I64 {
-    t := f.T()
+    t :~ f.T()
     r := t.Plain(t.Repr(ty))
     if t.KindOf(r) != types.Kind.Named: return -1, -1
     decl := t.DeclOf(r)
@@ -9283,14 +9283,14 @@ fn (f mut Free&) MovesLeaves(b I64, site I64, ty types.TypeId) Bool {
     # (a value owning more than one part's array - a Map's slot arrays, a Vec's text - moved only where every place it
     # holds is decided sole: each of its values built for it, where its new holder's let-go releases it; one of a place
     # not sole is built where the local lives, which that let-go leaves there)
-    if f.PartSplit(b, site, ty) != null {
+    if f.PartSplit(b, site, ty) is not null {
         for k in f.heldPlaces(ty) {
             if not f.IsSole(k): return false
         }
     }
     lvs := f.leaves(ty)
     for st in f.stores {
-        if st.Body != b or st.X == null or f.topSite(st.X!) != site: continue
+        if st.Body != b or st.X is null or f.topSite(st.X!) != site: continue
         if not f.owner[st.PlaceId] and not f.PartPlace(st.PlaceId): return false
         if not f.leafOf(lvs, st.PlaceId): return false
     }
@@ -9307,7 +9307,7 @@ fn (f Free&) leafOf(lvs Vec<leaf>&, k I64) Bool {
 # O8f (gap 22): whether a fill of a run-time array of el builds each element's owner fields as stores into their places
 # do (lower.fillCopy): el a struct owning storage whose copy runs no declared Copy (E31d)
 fn (f mut Free&) FillSplit(el types.TypeId) Bool {
-    t := f.T()
+    t :~ f.T()
     r := t.Plain(t.Repr(el))
     if t.KindOf(r) != types.Kind.Named or not t.HasBody(r) or t.DeclKindOf(t.DeclOf(r)) != types.DeclKind.Struct: return false
     return t.OwnsParts(r) and not t.RunsCopy(r)
@@ -9333,7 +9333,7 @@ fn (f mut Free&) CopyOwner(ty types.TypeId, i I64) I64 {
 # else in a region of its own, a kid of the fill's, each where the place is decided sole (lower.fillText) - so that the fill is no value made with no store into it (untracked); a fixed array's only
 # where it is built in a block (no owner's region holds its bytes), as fillOwners', or where its elements go in slots; -1 for none
 fn (f mut Free&) FillText(ty types.TypeId, block Bool) I64 {
-    t := f.T()
+    t :~ f.T()
     r := t.Plain(f.arrayOf(ty))
     if t.KindOf(r) != types.Kind.Array: return -1
     el := t.Elem(r)
@@ -9356,7 +9356,7 @@ fn (f mut Free&) FillText(ty types.TypeId, block Bool) I64 {
 # O8f (keptlast2): where ty is a fixed array of text (`Array<String, 2>`) whose text place is built in slots: that place,
 # else -1 - a fill's copy of such an array puts each of its elements' text in a slot (lower.fillText)
 fn (f mut Free&) FixedText(ty types.TypeId) I64 {
-    t := f.T()
+    t :~ f.T()
     r := t.Plain(t.Repr(ty))
     if t.KindOf(r) != types.Kind.Array or t.Length(r) == types.TypeId(0) or not f.slotText(t.Elem(r)): return -1
     k := f.placeKey(r, -1)
@@ -9365,7 +9365,7 @@ fn (f mut Free&) FixedText(ty types.TypeId) I64 {
 
 fn (f mut Free&) fillOwners(ty types.TypeId, block Bool) Vec<I64> {
     out Vec<I64>
-    t := f.T()
+    t :~ f.T()
     r := t.Plain(f.arrayOf(ty))
     if t.KindOf(r) != types.Kind.Array or (t.Length(r) != types.TypeId(0) and not block) or not f.FillSplit(t.Elem(r)): return out
     for i in range t.Items(t.Fields(t.Plain(t.Repr(t.Elem(r))))).Len() {
@@ -9464,10 +9464,10 @@ fn (f mut Free&) PartsLet(ty types.TypeId, depth I64 = 0, entry Bool = false) Ve
 }
 
 fn (f mut Free&) vecWalksAt(ty types.TypeId, path Vec<I64>&, out mut Vec<VecWalk>&, depth I64) {
-    t := f.T()
+    t :~ f.T()
     r := t.Plain(t.Repr(ty))
     if depth > 8 or t.KindOf(r) != types.Kind.Named or not t.HasBody(r) or t.DeclKindOf(t.DeclOf(r)) != types.DeclKind.Struct: return
-    fs := t.Items(t.Fields(r))
+    fs :~ t.Items(t.Fields(r))
     for i in range fs.Len() {
         if t.IsRef(fs[i]) or not (t.OwnedPart(fs[i]) or t.OwnsParts(fs[i])): continue
         if not t.OwnedPart(fs[i]) {
@@ -9510,7 +9510,7 @@ fn (f mut Free&) emptyValue(x typed.Expr&, args Array<typed.Expr&>?&, depth I64)
 
 # a parameter read in a constructor's body, args its call's arguments: one given a value holding no storage
 fn (f mut Free&) emptyParam(l I64, args Array<typed.Expr&>?&, depth I64) Bool {
-    if args == null: return false
+    if args is null: return false
     b := f.ctorAsked
     if b < 0: return false
     ps := f.Bodies[b].Params
@@ -9523,7 +9523,7 @@ fn (f mut Free&) emptyParam(l I64, args Array<typed.Expr&>?&, depth I64) Bool {
 # a constructor call whose body only declares its fields, each given a value holding no storage
 fn (f mut Free&) emptyCtor(c typed.Call&, depth I64) Bool {
     b := typed.CalleeBody(c)
-    if b < 0 or f.Bodies[b].Root == null or f.T().Role(f.Bodies[b].Ty) != types.RoleCtor: return false
+    if b < 0 or f.Bodies[b].Root is null or f.T().Role(f.Bodies[b].Ty) != types.RoleCtor: return false
     was := f.ctorAsked
     f.ctorAsked = b
     ok := true
@@ -9581,7 +9581,7 @@ fn copiedCall(x typed.Expr&) I64 {
 # m.Get(j)!)`, a clause running only where the call gave none) - copiedCall's otherwise; -1 for none
 fn argCall(x typed.Expr&) I64 {
     return match x {
-        case typed.Expr.Try(_, _, tr): argCall(tr.X!) if tr.X != null else -1
+        case typed.Expr.Try(_, _, tr): argCall(tr.X!) if tr.X is not null else -1
         case typed.Expr.Away(_, _, y): argCall(y)
         case _: copiedCall(x)
     }
@@ -9590,7 +9590,7 @@ fn argCall(x typed.Expr&) I64 {
 # the body the call argCall finds calls, -1 for none
 fn argCallee(x typed.Expr&) I64 {
     return match x {
-        case typed.Expr.Try(_, _, tr): argCallee(tr.X!) if tr.X != null else -1
+        case typed.Expr.Try(_, _, tr): argCallee(tr.X!) if tr.X is not null else -1
         case typed.Expr.Away(_, _, y): argCallee(y)
         case typed.Expr.Call(_, _, c): typed.CalleeBody(c)
         case _: -1
@@ -9607,8 +9607,8 @@ fn readCall(a typed.Expr&) I64 {
         case typed.Expr.Call(_, _, c): I64(c.Site)
         # (as lowering's readHere: a try passes its call's value on as it is - `m.Get(k)!.a[1]` - a clause running only
         # where the call gave none; a conversion of one value, a sequence of no statements)
-        case typed.Expr.Try(_, _, tr): readCall(tr.X!) if tr.X != null else -1
-        case typed.Expr.Seq(_, _, q): readCall(q.X!) if q.X != null and q.Stmts.Len() == 0 else -1
+        case typed.Expr.Try(_, _, tr): readCall(tr.X!) if tr.X is not null else -1
+        case typed.Expr.Seq(_, _, q): readCall(q.X!) if q.X is not null and q.Stmts.Len() == 0 else -1
         case typed.Expr.Prim(_, _, op, _, args): readCall(args[0]) if isConversion(op, args) or isLen(op, args) else -1
         # (a slice of it only read, `$v[i].name[0:8]` - lowering's readHere)
         case typed.Expr.Slice(_, _, sl): readPlaceCall(sl.Base)
@@ -9664,8 +9664,8 @@ fn (f mut Free&) ElemPlace(arr types.TypeId) I64 { return f.placeKey(arr, -1) if
 # elements' bytes (its elements' storage, another part): a copy made there is then split (lower.partCopy), so that the
 # region holds that one array alone; null where it owns nothing more, or the site is no part site
 fn (f mut Free&) PartSplit(b I64, site I64, ty types.TypeId) Array<I64>?& {
-    path := f.PartLeaf(b, site, ty)
-    if path == null: return null
+    path :~ f.PartLeaf(b, site, ty)
+    if path is null: return null
     return path if f.ownsBeyond(ty, path, 0) else null
 }
 
@@ -9685,12 +9685,12 @@ fn (f mut Free&) PartLeaf(b I64, site I64, ty types.TypeId) Array<I64>?& {
 # whether a value of type ty owns storage beyond the array path leads to: another part owning storage on the way, or
 # that array's elements owning storage
 fn (f mut Free&) ownsBeyond(ty types.TypeId, path Array<I64>&, depth I64) Bool {
-    t := f.T()
+    t :~ f.T()
     if depth == path.Len() {
         el := t.Elem(t.Repr(ty))
         return t.OwnedPart(el) or t.OwnsParts(el)
     }
-    fs := t.Items(t.Fields(t.Plain(t.Repr(ty))))
+    fs :~ t.Items(t.Fields(t.Plain(t.Repr(ty))))
     for i in range fs.Len() {
         if i != path[depth] and not t.IsRef(fs[i]) and (t.OwnedPart(fs[i]) or t.OwnsParts(fs[i])): return true
     }
@@ -9699,7 +9699,7 @@ fn (f mut Free&) ownsBeyond(ty types.TypeId, path Array<I64>&, depth I64) Bool {
 
 # whether a value of type ty is text a slot holds: an immut array of plain elements (a String)
 fn (f mut Free&) slotText(ty types.TypeId) Bool {
-    t := f.T()
+    t :~ f.T()
     r := t.Repr(ty)
     if t.KindOf(r) != types.Kind.Array or not t.OwnedPart(ty): return false
     el := t.Elem(r)
@@ -9711,7 +9711,7 @@ fn (f mut Free&) slotText(ty types.TypeId) Bool {
 fn (f mut Free&) DroppedMove(c typed.Call&) I64 {
     if not f.Done: return -1
     b2 := typed.CalleeBody(c)
-    if b2 < 0 or f.Bodies[b2].Root == null: return -1
+    if b2 < 0 or f.Bodies[b2].Root is null: return -1
     m := f.mustRes[b2]
     if m < MovBase: return -1
     return m - MovBase
@@ -9765,8 +9765,8 @@ fn (f mut Free&) endsFor(b I64, final Bool) Map<I64, Vec<I64>> {
 # the scope closes, could read what the block's end released
 fn (f mut Free&) endsMovedIn(b I64) Map<I64, Vec<I64>> {
     out Map<I64, Vec<I64>>
-    body := f.Bodies[b]
-    if body.Root == null or f.registered.Len() > 0: return out
+    body :~ f.Bodies[b]
+    if body.Root is null or f.registered.Len() > 0: return out
     cands := false
     for l in range body.Locals.Len() {
         if f.movedLocal(b, l) or f.leafLocal(b, l): cands = true
@@ -9798,7 +9798,7 @@ fn (f mut Free&) endsWalk(b I64, bl typed.Block&, u typed.LocalUses&, out mut Ma
             case typed.Stmt.Loop(_, b2, _) { f.endsWalk(b, b2, u, out) }
             case typed.Stmt.If(_, x) {
                 f.endsWalk(b, x.Then, u, out)
-                if x.Else != null: f.endsWalk(b, x.Else!, u, out)
+                if x.Else is not null: f.endsWalk(b, x.Else!, u, out)
             }
             case _ { }
         }
@@ -9850,13 +9850,13 @@ fn (f mut Free&) leafLocal(b I64, l I64) Bool {
 # (check.ownCopy), so it lets go of them where its block ends (endsHere), as a value moved out of a place does. Its
 # storage lives where its references must (a struct holding one beside its parts, O25h), longer than its block
 fn (f mut Free&) madeLocal(b I64, l I64, u typed.LocalUses&) Bool {
-    if not f.leafLocal(b, l) or u.Whole[l] or u.Init[l] == null: return false
+    if not f.leafLocal(b, l) or u.Whole[l] or u.Init[l] is null: return false
     if f.olIn[b] and f.ownLocalOf.Has(pair.Pair(b, l)): return false
-    t := f.T()
-    c := typed.Call.Of(u.Init[l]!)
-    if c == null: return false
+    t :~ f.T()
+    c :~ typed.Call.Of(u.Init[l]!)
+    if c is null: return false
     cb := typed.CalleeBody(c)
-    if cb < 0 or f.Bodies[cb].Root == null or t.Role(f.Bodies[cb].Ty) != types.RoleCtor or t.Results(f.Bodies[cb].Ty).Len() != 1: return false
+    if cb < 0 or f.Bodies[cb].Root is null or t.Role(f.Bodies[cb].Ty) != types.RoleCtor or t.Results(f.Bodies[cb].Ty).Len() != 1: return false
     # (an instance viewing what it is given (D9h) views values moved to it or built for it, or its local is given a
     # copy of it (walker.letCtorOf) - its own storage all the same; but never one viewing anything else)
     if (f.viewsOf(cb) & typed.ViewOther) != 0: return false
@@ -9877,7 +9877,7 @@ fn (f Free&) movedLocal(b I64, l I64) Bool {
 fn (f mut Free&) DroppedLeaves(c typed.Call&) Bool {
     if not f.Done: return false
     b2 := typed.CalleeBody(c)
-    if b2 < 0 or f.Bodies[b2].Root == null: return false
+    if b2 < 0 or f.Bodies[b2].Root is null: return false
     return f.mustRes[b2] == MovLeaves
 }
 
@@ -9901,7 +9901,7 @@ fn (f mut Free&) shown(g letGo) Bool {
 
 # the report: a row for each place that keeps, a note naming why, and a count
 fn (f mut Free&) Report() String {
-    d := f.P.L.Diags
+    d :~ f.P.L.Diags
     b := StringBuilder()
     places I64 = 0
     kept I64 = 0
@@ -9941,8 +9941,8 @@ fn (f mut Free&) Report() String {
         # (an owner kept for RSplit alone keeps for what keeps the part its let-go releases)
         rk := f.splitPart(k)
         r := f.why[rk]
-        why := r.Text
-        if f.whyKind[rk] == RNone: why = "it is let go of only inside calls that may let go of any place"
+        why :~ r.Text
+        if f.whyKind[rk] == RNone: why ~ "it is let go of only inside calls that may let go of any place"
         where := $d.Locate(r.File, I64(r.Sp.Start)) if r.File >= 0 else $d.Locate(g.File, at)
         # (O8f: a value changed in place, or a holder copied, keeps for no condition of the rule's - a gap)
         gapped := f.whyKind[rk] == RInPlace or f.whyKind[rk] == RCopied or f.whyKind[rk] == RSplit
@@ -10014,8 +10014,8 @@ fn (f mut Free&) copiedRet(b I64) Bool {
 }
 
 fn (f mut Free&) retCopies(b I64) Bool {
-    bd := f.Bodies[b]
-    t := f.T()
+    bd :~ f.Bodies[b]
+    t :~ f.T()
     if t.KindOf(bd.Ty) != types.Kind.Func: return false
     rt := t.Result(bd.Ty)
     if t.IsRef(rt) or t.KindOf(t.Repr(rt)) == types.Kind.Array or not t.OwnsParts(rt): return false
@@ -10046,14 +10046,14 @@ fn (f mut Free&) copiedValue(b I64, x typed.Expr&) Bool {
 
 # whether body b's local l lives where the result goes (the plan's Stored: O26a's returned local)
 fn (f mut Free&) storedInResult(b I64, l I64) Bool {
-    pl := f.Plans.Ref(b)
+    pl :~ f.Plans.Ref(b)
     v := f.resultVar(b)
     return v >= 0 and l < pl.Stored.Len() and pl.Stored[l] == typed.Scope.Var(v)
 }
 
 # whether a choice's value may be a place read (lower's copiesValue)
 fn readChoice(x typed.Expr?&) Bool {
-    if x == null: return false
+    if x is null: return false
     return match x {
         case typed.Expr.Read(_, _, _, _): true
         case typed.Expr.Away(_, _, y): readChoice(y)
@@ -10067,7 +10067,7 @@ fn readArms(m typed.Match&) Bool {
     for a in m.Arms {
         if readChoice(a.Value): return true
     }
-    return m.NoMatch != null and readChoice(m.NoMatch!.Value)
+    return m.NoMatch is not null and readChoice(m.NoMatch!.Value)
 }
 
 # O8f: the rows for a library's place (a Map entry's value, a collection's element) the program's own call lets go of in
@@ -10077,7 +10077,7 @@ GapCalls Array<String&> = Array<String&>["Put", "SetAt"]
 
 fn (f mut Free&) libraryGaps() Vec<String&> {
     out Vec<String&>
-    d := f.P.L.Diags
+    d :~ f.P.L.Diags
     for g in f.goes {
         k := g.PlaceId
         if k < 0 or not g.Again or g.Kind != LCall or g.Callee < 0 or not f.programCode[g.Body] or f.programCode[g.Callee]: continue
@@ -10110,7 +10110,7 @@ fn (f mut Free&) reported(k I64) Bool {
     if f.P.Gens.Len() > 0 and f.genPlace(k): return false
     owns := false
     for st in f.stores {
-        if st.PlaceId == k and (st.Site >= 0 or st.Kind == SFresh or st.Kind == SMove or st.X != null and f.widened(st.X) != null): owns = true
+        if st.PlaceId == k and (st.Site >= 0 or st.Kind == SFresh or st.Kind == SMove or st.X is not null and f.widened(st.X) is not null): owns = true
         # (2.4: an owner local's value it is given - a copy lowering makes for it, or a value not made for it, which
         # lowering copies or builds where the local's storage is - is storage there all the same)
         if st.PlaceId == k and f.isOwnLocal(k) and (st.Kind == SCopy or st.Kind == SFail): owns = true
@@ -10132,7 +10132,7 @@ fn (f mut Free&) reported(k I64) Bool {
         return m >= 0 and m < f.P.L.Mods.Len() and not f.P.L.Mods[m].Identity.StartsWith("std/")
     }
     if f.keyField[k] < 0: return false
-    t := f.T()
+    t :~ f.T()
     r := t.Repr(f.keyTy[k])
     if t.KindOf(r) != types.Kind.Named: return false
     m := t.DeclModule(t.DeclOf(r))
@@ -10143,7 +10143,7 @@ fn (f mut Free&) reported(k I64) Bool {
 # whether place k is a field of a type the library declares
 fn (f mut Free&) libraryField(k I64) Bool {
     if f.keyField[k] < 0: return false
-    t := f.T()
+    t :~ f.T()
     r := t.Repr(f.keyTy[k])
     if t.KindOf(r) != types.Kind.Named: return false
     m := t.DeclModule(t.DeclOf(r))
@@ -10162,7 +10162,7 @@ fn (f mut Free&) libraryStorage(k I64) Bool {
 }
 
 # a type as the program spells it
-fn (f mut Free&) typeName(ty types.TypeId) String { return f.Sc.Spell!(ty) if f.Sc.Spell != null else $f.T().Canon(ty) }
+fn (f mut Free&) typeName(ty types.TypeId) String { return f.Sc.Spell!(ty) if f.Sc.Spell is not null else $f.T().Canon(ty) }
 
 # whether let-go g is a call in the program's own code
 fn (f Free&) growsHere(g letGo) Bool { return g.Kind == LCall and g.Callee >= 0 and f.programCode[g.Body] }
@@ -10188,7 +10188,7 @@ fn (f mut Free&) before(a letGo, b letGo) Bool {
 
 # where the line holding offset at begins its text: its first character that is no space
 fn (f mut Free&) lineStart(file I64, at I64) I64 {
-    t := f.P.L.Diags.TextOf(file)
+    t :~ f.P.L.Diags.TextOf(file)
     a := at
     for a > 0 and t[a - 1] != '\n': a--
     for a < t.Len() and (t[a] == ' ' or t[a] == '\t'): a++
@@ -10240,9 +10240,9 @@ fn (f mut Free&) scopeName(g letGo, k I64) String {
     }
     n := 0
     for n < text.Len() and (text[n].IsLetter() or text[n].IsDigit() or text[n] == '_'): n++
-    root := text[:n]
-    body := f.Bodies[g.Body]
-    t := f.T()
+    root :~ text[:n]
+    body :~ f.Bodies[g.Body]
+    t :~ f.T()
     for l in range body.Locals.Len() {
         if f.P.L.Names.Text(body.Locals[l].Name) != root: continue
         isParam := false
@@ -10291,20 +10291,20 @@ fn (f mut Free&) Dump() String {
 # the parameter every value of an expression is reached from - through fields, elements, references and borrowed
 # results - given what each local's every value is reached from, a must-fact: MustNone where it is not one parameter's
 fn (f mut Free&) withinExpr(locals Vec<I64>&, x typed.Expr&) I64 {
-    t := f.T()
+    t :~ f.T()
     match x {
         case typed.Expr.Lit(_, _, _) { return MustTop }
         case typed.Expr.Read(_, _, p, _) { return f.withinPl(locals, p) }
         case typed.Expr.Borrow(_, _, p) { return f.withinPl(locals, p) }
         case typed.Expr.Call(_, _, c) {
             b2 := typed.CalleeBody(c)
-            if b2 < 0 or f.Bodies[b2].Root == null or t.Results(f.Bodies[b2].Ty).Len() != 1: return MustNone
+            if b2 < 0 or f.Bodies[b2].Root is null or t.Results(f.Bodies[b2].Ty).Len() != 1: return MustNone
             e := t.ResultFrom(f.Bodies[b2].Ty, 0)
             if e < 0 or e >= c.Args.Len(): return MustNone
             return f.withinExpr(locals, c.Args[e])
         }
         case typed.Expr.Try(_, _, tr) {
-            if tr.X == null: return MustNone
+            if tr.X is null: return MustNone
             for cl in tr.Clauses {
                 if cl.Defaults.Len() > 0: return MustNone
             }

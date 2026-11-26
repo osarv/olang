@@ -99,7 +99,7 @@ fn rewrite(path String&, src String&, keep Bool, r mut Report&) String {
             continue
         }
         if t.k != token.Tok.Iden: continue
-        word := src[t.start:t.end]
+        word :~ src[t.start:t.end]
         afterDot := i > 0 and v[i - 1].k == token.Tok.Dot
         next := v[i + 1].k if i + 1 < v.Len() else token.Tok.StmtEnd
         with := ""
@@ -152,9 +152,9 @@ fn rewriteMarkdown(path String&, src String&, keep Bool, r mut Report&) String {
     out := StringBuilder()
     block := StringBuilder()
     inBlock := false
-    lines := src.Split("\n")
+    lines :~ src.Split("\n")
     for k in range lines.Len() {
-        line := lines[k]
+        line :~ lines[k]
         last := k == lines.Len() - 1
         if inBlock and line.StartsWith("```") {
             out.Push(rewrite(path, block.ToString(), keep, r))
@@ -176,7 +176,7 @@ fn rewriteMarkdown(path String&, src String&, keep Bool, r mut Report&) String {
 
 # the .olang and .md files under dir, depth first, in byte order; build, .git and links to directories are not entered
 fn walk(dir String&, out mut Vec<String&>&) {
-    names := try os.ReadDir(dir) catch default Array<String&>(0)
+    names :~ try os.ReadDir(dir) catch default Array<String&>(0)
     for name in names {
         path := srcmask.PathJoin(dir, name)
         if os.IsDir(path) {
@@ -194,9 +194,9 @@ fn main() ? {
     verbose := false
     keep := true
     paths Vec<String&>
-    args := os.Args()
+    args :~ os.Args()
     for i in range 1, args.Len() {
-        a := args[i]
+        a :~ args[i]
         if a == "--check": check = true
         else if a == "--vec": keep = false
         else if a == "-v": verbose = true
@@ -231,7 +231,7 @@ fn main() ? {
         }
     }
     for l in r.left: srcmask.Say("by hand: " + $l)
-    verb := "would change " if check else "changed "
+    verb :~ "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files: " + $r.n + " names")
     if check and changed > 0: os.Exit(1)
 }

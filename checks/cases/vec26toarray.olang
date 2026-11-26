@@ -13,7 +13,7 @@ fn churn() I64 {
 fn main() ? {
     v := Vec<String&>()
     v.Push("a")
-    a := v.ToArray()
+    a :~ v.ToArray()
     for _ in range 100: v.Push("b")
     churn()
     try io.PutLn($a[0] + " " + $a.Len() + " " + $v.Len())

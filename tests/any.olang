@@ -67,8 +67,8 @@ test "T32a: an any holds a struct borrowed, temporaries built where it lands, nu
     lab := Label("hi")
     xs.Push(lab)
     n = Count(9)
-    lab = Label("no")
-    c.n = "tim"
+    lab ~ Label("no")
+    c.n ~ "tim"
     assert churn() > 0
     assert names(xs) == "cat tim, cat kit, high, count 5, label hi"
     k := kept()
@@ -132,7 +132,7 @@ test "T32c: an any of another module's trait, its default through the table, gen
     xs.Push(sh.Dot(1))
     xs.Push(sh.Ring(5))
     assert churn() > 0
-    a := xs.ToArray()
+    a :~ xs.ToArray()
     assert areas(a) == 9 + 6 + 0 + 5
     assert xs[0].Describe() == 13 and xs[3].Describe() == 5
     assert describeAll(xs) == 13 + 9 + 1 + 5
@@ -145,11 +145,11 @@ test "T33: == is the same instance; an any renders its instance" {
     x any Named& = c
     y any Named& = c
     z any Named& = Cat("tom")
-    assert x == y and x != z
+    assert x is y and x is not z
     m any Named?& = null
-    assert m == null
-    m = c
-    assert m == x
+    assert m is null
+    m ~ c
+    assert m is x
     assert $x == "Cat(\"tom\")"
     w any Named& = Lev.High
     assert $w == "Lev.High"
@@ -192,7 +192,7 @@ fn slide(w mut any Widget&) {
 }
 
 fn labelLen(w any Widget&) I64 {
-    b := try w as Button catch CaseError.WrongCase default Button("none")
+    b :~ try w as Button catch CaseError.WrongCase default Button("none")
     return b.label.Len()
 }
 
@@ -394,14 +394,14 @@ fn chains(n I64) String {
     p := RPlain(0)
     for i in range 1, n {
         a mut RNode& = RNode(i)
-        a.next = h.next
-        h.next = a
+        a.next ~ h.next
+        h.next ~ a
         q mut RPlain& = RPlain(i)
-        q.next = p.next
-        p.next = q
+        q.next ~ p.next
+        p.next ~ q
     }
     self mut RNode& = RNode(7)
-    self.next = self
+    self.next ~ self
     s any Named& = self
     return $h + "|" + $p + "|" + $s
 }
@@ -613,7 +613,7 @@ fn anyGeneric(n I64) String {
     s := ASrc<I64>(AUps(n + 1))
     f := try s.First() catch default -1
     m mut any Iterator<I64>& = AUps(n)
-    mapped := m.Map(fn(x I64) String& { return "m" + $x })
+    mapped :~ m.Map(fn(x I64) String& { return "m" + $x })
     return $anyCount(a) + " " + $f + " " + $s.Rest() + " " + $mapped
 }
 BakedAnyGeneric String = anyGeneric(2)
@@ -656,7 +656,7 @@ test "T32a: a call's array a scope argument puts elsewhere is copied into the bo
 type RsH struct(s Array<Char>&) { s }
 fn rsKeep(k mut RsH&, i I64) Array<Char> {
     s Array<Char> = "abc" + $i
-    k.s = s
+    k.s ~ s
     return s
 }
 fn rsLog(log mut Vec<Array<Char>&>&, i I64) Array<Char> {
@@ -762,10 +762,10 @@ test "T7b, E25: a scoped call's array of plain data is copied where it is return
 # count, a destructor of the block - else it is copied; baked while compiling exactly as at run time, and an assert the
 # compiler decides agrees
 type SnK struct(s Array<Char>&) { s }
-fn (k mut SnK&) Set(t Array<Char>&) { k.s = t }
+fn (k mut SnK&) Set(t Array<Char>&) { k.s ~ t }
 fn snAlias(lst mut Vec<Array<Char>&>&, i I64) Array<Char> {
     s Array<Char> = "abc" + $i
-    l := lst
+    l :~ lst
     l.Push(s)
     return s
 }
@@ -791,15 +791,15 @@ fn snChain(k mut SnK&, i I64) Array<Char> {
     r7 Array<Char>& = ""
     r8 Array<Char>& = ""
     for _ in range 10 {
-        k.s = r8
-        r8 = r7
-        r7 = r6
-        r6 = r5
-        r5 = r4
-        r4 = r3
-        r3 = r2
-        r2 = r1
-        r1 = s
+        k.s ~ r8
+        r8 ~ r7
+        r7 ~ r6
+        r6 ~ r5
+        r5 ~ r4
+        r4 ~ r3
+        r3 ~ r2
+        r2 ~ r1
+        r1 ~ s
     }
     return s
 }
@@ -870,7 +870,7 @@ fn spawnStores(k I64) String {
     b := ""
     c := Array<I64>(0)
     same := "xxxxxxx"
-    before := same[0:3]
+    before :~ same[0:3]
     for i in range k + 1 {
         join {
             spawn a, n = spTwo(i)

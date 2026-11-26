@@ -19,8 +19,8 @@ fn main() {
     b := Bag()
     b.items.Push(7)
     f fn&(g Bag) I64 pure = fn(g): return g.items.Len()
-    d := v.View()
-    e := b.items.View()
+    d :~ v.View()
+    e :~ b.items.View()
     n := f(b)
     fn(w mut Vec<I64>&) { w[0] = 3 }(v)
     assert churn() > 0

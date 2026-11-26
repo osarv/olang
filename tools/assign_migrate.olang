@@ -1,0 +1,168 @@
+# assign_migrate - the null test is "x is null" (E10c, the user's decision of 2026-11-26), and "x == null" an error:
+# "==" and "!=" beside the null literal become "is" and "is not" ("null == x" "null is x"), read with the compiler's
+# scanner (comments and text are left alone), in .olang files and in the "```olang" blocks and code spans of a Markdown
+# file named on the command line. "is" binds as "==" does, so nothing is parenthesized. Idempotent.
+#
+# The same day "=" given a reference came to write what it names, ":=" to declare a value and "==" to compare contents
+# through references (S4a, S4f, E10d). Code written before needs its links ("r = x" -> "r ~ x"), reference locals
+# ("r := x" -> "r :~ x") and identity tests ("a == b" -> "a is b") rewritten with the checker's types under the old
+# meanings: this tool as olang a6d97410b built it (wt-assign's stage 1, the checker's OLANG_ASSIGNS report) does that -
+# build that commit's compiler and run its build/tools_assign_migrate --olang build/olang over the code (HISTORY "links
+# and contents").
+#
+#     $OLANG build tools/assign_migrate.olang && build/tools_assign_migrate [--olang PATH] FILE|DIR...
+
+import "std/os"
+import "srcmask"
+import "diagedit"
+import "../compiler/scan"
+import "../compiler/token"
+
+# a token of the text: kind and span
+type VT struct(k token.Tok, start I64, end I64) {
+    k
+    start
+    end
+}
+
+fn vtokens(src String&) Vec<VT> {
+    ts := scan.Tokens.Scan(src)
+    out Vec<VT>
+    for tk in ts.Toks: out.Push(VT(tk.Kind, I64(tk.Start), I64(tk.End)))
+    return out
+}
+
+type Count struct() {
+    nulls I64 = 0
+}
+
+# the null tests of a text: "==" and "!=" beside the null literal become "is" and "is not"
+fn nullTests(src String&, n mut Count&) String {
+    v := vtokens(src)
+    out := StringBuilder()
+    from I64 = 0
+    for i in range v.Len() {
+        k := v[i].k
+        if k != token.Tok.EqEq and k != token.Tok.NotEq: continue
+        after := i + 1 < v.Len() and v[i + 1].k == token.Tok.NullLit
+        before := i > 0 and v[i - 1].k == token.Tok.NullLit
+        if not after and not before: continue
+        out.Push(src[from:v[i].start])
+        out.Push("is" if k == token.Tok.EqEq else "is not")
+        from = v[i].end
+        n.nulls++
+    }
+    if from == 0: return $src
+    out.Push(src[from:])
+    return out.ToString()
+}
+
+# a line of Markdown outside a code block: its inline code spans migrated, the rest kept
+fn nullSpans(line String&, n mut Count&) String {
+    out := StringBuilder()
+    from I64 = 0
+    for {
+        a := try line[from:].Find("`") catch default -1
+        if a < 0: break
+        b := try line[from + a + 1:].Find("`") catch default -1
+        if b < 0: break
+        lo, hi := from + a + 1, from + a + 1 + b
+        out.Push(line[from:lo])
+        out.Push(nullTests(line[lo:hi], n))
+        out.PushChar('`')
+        from = hi + 1
+    }
+    out.Push(line[from:])
+    return out.ToString()
+}
+
+# a Markdown file: the null tests of its olang code blocks and inline code spans migrated, the rest kept
+fn nullMarkdown(src String&, n mut Count&) String {
+    out := StringBuilder()
+    block := StringBuilder()
+    fence := ""
+    lines :~ src.Split("\n")
+    for k in range lines.Len() {
+        line :~ lines[k]
+        if fence == "olang" and line.StartsWith("```") {
+            out.Push(nullTests(block.ToString(), n))
+            block.Clear()
+            fence = ""
+        } else if fence == "olang" {
+            block.Push(line)
+            block.PushChar('\n')
+            continue
+        } else if fence != "" {
+            if line.StartsWith("```"): fence = ""
+        } else if line.StartsWith("```") {
+            fence = "olang" if line.StartsWith("```olang") else "other"
+        } else {
+            out.Push(nullSpans(line, n))
+            if k < lines.Len() - 1: out.PushChar('\n')
+            continue
+        }
+        out.Push(line)
+        if k < lines.Len() - 1: out.PushChar('\n')
+    }
+    if fence == "olang": out.Push(block.ToString())
+    return out.ToString()
+}
+
+fn main() ? {
+    paths Vec<String&>
+    args :~ os.Args()
+    i I64 = 1
+    for i < args.Len() {
+        # (--olang is what olang fix passes a driven tool: the null tests need no compiler)
+        if args[i] == "--olang" and i + 1 < args.Len() {
+            i += 2
+            continue
+        }
+        paths.Push($args[i])
+        i++
+    }
+    if paths.Len() == 0 {
+        srcmask.SayErr("usage: build/tools_assign_migrate [--olang PATH] FILE|DIR...")
+        os.Exit(2)
+    }
+    files Vec<String&>
+    diagedit.OlangFiles(paths, files)
+    n := Count()
+    left Vec<String&>
+    for path in files: nullFile(path, false, n, left)
+    for p in paths {
+        if p.EndsWith(".md"): nullFile(p, true, n, left)
+    }
+    srcmask.Say("assign: " + $n.nulls + " null tests")
+    for l in left: srcmask.Say("by hand: " + $l)
+}
+
+# a file's null tests rewritten in place
+fn nullFile(path String&, markdown Bool, n mut Count&, left mut Vec<String&>&) {
+    src := try srcmask.ReadText(path) catch { return }
+    out := nullMarkdown(src, n) if markdown else nullTests(src, n)
+    if out == src: return
+    try os.WriteFile(path, out) catch { left.Push($path + ": not written") }
+}
+
+test "null tests are 'is null' and 'is not null'" {
+    n := Count()
+    assert nullTests("    if x == null { }\n", n) == "    if x is null { }\n"
+    assert nullTests("    if x.next != null and y { }\n", n) == "    if x.next is not null and y { }\n"
+    assert nullTests("    b := a == (p.q == null)\n", n) == "    b := a == (p.q is null)\n"
+    assert nullTests("    b := null == f(x)\n", n) == "    b := null is f(x)\n"
+    assert n.nulls == 4
+}
+
+test "comments, text and code already new are left as they are" {
+    n := Count()
+    src := "    # x == null\n    s := \"x != null\"\n    if x is null or y is not null or a == b { }\n"
+    assert nullTests(src, n) == src and n.nulls == 0
+}
+
+test "a Markdown file's olang blocks and code spans" {
+    n := Count()
+    src := "Test it with `p == null`; a reference is null.\n```olang\nif p != null { }\n```\n```sh\nx == null\n```\n"
+    want := "Test it with `p is null`; a reference is null.\n```olang\nif p is not null { }\n```\n```sh\nx == null\n```\n"
+    assert nullMarkdown(src, n) == want
+}

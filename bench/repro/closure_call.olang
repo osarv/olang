@@ -11,7 +11,7 @@ import "std/io"
 import "std/os"
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     n := try args[1].ParseInt()
     passes := try args[2].ParseInt()
     a := Array<I64>(n)

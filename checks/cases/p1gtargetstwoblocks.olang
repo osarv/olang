@@ -19,7 +19,7 @@ fn main() ? io.Error {
         join {
             spawn a, b = two(i + 5)
         }
-        b!.next = Node(99)
+        b!.next ~ Node(99)
     }
     try io.PutLn($a!.v)
 }

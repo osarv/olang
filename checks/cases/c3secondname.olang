@@ -19,8 +19,8 @@ fn churn() {
 }
 fn N.mk1(i I64) N& {
     x1 mut N& = N(i)
-    x1.next = N(i + 1)
-    x2 := x1
+    x1.next ~ N(i + 1)
+    x2 :~ x1
     return x2
 }
 fn H.mk2(i I64) H {
@@ -30,13 +30,13 @@ fn H.mk2(i I64) H {
 }
 fn N.mk3(i I64) N {
     x1 := N(i)
-    x1.next = N(i + 1)
+    x1.next ~ N(i + 1)
     x2 := x1
     return x2
 }
 fn N.mk3after(i I64) N {
     x1 := N(i)
-    x1.next = N(i + 1)
+    x1.next ~ N(i + 1)
     x2 := x1
     x1.v = 9
     return x2

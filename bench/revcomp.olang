@@ -30,19 +30,19 @@ fn reversed(out mut io.Writer&, seq Array<Char>&) {
 }
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     if args.Len() < 2 {
         try io.PutErrLn("usage: revcomp FILE")
         os.Exit(2)
     }
-    text := try os.ReadFile(args[1])
+    text :~ try os.ReadFile(args[1])
     out := io.Writer(io.Stdout)
     seq := Array<Char>(text.Len())    # the sequence being read, its line ends left out
     n I64 = 0
     at I64 = 0
     for at < text.Len() {
         end := try text[at:].FindByte('\n') catch default text.Len() - at
-        line := text[at:at + end]
+        line :~ text[at:at + end]
         at += end + 1
         if line.StartsWith(">") {
             if n > 0: reversed(out, seq[:n])

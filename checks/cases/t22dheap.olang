@@ -12,7 +12,7 @@ fn smallest(seen mut Vec<N&>&) I64 {
         return a.v < b.v
     })
     for i in range 5: h.Push(N(9 - i))
-    m := try h.Pop() catch default N(-1)
+    m :~ try h.Pop() catch default N(-1)
     return m.v
 }
 

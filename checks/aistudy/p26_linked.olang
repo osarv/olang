@@ -8,28 +8,28 @@ fn push(l List&, x I64) List { return List.Cons(x, l) }
 
 fn length(l List&) I64 {
     n := 0
-    cur := l
+    cur :~ l
     for cur == List.Cons {
         n++
-        cur = cur.tail
+        cur ~ cur.tail
     }
     return n
 }
 
 fn reverse(l List&) List {
     acc := List.Nil
-    cur := l
+    cur :~ l
     for cur == List.Cons {
         acc = List.Cons(cur.head, acc)
-        cur = cur.tail
+        cur ~ cur.tail
     }
     return acc
 }
 
 fn nth(l List&, n I64) I64 {
-    cur := l
+    cur :~ l
     for _ in range n {
-        if cur == List.Cons: cur = cur.tail
+        if cur == List.Cons: cur ~ cur.tail
     }
     if cur == List.Cons: return cur.head
     return 0

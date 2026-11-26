@@ -13,7 +13,7 @@ type Bag struct(head mut Node&) {
     head
 }
 fn (b Bag&) Str() String {
-    f := fn() { b.head.next = Node(5, null) }
+    f := fn() { b.head.next ~ Node(5, null) }
     f()
     return "b"
 }

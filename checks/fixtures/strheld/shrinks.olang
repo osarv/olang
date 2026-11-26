@@ -18,7 +18,7 @@ fn joins() String {
     v := Vec<I64>()
     for i in range 30: v.Push(i)
     m.Put("k", v)
-    a := v.ToArray()
+    a :~ v.ToArray()
     return $l + " " + $m + " " + $v + " " + $a + " " + $shrink(l) + $clr(m) + $pop(v) + $pop(v) + " " + $l + " " + $m + " " + $v
 }
 Baked String& = joins()

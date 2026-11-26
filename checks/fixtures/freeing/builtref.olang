@@ -37,7 +37,7 @@ fn main() {
     t := 0
     last := ""
     for i in range N {
-        rr := second(o.inner)
+        rr :~ second(o.inner)
         o.inner = P(mkA(i), mkB(i), rr)
         junk := mkA(i + 3)
         t += o.inner.r.Len() + junk[0].Len()

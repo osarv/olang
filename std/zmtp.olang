@@ -91,7 +91,7 @@ fn (s Socket&) Send(parts ...String&) ? net.Error {
 # what has arrived read in - waiting until something has: a message or more of one, to Next
 fn (s mut Socket&) Fill() ? net.Error {
     buf := Array<U8>(65536)
-    got := try s.conn.Read(buf)
+    got :~ try s.conn.Read(buf)
     if s.at == s.in.Len() {
         s.in.Clear()
         s.at = 0
@@ -105,7 +105,7 @@ fn (s mut Socket&) Next() Array<String> ? Exhausted, Error.Protocol {
     for {
         if not s.greeted {
             if s.in.Len() - s.at < 64: error Exhausted.End
-            g := s.in.View()[s.at:s.at + 64]
+            g :~ s.in.View()[s.at:s.at + 64]
             if g[0] != 0xff or g[9] != 0x7f or g[10] < 3 or String(g[12:16]) != "NULL": error Error.Protocol
             s.at += 64
             s.greeted = true
@@ -122,7 +122,7 @@ fn (s mut Socket&) Next() Array<String> ? Exhausted, Error.Protocol {
 # where the first message from at ends, and how many frames it has that are no command (a command alone counts as a
 # message of none); -1 frames where it is not whole yet
 fn (s Socket&) whole() I64, I64 {
-    v := s.in.View()
+    v :~ s.in.View()
     i := s.at
     count I64 = 0
     for {
@@ -150,7 +150,7 @@ fn sizeAt(v Array<U8>&, i I64, long Bool) I64 {
 # the frames of the message from at to end that are no command, count of them, each copied out
 fn (s Socket&) frames(end I64, count I64) Array<String> {
     out := Array<String>(count)
-    v := s.in.View()
+    v :~ s.in.View()
     i := s.at
     k I64 = 0
     for i < end {

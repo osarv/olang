@@ -17,7 +17,7 @@ fn mk(r Node&, i I64) Node& { return Node(i) }
 fn R.keep(r Node&, i I64) R& { return R(i) }
 fn make(n Node&, fns mut Vec<fn&(i I64) I64>&) {
     fns.Push(fn(i I64) I64 {
-        m := mk(n, n.v + i)
+        m :~ mk(n, n.v + i)
         if i % 1000 == 0: R.keep(n, 1)
         return m.v
     })

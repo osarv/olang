@@ -1,0 +1,150 @@
+# S4f, E10d, E10c: "r ~ x" links a reference to storage that exists, "r :~ x" declares one; "a is b" asks whether two
+# references name one object - never calling Eq - and "x is null" is the null test. Baked is computed while compiling
+# (K2) and the top-level assert decided there (S17a), so the evaluator agrees with the run time.
+
+# a type whose Eq compares contents: "is" never calls it
+type Node struct(v I64, next Node?&) {
+    v
+    next
+}
+fn (a Node&) Eq(b Node&) Bool { return a.v == b.v }
+fn (n Node&) Hash() I64 { return n.v }
+
+# a cursor linked along the list
+fn walk(head Node?&) I64 {
+    n I64 = 0
+    at :~ head
+    for at is not null {
+        n += at.v
+        at ~ at.next
+    }
+    return n
+}
+
+fn score() I64 {
+    t I64 = 0
+    list := Node(1, Node(2, Node(3, null)))
+    t += walk(list)
+    a :~ list
+    a.v = 10
+    t += list.v * 10
+    b := Node(10, null)
+    if a == b: t += 1000
+    if a is not b: t += 10000
+    c :~ a
+    if c is a: t += 100000
+    c ~ b
+    if c is b and c is not a: t += 1000000
+    n :~ list.next
+    if n is not null: n ~ n.next
+    if n is not null and n.v == 3 and n.next is null: t += 10000000
+    return t
+}
+
+Baked I64 = score()
+
+assert score() == 11111106
+
+test "'~' and ':~' link, 'is' tests one object, at run time and while compiling" {
+    assert score() == 11111106 and Baked == score()
+}
+
+test "a link through a field and an element, and a reference unlinked with null" {
+    x := Node(1, null)
+    y := Node(2, null)
+    h Node?& = x
+    h ~ y
+    assert h is y and h is not x
+    h ~ null
+    assert h is null
+    m := Node(5, null)
+    m.next ~ y
+    assert m.next is y
+    assert m.next!.v == 2
+    rs := Array<Node?&>(2)
+    rs[1] ~ x
+    assert rs[1] is x and rs[0] is null
+}
+
+# "=" through a reference writes the whole of what it names (S4f): the store a value place gets, the old value ended as
+# any store ends it; "==" between two references compares what they name (E10d); ":=" of a reference declares a copy
+type Pt struct(x I64, y I64) {
+    x, y
+}
+
+fn writes() I64 {
+    p := Pt(1, 2)
+    r :~ p
+    r = Pt(3, 4)
+    q := Pt(3, 4)
+    s :~ q
+    t I64 = 0
+    if p.x == 3 and p.y == 4: t += 1
+    if r == s: t += 10
+    if r is not s: t += 100
+    c := r
+    c.x = 9
+    if p.x == 3 and c.x == 9: t += 1000
+    return t
+}
+
+Written I64 = writes()
+
+assert writes() == 1111
+
+test "'=' through a reference writes what it names, '==' compares contents, ':=' copies - at run time and while compiling" {
+    assert writes() == 1111 and Written == writes()
+}
+
+test "'==' through references that may be null: a null equals only a null" {
+    a Pt?& = null
+    b Pt?& = null
+    assert a == b
+    p := Pt(1, 2)
+    a ~ p
+    assert a != b and b != a
+    q := Pt(1, 2)
+    b ~ q
+    assert a == b and a is not b
+}
+
+type Log struct() {
+    seen := Vec<I64>()
+}
+
+type Res unique struct(id I64, log mut Log&) {
+    id, log
+} destruct { log.seen.Push(id) }
+
+type Box struct(r Res) {
+    r
+}
+
+fn replace(b mut Res&, log mut Log&, id I64) { b = Res(id, log) }
+
+test "a write through a reference ends the old value once, and the new one where its holder lets go" {
+    log := Log()
+    if log.seen.Len() == 0 {
+        b := Box(Res(1, log))
+        replace(b.r, log, 2)
+        assert log.seen.Len() == 1 and log.seen[0] == 1 and b.r.id == 2
+    }
+    assert log.seen.Len() == 2 and log.seen[1] == 2
+}
+
+type Cell struct(v I64, next mut Cell?&) {
+    v
+    next
+}
+
+fn fill(n mut Cell&, v I64) { n = Cell(v, Cell(v + 1, null)) }
+
+test "a write through a reference into a list, read back after an arena churn" {
+    h := Cell(1, Cell(2, null))
+    fill(h.next!, 7)
+    for i in range 1000 {
+        junk := Cell(i, Cell(i, null))
+        assert junk.next!.v == i
+    }
+    assert h.next!.v == 7 and h.next!.next!.v == 8
+}

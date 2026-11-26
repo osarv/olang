@@ -7,14 +7,14 @@ fn Config.Parse(text String&) Config ? ParseError {
     c := Config()
     section := ""
     for raw in text.Lines() {
-        line := raw.Trim()
+        line :~ raw.Trim()
         if line == "" or line.StartsWith("#"): continue
         if line.StartsWith("[") {
             section = line[1:line.Len() - 1]
             continue
         }
         eq := try line.Find("=") catch { error ParseError.Invalid }
-        key := line[:eq].Trim()
+        key :~ line[:eq].Trim()
         c.vals.Put($section + "." + $key, line[eq + 1:].Trim())
     }
     return c

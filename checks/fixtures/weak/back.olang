@@ -5,4 +5,4 @@ type Back struct() {
     At weak mut node.Node?& = null
 }
 
-fn (b mut Back&) Point(n mut node.Node&) { b.At = n }
+fn (b mut Back&) Point(n mut node.Node&) { b.At ~ n }

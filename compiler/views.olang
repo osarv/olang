@@ -249,7 +249,7 @@ fn (v mut Viewer&) Run() {
 fn (v mut Viewer&) RunKept(k mut Kept&) {
     for m in v.P.L.Mods {
         if m.File < 0: continue
-        if m.Src != null: v.texts.Put(m.File, m.Src!.Text)
+        if m.Src is not null: v.texts.Put(m.File, m.Src!.Text)
         if m.Identity.StartsWith("std/"): v.library.Put(m.File, true)
         if m.Identity == "std/prelude/vec": v.vecFile = m.File
         if m.Identity == "std/prelude/map": v.mapFile = m.File
@@ -263,7 +263,7 @@ fn (v mut Viewer&) RunKept(k mut Kept&) {
         for _ in v.Bodies[i].Params: v.sums[i].Passes.Push(false)
         v.sums[i].Known = v.walkable(i)
     }
-    v.Keys = v.BodyKeys()
+    v.Keys ~ v.BodyKeys()
     if not k.Afresh: v.take(k)
     v.components()
     if not v.viewsHeld(): return
@@ -308,8 +308,8 @@ fn (v mut Viewer&) viewsHeld() Bool {
 
 # whether body b is walked: it has code, it is no condition the build decides, and it holds no unknown type
 fn (v mut Viewer&) walkable(b I64) Bool {
-    body := v.Bodies[b]
-    if body.Root == null: return false
+    body :~ v.Bodies[b]
+    if body.Root is null: return false
     match body.Of {
         case typed.BodyOf.Cond(_, _) { return false }
         case _ { }
@@ -323,8 +323,8 @@ fn (v mut Viewer&) walkable(b I64) Bool {
 # body b walked: its summary found, or its errors said
 fn (v mut Viewer&) walk(b I64, check Bool) {
     if not v.sums[b].Known or v.given.Has(b): return
-    body := v.Bodies[b]
-    v.B = body
+    body :~ v.Bodies[b]
+    v.B ~ body
     v.Id = b
     v.check = check
     v.quiet = false
@@ -411,7 +411,7 @@ fn (v mut Viewer&) where(p place) String {
         case Root.Global(_, n): $v.text(n)
         case _: "?"
     }
-    path := v.strs[p.Path]
+    path :~ v.strs[p.Path]
     show := p.Show if p.Show >= 0 and p.Show <= path.Len() else path.Len()
     return $name + $path[:show]
 }
@@ -427,14 +427,14 @@ fn (v mut Viewer&) fieldName(t types.TypeId, i I64) String {
         v.fieldsOf.Put(d, k)
         for n in v.P.FieldNames(t): v.nameLists.RefMut(k).Push(n)
     }
-    ns := v.nameLists.Ref(k)
+    ns :~ v.nameLists.Ref(k)
     return $v.text(ns[i]) if i < ns.Len() else $i
 }
 
 # ---- tokens: where stage 0's rows put an operation (the method's name, an index's bracket) ----
 
 fn (v mut Viewer&) charAt(at I64) Char {
-    t := try v.texts.Get(v.B!.File) catch default ""
+    t :~ try v.texts.Get(v.B!.File) catch default ""
     return t[at] if at >= 0 and at < t.Len() else '\0'
 }
 
@@ -531,8 +531,8 @@ fn (v mut Viewer&) bufferField(t types.TypeId) String {
     d := v.deref(t)
     if v.P.T.KindOf(d) != types.Kind.Named: return ""
     decl := v.P.T.DeclOf(d)
-    name := v.text(v.P.T.DeclName(decl))
-    mod := v.P.T.Modules[v.P.T.DeclModule(decl)]
+    name :~ v.text(v.P.T.DeclName(decl))
+    mod :~ v.P.T.Modules[v.P.T.DeclModule(decl)]
     if name == "Vec" and mod == "std/prelude/vec": return "data"
     if name == "Map" and mod == "std/prelude/map": return "ents"
     if name == "ColumnVec" and mod == "std/prelude/columns": return "data"   # its Columns, one buffer per field (T7e)
@@ -554,7 +554,7 @@ fn placeAdd(out mut Vec<place>&, p place) {
 
 # the places an expression names - a local's, a parameter's, a global's, a field's of one, either of a conditional's
 fn (v mut Viewer&) exprPlaces(x typed.Expr?&, st state&, out mut Vec<place>&) {
-    if x == null: return
+    if x is null: return
     match x {
         case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p) { v.placePlaces(p, st, out) }
         case typed.Expr.Cond(_, _, c) {
@@ -597,7 +597,7 @@ fn (v mut Viewer&) callPlaces(c typed.Call&, st state&, out mut Vec<place>&) {
 ElemSeg := "[...]"
 
 fn (v mut Viewer&) placePlaces(p typed.Lvalue?&, st state&, out mut Vec<place>&) {
-    if p == null: return
+    if p is null: return
     match p {
         case typed.Lvalue.Local(_, _, id) {
             # a second name stands for what it names; a parameter given another value is a root of its own
@@ -721,8 +721,8 @@ fn (v mut Viewer&) below(a place, path I64, show I64, found Bool) place {
 
 # whether path a is path b, or a place above it, at a field's boundary
 fn (v mut Viewer&) prefix(a I64, b I64) Bool {
-    x := v.strs[a]
-    y := v.strs[b]
+    x :~ v.strs[a]
+    y :~ v.strs[b]
     return y.StartsWith(x) and (y.Len() == x.Len() or y[x.Len()] == '.' or y[x.Len()] == '[')
 }
 
@@ -744,8 +744,8 @@ fn (v mut Viewer&) meets(p place, g place) Bool {
 # the local a place is below, through fields, elements, payloads and the references it is read through; -1 for a
 # parameter's, a global's or none
 fn (v mut Viewer&) rootLocal(p typed.Lvalue&) I64 {
-    q := v.rootPlace(p)
-    if q == null: return -1
+    q :~ v.rootPlace(p)
+    if q is null: return -1
     return match q {
         case typed.Lvalue.Local(_, _, id): -1 if v.isParam(I64(id)) else I64(id)
         case _: -1
@@ -756,12 +756,12 @@ fn (v mut Viewer&) rootLocal(p typed.Lvalue&) I64 {
 fn (v mut Viewer&) rootPlace(p typed.Lvalue&) typed.Lvalue?& {
     q typed.Lvalue?& = p
     for _ in range 64 {
-        if q == null: return null
+        if q is null: return null
         match q {
-            case typed.Lvalue.Field(_, _, b, _) { q = b }
-            case typed.Lvalue.Elem(_, _, e) { q = e.Base }
-            case typed.Lvalue.Payload(_, _, pl) { q = pl.Base }
-            case typed.Lvalue.Deref(_, _, r) { q = argPlace(r) }
+            case typed.Lvalue.Field(_, _, b, _) { q ~ b }
+            case typed.Lvalue.Elem(_, _, e) { q ~ e.Base }
+            case typed.Lvalue.Payload(_, _, pl) { q ~ pl.Base }
+            case typed.Lvalue.Deref(_, _, r) { q ~ argPlace(r) }
             case typed.Lvalue.Local(_, _, _), typed.Lvalue.Global(_, _, _, _) { return q }
             case _ { return null }
         }
@@ -770,10 +770,10 @@ fn (v mut Viewer&) rootPlace(p typed.Lvalue&) typed.Lvalue?& {
 }
 
 fn unAway(x typed.Expr&) typed.Expr& {
-    y := x
+    y :~ x
     for _ in range 16 {
         match y {
-            case typed.Expr.Away(_, _, z) { y = z }
+            case typed.Expr.Away(_, _, z) { y ~ z }
             case _ { return y }
         }
     }
@@ -782,7 +782,7 @@ fn unAway(x typed.Expr&) typed.Expr& {
 
 # the place an argument names, for a keep
 fn argPlace(x typed.Expr&) typed.Lvalue?& {
-    y := unAway(x)
+    y :~ unAway(x)
     return match y {
         case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p): p
         case _: null
@@ -895,7 +895,7 @@ fn (v mut Viewer&) use(id I64, sp source.Span, st state&) {
         n := v.B!.Locals[id].Name
         m := msgs.VecHiddenViewStale(w, w) if n == source.NameId(0) else msgs.VecViewStale(v.text(n), w, w)
         rec := v.P.L.Diags.Error(v.at(sp), m)
-        grewIn := v.strs[h.V.GrowIn]
+        grewIn :~ v.strs[h.V.GrowIn]
         v.P.L.Diags.Note(rec, v.at(h.V.GrowAt), msgs.NoteVecGrowsHere(w, grewIn, copyHint(h.V.Of, w)))
         if h.V.InnerFile >= 0 and not v.library.Has(h.V.InnerFile) {
             v.P.L.Diags.Note(rec, diag.Where.Span(h.V.InnerFile, I64(h.V.InnerAt.Start), I64(h.V.InnerAt.End))
@@ -949,7 +949,7 @@ fn (v mut Viewer&) factPut(views Bool, param I64, module I64, name source.NameId
     key := putKey(views, v.Id, param, module, name, g.Path, g.Any)
     if v.puts.Has(key): return
     v.puts.Put(key, true)
-    path := v.strs[g.Path]
+    path :~ v.strs[g.Path]
     pid := g.Path
     found := g.Any
     d I64 = 0
@@ -977,7 +977,7 @@ fn (v mut Viewer&) factPut(views Bool, param I64, module I64, name source.NameId
 # ---- statements ----
 
 fn (v mut Viewer&) block(bl typed.Block?&, st mut state&) {
-    if bl == null: return
+    if bl is null: return
     for s in bl.Stmts {
         if st.Dead: return
         v.stmt(s, st)
@@ -995,7 +995,7 @@ fn (v mut Viewer&) block(bl typed.Block?&, st mut state&) {
 }
 
 fn (v mut Viewer&) stmt(s typed.Stmt?&, st mut state&) {
-    if s == null or st.Dead: return
+    if s is null or st.Dead: return
     scratch := Vec<view>()
     match s {
         case typed.Stmt.Let(_, id, x) {
@@ -1037,12 +1037,12 @@ fn (v mut Viewer&) stmt(s typed.Stmt?&, st mut state&) {
         case typed.Stmt.Suspend(sp, x) { v.handOut(sp, x, st) }
         case typed.Stmt.Raise(_, _, _), typed.Stmt.Reraise(_, _, _) { st.Dead = true }
         case typed.Stmt.Exit(_, _, m) {
-            if m != null: v.expr(m, st, scratch)
+            if m is not null: v.expr(m, st, scratch)
             st.Dead = true
         }
         case typed.Stmt.Assert(_, c, m) {
             v.expr(c, st, scratch)
-            if m != null {
+            if m is not null {
                 mc := st.copy()
                 v.expr(m, mc, scratch)
             }
@@ -1077,7 +1077,7 @@ fn (v mut Viewer&) handOut(sp source.Span, x typed.Expr?&, st mut state&) {
 
 fn (v mut Viewer&) loop(body typed.Block&, post typed.Block?&, st mut state&) {
     v.loops.Push(loopFrame(body.Id))
-    frame := v.loops[v.loops.Len() - 1]
+    frame :~ v.loops[v.loops.Len() - 1]
     head := st.copy()
     exits := state.dead()
     for _ in range 12 {
@@ -1135,9 +1135,9 @@ fn (v mut Viewer&) spawn(sp source.Span, t typed.Spawn&, st mut state&) {
 
 # what a local holds from now on: the views its value holds, and the places it is a second name of
 fn (v mut Viewer&) bind(id I64, x typed.Expr?&, refs Vec<view>&, whole Bool, st mut state&) {
-    if x != null {
-        lam := lambdaOf(x)
-        if lam != null {
+    if x is not null {
+        lam :~ lambdaOf(x)
+        if lam is not null {
             ls := try v.lambdas.Get(id) catch default Vec<typed.Expr&>()
             ls.Push(lam)
             v.lambdas.Put(id, ls)
@@ -1155,7 +1155,7 @@ fn (v mut Viewer&) bind(id I64, x typed.Expr?&, refs Vec<view>&, whole Bool, st 
         }
         st.forget(id)
         # (a reference local only: a Vec's value - a struct holding it by value - copied is a Vec of its own, QCE)
-        if x != null and v.structish(x.Type()) and v.P.T.IsRef(v.B!.Locals[id].Ty) {
+        if x is not null and v.structish(x.Type()) and v.P.T.IsRef(v.B!.Locals[id].Ty) {
             ps Vec<place>
             v.exprPlaces(x, st, ps)
             self := false
@@ -1174,7 +1174,7 @@ fn (v mut Viewer&) bind(id I64, x typed.Expr?&, refs Vec<view>&, whole Bool, st 
 }
 
 fn (v mut Viewer&) assign(target typed.Lvalue?&, x typed.Expr?&, refs Vec<view>&, st mut state&) {
-    if target == null: return
+    if target is null: return
     match target {
         case typed.Lvalue.Local(_, _, id) {
             param := v.isParam(I64(id))
@@ -1230,7 +1230,7 @@ fn (v mut Viewer&) storeInto(target typed.Lvalue&, refs Vec<view>?&, st mut stat
             }
         }
     }
-    if refs != null: v.keepIn(target, target.Type(), refs, st)
+    if refs is not null: v.keepIn(target, target.Type(), refs, st)
     if root < 0: return
     # a field of a second name assigned: no longer a second name as a whole
     match target {
@@ -1244,15 +1244,15 @@ fn (v mut Viewer&) storeInto(target typed.Lvalue&, refs Vec<view>?&, st mut stat
 # what a store into place into puts there: its views held by the local the place is below; a parameter's own value (a
 # summary's mark) stored below another parameter is what the body keeps
 fn (v mut Viewer&) keepIn(into typed.Lvalue?&, ty types.TypeId, refs Vec<view>&, st mut state&) {
-    if into == null or not v.carries(ty): return
+    if into is null or not v.carries(ty): return
     holder := v.rootLocal(into)
     if holder >= 0 {
         for r in refs: holdAdd(st, holder, r)
     }
     if v.check: return
     roots Vec<place>
-    rp := v.rootPlace(into)
-    if rp != null: v.placePlaces(rp, st, roots)
+    rp :~ v.rootPlace(into)
+    if rp is not null: v.placePlaces(rp, st, roots)
     for r in roots {
         pi := match r.R {
             case Root.Param(i): i
@@ -1282,7 +1282,7 @@ fn (v mut Viewer&) keepIn(into typed.Lvalue?&, ty types.TypeId, refs Vec<view>&,
 
 # an expression evaluated: its parts in order, its calls' effects, and into out what its value holds of views
 fn (v mut Viewer&) expr(x typed.Expr?&, st mut state&, out mut Vec<view>&) {
-    if x == null or st.Dead: return
+    if x is null or st.Dead: return
     mine := Vec<view>()
     scratch := Vec<view>()
     match x {
@@ -1364,7 +1364,7 @@ fn (v mut Viewer&) expr(x typed.Expr?&, st mut state&, out mut Vec<view>&) {
 # reference parameter is the storage it is in, a view's element (E12c); one read out of it is a value apart from the
 # buffer, a reference element included (it refers where the Vec's elements do, M19d)
 fn (v mut Viewer&) placeRefs(p typed.Lvalue?&, inPlace Bool, st mut state&, out mut Vec<view>&) {
-    if p == null or st.Dead: return
+    if p is null or st.Dead: return
     match p {
         case typed.Lvalue.Local(sp, _, id) {
             v.use(I64(id), sp, st)
@@ -1409,7 +1409,7 @@ fn (v mut Viewer&) matchOf(m typed.Match&, st mut state&, out mut Vec<view>&) {
         v.arm(a, s, out)
         merge(after, s)
     }
-    if m.NoMatch != null {
+    if m.NoMatch is not null {
         s := st.copy()
         v.arm(m.NoMatch!, s, out)
         merge(after, s)
@@ -1445,7 +1445,7 @@ fn (v mut Viewer&) call(sp source.Span, ty types.TypeId, c typed.Call&, st mut s
         case typed.Callee.Body(id) { callee = I64(id) }
         case typed.Callee.Value(f) {
             value = true
-            fval = f
+            fval ~ f
             v.expr(f, st, fnRefs)
             # (a function written where it is called - a named one, a lambda - is followed: it grows what its body grows,
             # docs/fnvalues.md 4.6)
@@ -1488,10 +1488,10 @@ fn (v mut Viewer&) call(sp source.Span, ty types.TypeId, c typed.Call&, st mut s
         # whose type promises "pure" (T21c) only what its "mut" arguments reach - a value given it is its own, unless it
         # holds a writable reference (docs/fnvalues.md 4.6)
         fty := v.calleeType(c)
-        ps := v.P.T.Items(v.P.T.Params(fty))
+        ps :~ v.P.T.Items(v.P.T.Params(fty))
         clean := v.P.T.PromisesPure(v.P.T.Repr(fty))
         for i in range n {
-            a := c.Args[i]
+            a :~ c.Args[i]
             if not v.structish(a.Type()): continue
             if i < ps.Len() and v.P.T.IsRef(ps[i]) and (v.P.T.PermOf(ps[i]) & types.Writable) == 0: continue
             if clean and i < ps.Len() and not v.P.T.IsRef(ps[i]) and not v.P.T.ReachesWrite(ps[i], clean = true) { continue }
@@ -1518,7 +1518,7 @@ fn (v mut Viewer&) call(sp source.Span, ty types.TypeId, c typed.Call&, st mut s
     }
     # (a lambda called, or given to the call, which may call it: what its body grows through its captures - a capture of
     # a second name of a Vec, "rv mut Vec<I64>& = v" - grows what the capture was made of)
-    if fval != null: v.capGrows(fval, st, grows, innerFile, innerAt)
+    if fval is not null: v.capGrows(fval, st, grows, innerFile, innerAt)
     for a in c.Args: v.capGrows(a, st, grows, innerFile, innerAt)
     for g in range grows.Len(): v.grow(grows[g], tok, name, innerFile[g], innerAt[g], st)
     # what its result holds
@@ -1558,7 +1558,7 @@ fn (v mut Viewer&) call(sp source.Span, ty types.TypeId, c typed.Call&, st mut s
     if known and not v.quiet {
         for k in v.sums[callee].Keeps {
             if k.Param < 0 or k.Param >= n or k.Into < 0 or k.Into >= n or argRefs[k.Param].Len() == 0: continue
-            a := c.Args[k.Into]
+            a :~ c.Args[k.Into]
             v.keepIn(argPlace(a), a.Type(), argRefs[k.Param], st)
         }
     }
@@ -1630,8 +1630,8 @@ fn (v mut Viewer&) capGrowsOf(b I64, caps Array<typed.Capture&>&, st state&, gro
 # the lambdas x is: one written there, or those a local it reads or borrows was given
 fn (v mut Viewer&) lambdasOf(x typed.Expr&) Vec<typed.Expr&> {
     out Vec<typed.Expr&>
-    lam := lambdaOf(x)
-    if lam != null {
+    lam :~ lambdaOf(x)
+    if lam is not null {
         out.Push(lam)
         return out
     }
@@ -1736,7 +1736,7 @@ fn (v mut Viewer&) Gather(k mut Kept&) {
 fn (v mut Viewer&) BodyKeys() Array<String&>& {
     n := v.Bodies.Len()
     keys mut Array<String&>& = Array<String&>(n, "")
-    for b in range n: keys[b] = v.bodyKey(b, keys)
+    for b in range n: keys[b] ~ v.bodyKey(b, keys)
     seen Map<String, I64>
     for b in range n {
         if keys[b] == "": continue
@@ -1745,14 +1745,14 @@ fn (v mut Viewer&) BodyKeys() Array<String&>& {
             seen.Put(k, b)
             continue
         }
-        keys[had] = ""
-        keys[b] = ""
+        keys[had] ~ ""
+        keys[b] ~ ""
     }
     return keys
 }
 
 fn (v mut Viewer&) bodyKey(b I64, keys Array<String&>&) String {
-    body := v.Bodies[b]
+    body :~ v.Bodies[b]
     at := $body.Sp.Start + "-" + $body.Sp.End
     return match body.Of {
         case typed.BodyOf.Fn(inst): $"fn " + $at if v.P.InstanceArgs(inst) == types.ListId(0) else ""
@@ -1793,7 +1793,7 @@ type Unwritable error { Here }
 # each fact as "grows", "views" or "keeps" and its fields - a module and a file by their identity. A word holding a
 # space, a tab or a line break cannot be written
 fn (v mut Viewer&) SummaryText(b I64) String ? Unwritable {
-    sm := v.sums[b]
+    sm :~ v.sums[b]
     w Vec<String&>
     w.Push("known" if sm.Known else "unknown")
     passes := StringBuilder()
@@ -1811,7 +1811,7 @@ fn (v mut Viewer&) SummaryText(b I64) String ? Unwritable {
 fn (v mut Viewer&) factText(kind String&, f fact) String ? Unwritable {
     module := try v.moduleWord(f.Module)
     file := try v.fileWord(f.File)
-    name := "-" if f.Name == source.NameId(0) else $v.text(f.Name)
+    name :~ "-" if f.Name == source.NameId(0) else $v.text(f.Name)
     words := Array<String&>[kind, $f.Param, module, name, $"." + $v.strs[f.Path], $f.Show, "1" if f.Any else "0", file
         $f.At.Start, $f.At.End, $f.Into]
     for x in words {
@@ -1839,7 +1839,7 @@ fn (v mut Viewer&) take(k mut Kept&) {
     if k.Given.Len() == 0: return
     for b in range v.Bodies.Len() {
         if v.Keys[b] == "": continue
-        text := try k.Given.Get($v.Bodies[b].File + " " + $v.Keys[b]) catch { continue }
+        text :~ try k.Given.Get($v.Bodies[b].File + " " + $v.Keys[b]) catch { continue }
         sm := try v.readSummary(b, text) catch Unwritable { continue }
         v.sums[b] = sm
         v.given.Put(b, true)
@@ -1848,7 +1848,7 @@ fn (v mut Viewer&) take(k mut Kept&) {
 }
 
 fn (v mut Viewer&) readSummary(b I64, text String&) summary ? Unwritable {
-    words := text.Split(" ").ToVec()
+    words :~ text.Split(" ").ToVec()
     if words.Len() < 2 or not words[1].StartsWith("p"): error Unwritable.Here
     sm := summary()
     sm.Known = words[0] == "known"
@@ -1861,7 +1861,7 @@ fn (v mut Viewer&) readSummary(b I64, text String&) summary ? Unwritable {
         sm.Passes[i] = true
     }
     for i in range 2, words.Len() {
-        parts := words[i].Split("|").ToVec()
+        parts :~ words[i].Split("|").ToVec()
         if parts.Len() != 11: error Unwritable.Here
         f := try v.readFact(parts)
         match parts[0] {
@@ -1904,7 +1904,7 @@ fn (v mut Viewer&) compare(k mut Kept&) {
     for b in range v.Bodies.Len() {
         if v.Keys[b] == "": continue
         key := $v.Bodies[b].File + " " + $v.Keys[b]
-        given := try k.Given.Get(key) catch { continue }
+        given :~ try k.Given.Get(key) catch { continue }
         k.Taken++
         found := try v.SummaryText(b) catch Unwritable default "(unwritable)"
         if found == given: continue
@@ -1919,8 +1919,8 @@ fn (v mut Viewer&) components() {
     n := v.Bodies.Len()
     for i in range n {
         v.edgeFrom.Push(v.edgeTo.Len())
-        body := v.Bodies[i]
-        if body.Root != null: calls(body.Root, v.edgeTo)
+        body :~ v.Bodies[i]
+        if body.Root is not null: calls(body.Root, v.edgeTo)
         v.tIndex.Push(-1)
         v.tLow.Push(0)
         v.tOn.Push(false)
@@ -1967,12 +1967,12 @@ fn (v mut Viewer&) callsItself(b I64) Bool {
 
 # the bodies a block calls by name
 fn calls(bl typed.Block?&, out mut Vec<I64>&) {
-    if bl == null: return
+    if bl is null: return
     for s in bl.Stmts: callsStmt(s, out)
 }
 
 fn callsStmt(s typed.Stmt?&, out mut Vec<I64>&) {
-    if s == null: return
+    if s is null: return
     match s {
         case typed.Stmt.Let(_, _, x), typed.Stmt.Eval(_, x), typed.Stmt.Return(_, x), typed.Stmt.Yield(_, x), typed.Stmt.Suspend(_, x) { callsExpr(x, out) }
         case typed.Stmt.Assign(_, p, x) {
@@ -2007,7 +2007,7 @@ fn callsStmt(s typed.Stmt?&, out mut Vec<I64>&) {
 }
 
 fn callsPlace(p typed.Lvalue?&, out mut Vec<I64>&) {
-    if p == null: return
+    if p is null: return
     match p {
         case typed.Lvalue.Deref(_, _, r) { callsExpr(r, out) }
         case typed.Lvalue.Field(_, _, b, _) { callsPlace(b, out) }
@@ -2022,7 +2022,7 @@ fn callsPlace(p typed.Lvalue?&, out mut Vec<I64>&) {
 }
 
 fn callsExpr(x typed.Expr?&, out mut Vec<I64>&) {
-    if x == null: return
+    if x is null: return
     match x {
         case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { callsPlace(p, out) }
         case typed.Expr.Promote(_, _, pr) { callsExpr(pr.X, out) }
@@ -2093,7 +2093,7 @@ fn callsExpr(x typed.Expr?&, out mut Vec<I64>&) {
 }
 
 fn callsArm(a typed.Arm?&, out mut Vec<I64>&) {
-    if a == null: return
+    if a is null: return
     for alt in a.Alts {
         callsExpr(alt.Test, out)
         for bd in alt.Binds: callsExpr(bd.From, out)
@@ -2115,7 +2115,7 @@ if TestBuild {
 
     # a program of one file, main.olang, checked and its views judged: the errors said in it, "LINE:COL RULE " each
     fn said(text String&) String {
-        dir := try os.MkTemp() catch os.Error { unreachable }
+        dir :~ try os.MkTemp() catch os.Error { unreachable }
         defer { try os.RemoveAll(dir) catch os.Error { } }
         try os.WriteFile($dir + "/main.olang", text) catch os.Error { }
         consts := cond.Consts()
@@ -2146,14 +2146,14 @@ if TestBuild {
             "fn main() {\n" +
             "    v := Vec<I64>()\n" +
             "    v.Push(1)\n" +
-            "    d := v.View()\n" +
+            "    d :~ v.View()\n" +
             "    v.Push(2)\n" +
             "    assert first(d) == 1\n" +
             "    w mut Vec<I64>& = v\n" +
-            "    e := v.View()\n" +
+            "    e :~ v.View()\n" +
             "    w.Push(3)\n" +
             "    assert e[0] == 1\n" +
-            "    f := v.View()\n" +
+            "    f :~ v.View()\n" +
             "    fill(v)\n" +
             "    assert f.Len() > 0\n" +
             "}\n"))
@@ -2170,17 +2170,17 @@ if TestBuild {
             "    v := Vec<I64>()\n" +
             "    v.Push(4)\n" +
             "    assert grow(v, v.View()) == 4\n" +
-            "    d := v.View()\n" +
+            "    d :~ v.View()\n" +
             "    join {\n" +
             "        spawn look(d)\n" +
             "        v.Push(5)\n" +
             "    }\n" +
             "    o := Vec<I64>()\n" +
-            "    e := v.View()\n" +
+            "    e :~ v.View()\n" +
             "    o.Push(1)\n" +
             "    assert look(e) == 4\n" +
             "    for i in range 3 {\n" +
-            "        x := v.View()\n" +
+            "        x :~ v.View()\n" +
             "        assert look(x) == 4\n" +
             "        v.Push(i)\n" +
             "    }\n" +

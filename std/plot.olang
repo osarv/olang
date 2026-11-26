@@ -144,11 +144,11 @@ fn (p Plot&) Save(path String&) ? os.Error { try os.WriteFile(path, p.Svg()) }
 # default viewer without waiting for it: wslview (else explorer.exe) on WSL, open on macOS, xdg-open elsewhere. Fails
 # with the os.Error naming the viewer to install, and the file, when none is found
 fn (p Plot&) Show() ? os.Error {
-    dir := try os.MkTemp(prefix = "olang-plot-")
+    dir :~ try os.MkTemp(prefix = "olang-plot-")
     path := $dir + "/plot.svg"
     try p.Save(path)
     wsl := isWsl()
-    distro := try os.Env("WSL_DISTRO_NAME") catch default ""
+    distro :~ try os.Env("WSL_DISTRO_NAME") catch default ""
     interop := os.Exists("/proc/sys/fs/binfmt_misc/WSLInterop")
     viewer := try viewerFor(TargetOs, wsl, interop, distro, found("wslview"), found("explorer.exe"), found("open"), found("xdg-open"), path)
     # on WSL the viewer is given the Windows path: wslview hands a Linux one to cmd's start as it is, which reads
@@ -168,13 +168,13 @@ fn viewerFor(system String&, wsl Bool, interop Bool, distro String&, wslview Boo
     if wsl and explorer: return "explorer.exe"
     if system == "macos" and open: return "open"
     if system != "macos" and not wsl and xdgOpen: return "xdg-open"
-    want := "open" if system == "macos" else "wslu (wslview)" if wsl else "xdg-utils (xdg-open)"
+    want :~ "open" if system == "macos" else "wslu (wslview)" if wsl else "xdg-utils (xdg-open)"
     error os.Error.NotFound("no viewer found: install " + $want + " to open " + $file)
 }
 
 # whether this is WSL: the kernel's version text names Microsoft
 fn isWsl() Bool {
-    text := try os.ReadFile("/proc/version") catch default ""
+    text :~ try os.ReadFile("/proc/version") catch default ""
     return text.Contains("icrosoft")
 }
 
@@ -429,7 +429,7 @@ test "Save writes the SVG file" {
     try p.Line([1, 2], [3, 4])
     try os.MkDirAll("build/plot_files")
     try p.Save("build/plot_files/a.svg")
-    got := try os.ReadFile("build/plot_files/a.svg")
+    got :~ try os.ReadFile("build/plot_files/a.svg")
     assert String(got) == p.Svg()
 }
 

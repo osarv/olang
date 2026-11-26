@@ -189,7 +189,7 @@ fn (s mut scanner&) diag(k LexError, start I64, end I64, b Char = '\0') {
 }
 
 fn (s mut scanner&) run() {
-    t := s.text
+    t :~ s.text
     n := t.Len()
     i I64 = 0
     nl Bool = false                  # a line ended since the last token kept
@@ -314,7 +314,7 @@ fn (s mut scanner&) closeBeforeDecl(k token.Tok, end I64) {
     if s.brackets.Len() == 0 or s.curlies > 0: return
     decl := k == token.Tok.Type or k == token.Tok.Test or k == token.Tok.Import or k == token.Tok.Extern
     if k == token.Tok.Fn {
-        t := s.text
+        t :~ s.text
         i I64 = end
         for i < t.Len() and (t[i] == ' ' or t[i] == '\t'): i++
         decl = i < t.Len() and (isLetter(t[i]) or t[i] == '_')
@@ -446,6 +446,7 @@ fn operator(t String&, i I64) token.Tok, I64 {
         }
         case ':' {
             if d == '=': return token.Tok.Define, i + 2
+            if d == '~': return token.Tok.DefineLink, i + 2
             return token.Tok.Colon, i + 1
         }
         case '=' {
@@ -499,7 +500,7 @@ fn digitOf(c Char, radix I64) Bool {
 # has. A '_' stands between two digits of the run - one before it and one after - or it is reported, once for a run
 # of them
 fn (s mut scanner&) digits(from I64, radix I64) I64, I64 {
-    t := s.text
+    t :~ s.text
     n := t.Len()
     i I64 = from
     count I64 = 0
@@ -539,7 +540,7 @@ fn fractionAt(t String&, i I64) Bool {
 
 # the number literal at i (L10-L12a): its kind and where it ends
 fn (s mut scanner&) number(i I64) token.Tok, I64 {
-    t := s.text
+    t :~ s.text
     n := t.Len()
     if t[i] == '0' and i + 1 < n {
         p := t[i + 1]
@@ -590,7 +591,7 @@ fn hexDigit(c Char) I64 {
 # the escape at j (its '\'), in a literal quoted by q (L15): where it ends, its errors said; a '\u{...}' in a character
 # literal (q '\'') only below 0x80
 fn (s mut scanner&) escape(j I64, q Char) I64 {
-    t := s.text
+    t :~ s.text
     n := t.Len()
     e := t[j + 1]
     if e == 'x' {
@@ -614,7 +615,7 @@ fn (s mut scanner&) escape(j I64, q Char) I64 {
 # the string literal at i (L14, L15): where it ends. A literal never crosses a line: one a line's end stops ends before
 # that newline
 fn (s mut scanner&) str(i I64) I64 {
-    t := s.text
+    t :~ s.text
     n := t.Len()
     if i + 2 < n and t[i + 1] == '"' and t[i + 2] == '"': return s.raw(i)
     j I64 = i + 1
@@ -648,7 +649,7 @@ fn (s mut scanner&) str(i I64) I64 {
 
 # the character literal at i (L13, L15): where it ends, never past its line's end
 fn (s mut scanner&) char(i I64) I64 {
-    t := s.text
+    t :~ s.text
     n := t.Len()
     j I64 = i + 1
     if j >= n {
@@ -700,7 +701,7 @@ fn (s mut scanner&) char(i I64) I64 {
 # a character literal at i whose character at j is no ASCII (L13): one well-formed in UTF-8 is several bytes, and invalid
 # UTF-8 is no text (L1) - either said; where the literal ends, never past its line's end
 fn (s mut scanner&) wideChar(i I64, j I64) I64 {
-    t := s.text
+    t :~ s.text
     le := lineEnd(t, j)
     w := utf8Width(t, j, le)
     k := j + w if w > 0 else j + 1
@@ -720,7 +721,7 @@ fn (s mut scanner&) wideChar(i I64, j I64) I64 {
 
 # L1: the text in t[from:to] - a comment or a literal - is well-formed UTF-8; the first byte where it is not is said
 fn (s mut scanner&) utf8(from I64, to I64) {
-    t := s.text
+    t :~ s.text
     x := from
     for x < to {
         if t[x] < 0x80 {
@@ -754,7 +755,7 @@ fn utf8Width(t String&, i I64, to I64) I64 {
 
 # raw text at i, its opening '"""' (L14a): where it ends - after its closing '"""', or at the file's end
 fn (s mut scanner&) raw(i I64) I64 {
-    t := s.text
+    t :~ s.text
     n := t.Len()
     j I64 = i + 3
     for j + 2 < n and not (t[j] == '"' and t[j + 1] == '"' and t[j + 2] == '"'): j++
@@ -831,7 +832,7 @@ fn unicodeEscape(t String&, j I64) I64, I64 ? BadEscape {
 fn LiteralBytes(t String&) Array<U8> {
     b := Vec<U8>()
     if t.Len() >= 6 and t[0] == '"' and t[1] == '"' and t[2] == '"' {
-        body := t[3:t.Len() - 3]
+        body :~ t[3:t.Len() - 3]
         nl := try body.FindByte('\n') catch default -1
         if nl < 0 {
             for ch in body: b.Push(U8(ch))

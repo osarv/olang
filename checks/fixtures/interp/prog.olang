@@ -69,9 +69,9 @@ fn main() ? Oops, io.Error, os.Error {
     q P& = P(1, 2)
     r P& = q
     o P& = P(1, 2)
-    try io.Put("atomics " + $found + " " + $hits.AtomicLoad() + " identity " + $(q == r) + " " + $(q != o) + "\n")
+    try io.Put("atomics " + $found + " " + $hits.AtomicLoad() + " identity " + $(q is r) + " " + $(q is not o) + "\n")
     os.Run("echo written > prog.txt")
-    t := try os.ReadFile("prog.txt")
+    t :~ try os.ReadFile("prog.txt")
     try io.Put("read " + $t.Trim() + " " + $(try risky(1) catch default -1) + " " + $(try risky(5) catch default -1) + "\n")
     y := try risky(3)
     try io.Put("not reached " + $y + "\n")

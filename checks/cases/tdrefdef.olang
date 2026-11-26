@@ -6,6 +6,6 @@ type P struct(v I32) { v }
 fn ref(p P&) P& ? E { return p }
 fn main() ? E { }
 fn refdef(p P&, q P&) I32 {
-    r := try ref(p) catch default q
+    r :~ try ref(p) catch default q
     return r.v
 }

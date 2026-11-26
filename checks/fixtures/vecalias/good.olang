@@ -7,7 +7,7 @@ fn main() ? {
     v := Vec<I64>()
     v.Push(10)
     v.Push(20)
-    d := vlib.View2(v)
+    d :~ vlib.View2(v)
     s := d[0] + d[1]
     v.Push(30)
     f := vlib.Sum

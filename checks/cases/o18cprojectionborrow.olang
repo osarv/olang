@@ -18,7 +18,7 @@ fn main() ? {
     held Inner?& = null
     for _ in range 3 {
         x := st.get(0).inner
-        held = x
+        held ~ x
     }
     try io.PutLn(held!.s)
 }

@@ -21,8 +21,8 @@ import layout "../fmt"
 import "../unparse"
 
 fn main() ? {
-    args := os.Args()
-    mode := args[1] if args.Len() >= 2 else ""
+    args :~ os.Args()
+    mode :~ args[1] if args.Len() >= 2 else ""
     if (mode != "-f" and mode != "-l" and mode != "-p" and mode != "-v") or args.Len() < 3 {
         try io.PutErrLn("usage: fmt -f|-l|-p|-v FILE...") catch io.Error { }
         os.Exit(2)
@@ -31,7 +31,7 @@ fn main() ? {
 }
 
 fn run(mode String&, args Array<String&>&) I32 {
-    std := try os.Env("OLANG_STD") catch default "std"
+    std :~ try os.Env("OLANG_STD") catch default "std"
     if mode != "-v": return layout.Files(mode, args[2:], std)
     out := io.Writer(io.Stdout)
     prelude := layout.PreludeTypes(std)
@@ -41,7 +41,7 @@ fn run(mode String&, args Array<String&>&) I32 {
     skipped I64 = 0
     failed I64 = 0
     for k in range 2, args.Len() {
-        path := args[k]
+        path :~ args[k]
         src := try source.Source.Read(path) catch os.Error {
             try io.PutErr("olang: " + $path + ": cannot be read\n") catch io.Error { }
             status = 1
@@ -52,7 +52,7 @@ fn run(mode String&, args Array<String&>&) I32 {
             skipped++
             continue
         }
-        what := verify(src, text, std, prelude)
+        what :~ verify(src, text, std, prelude)
         if what != "" {
             out.Write($path + ": " + $what + "\n")
             failed++
@@ -78,18 +78,18 @@ fn verify(src source.Source&, text String&, std String&, prelude String&) String
     file := diags.AddFile(src.Path, src.Text)
     ts := scan.Tokens.Scan(src.Text)
     p := parse.Parser(src, ts, names, o, diags, file)
-    decls := p.File()
+    decls :~ p.File()
     before := unparse.Unparse(decls, names, src.Text, diags)
     written := source.Source(src.Path, text)
     diags2 := diag.Diagnostics(false)
     file2 := diags2.AddFile(src.Path, text)
     ts2 := scan.Tokens.Scan(text)
     p2 := parse.Parser(written, ts2, names, o, diags2, file2)
-    decls2 := p2.File()
+    decls2 :~ p2.File()
     if ts2.Diags.Len() > 0 or diags2.AllSaid().Len() > 0: return "the text written does not parse"
     after := unparse.Unparse(decls2, names, text, diags2)
     if after != before {
-        dbg := try os.Env("FMT_DEBUG") catch default ""
+        dbg :~ try os.Env("FMT_DEBUG") catch default ""
         if dbg != "" {
             try os.WriteFile($dbg + ".before", before) catch os.Error { }
             try os.WriteFile($dbg + ".after", after) catch os.Error { }

@@ -23,11 +23,11 @@ type Count struct() {
 
 # the name a module is imported by in text: the alias written, or the path's last element; "" where it is not imported
 fn aliasOf(text String&, path String&) String {
-    base := path[path.FindLast("/")! + 1:]
+    base :~ path[path.FindLast("/")! + 1:]
     for line in text.Lines() {
-        t := srcmask.Strip(line)
+        t :~ srcmask.Strip(line)
         if not t.StartsWith("import ") or not t.EndsWith("\"" + $path + "\"") and not t.EndsWith("\"" + $base + "\""): continue
-        words := t.Split(" ")
+        words :~ t.Split(" ")
         return $words[1] if words.Len() == 3 else $base
     }
     return ""
@@ -80,7 +80,7 @@ fn closeLine(t String&, osA String&) Bool {
     for ch in rest[call.Len():end] {
         if not srcmask.IsWord(ch) and ch != '.': return false
     }
-    tail := srcmask.Strip(rest[end + 1:])
+    tail :~ srcmask.Strip(rest[end + 1:])
     if tail == "" or tail == "!": return true
     return tail.StartsWith("catch") and (tail.EndsWith("{ }") or tail.EndsWith("{}"))
 }
@@ -89,13 +89,13 @@ fn closeLine(t String&, osA String&) Bool {
 fn fileNames(src String&, osA String&) Vec<String&> {
     out Vec<String&>
     for line in src.Lines() {
-        t := srcmask.Strip(line)
+        t :~ srcmask.Strip(line)
         eq := try t.Find(" := ") catch default -1
         if eq <= 0: continue
-        name := t[:eq]
+        name :~ t[:eq]
         if not every(name): continue
-        rhs := t[eq + 4:]
-        if rhs.StartsWith("try "): rhs = rhs[4:]
+        rhs :~ t[eq + 4:]
+        if rhs.StartsWith("try "): rhs ~ rhs[4:]
         if rhs.StartsWith(osA + ".File.Open(") or rhs.StartsWith(osA + ".File.Create("): out.Push($name)
     }
     return out
@@ -223,7 +223,7 @@ fn usedAsNumber(line String&, mask String&, name String&, io String&) Bool {
         end := i + name.Len()
         if end < line.Len() and line[end] == '.': continue
         if line[end:].StartsWith(" := ") or line[end:].StartsWith(" = "): continue
-        before := srcmask.StripEnd(line[:i])
+        before :~ srcmask.StripEnd(line[:i])
         if before.EndsWith(io + ".Reader(") or before.EndsWith(io + ".Writer(") or before.EndsWith(io + ".Lines("): continue
         return true
     }
@@ -232,7 +232,7 @@ fn usedAsNumber(line String&, mask String&, name String&, io String&) Bool {
 
 # the files under a directory, build/ and names beginning with "." left out
 fn walk(dir String&, out mut Vec<String&>&) {
-    names := try os.ReadDir(dir) catch default Array<String&>(0)
+    names :~ try os.ReadDir(dir) catch default Array<String&>(0)
     for n in names {
         if n.StartsWith(".") or n == "build": continue
         p := srcmask.PathJoin(dir, n)
@@ -245,9 +245,9 @@ fn main() ? {
     check := false
     verbose := false
     paths Vec<String&>
-    args := os.Args()
+    args :~ os.Args()
     for i in range 1, args.Len() {
-        a := args[i]
+        a :~ args[i]
         if a == "--check": check = true
         else if a == "-v": verbose = true
         else: paths.Push($a)
@@ -281,7 +281,7 @@ fn main() ? {
         }
     }
     for h in hand: srcmask.Say(h)
-    verb := "would change " if check else "changed "
+    verb :~ "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files: " + $total.n + " rewrites")
     if check and changed > 0: os.Exit(1)
 }

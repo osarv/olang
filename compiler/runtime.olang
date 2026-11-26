@@ -56,10 +56,10 @@ fn malformed(path String&, n I64, why String&) ? Bad {
 # would among them
 fn directive(line String&) I64 {
     if not line.StartsWith("; @"): return -1
-    rest := line[3:]
-    word := rest
+    rest :~ line[3:]
+    word :~ rest
     sp := try rest.Find(" ") catch default -1
-    if sp >= 0: word = rest[:sp]
+    if sp >= 0: word ~ rest[:sp]
     if word == "if": return 0
     if word == "else": return 1
     if word == "end": return 2
@@ -71,7 +71,7 @@ fn directive(line String&) I64 {
 # B19b) or not
 fn Fill(file String&, arch String&, san Bool, prof Bool = false, bench Bool = false, system String& = "linux") String ? Bad {
     path := $load.StdDir() + "/runtime/" + $file
-    bytes := try os.ReadFile(path) catch os.Error {
+    bytes :~ try os.ReadFile(path) catch os.Error {
         try io.PutErrLn($"olang: " + $path + ": cannot open this file") catch io.Error { }
         error Bad.Unreadable
     }
@@ -87,17 +87,17 @@ fn Fill(file String&, arch String&, san Bool, prof Bool = false, bench Bool = fa
         n++
         # B20, B19b: a line of the profiler's hooks or of a benchmark build's counting, code in that build and a comment
         # in every other - so a compiler that knows nothing of them reads the file as it always has
-        line := written
-        if prof and written.StartsWith("; @prof "): line = written[8:]
-        if bench and written.StartsWith("; @bench "): line = written[9:]
+        line :~ written
+        if prof and written.StartsWith("; @prof "): line ~ written[8:]
+        if bench and written.StartsWith("; @bench "): line ~ written[9:]
         d := directive(line)
         if d == 0 {
             if inIf { try malformed(path, n, "\"; @if\" inside another") }
-            c := line[6:].TrimStart()
+            c :~ line[6:].TrimStart()
             neg := c.StartsWith("!")
-            if neg: c = c[1:]
+            if neg: c ~ c[1:]
             sp := try c.Find(" ") catch default -1
-            if sp >= 0: c = c[:sp]
+            if sp >= 0: c ~ c[:sp]
             if c != "san" and c not in Archs {
                 try malformed(path, n, "a condition that is neither \"san\" nor an architecture")
             }
@@ -127,7 +127,7 @@ fn Fill(file String&, arch String&, san Bool, prof Bool = false, bench Bool = fa
             out.PushChar('\n')
             continue
         }
-        rest := line
+        rest :~ line
         for {
             at := try rest.Find("@@") catch default -1
             if at < 0 {
@@ -135,7 +135,7 @@ fn Fill(file String&, arch String&, san Bool, prof Bool = false, bench Bool = fa
                 break
             }
             out.Push(rest[:at])
-            after := rest[at + 2:]
+            after :~ rest[at + 2:]
             end := try after.Find("@@") catch default -1
             if end < 0: try malformed(path, n, "an \"@@\" with no \"@@\" closing it")
             v := try fact(after[:end], row) catch Bad {
@@ -143,7 +143,7 @@ fn Fill(file String&, arch String&, san Bool, prof Bool = false, bench Bool = fa
                 unreachable
             }
             out.Push($v)
-            rest = after[end + 2:]
+            rest ~ after[end + 2:]
         }
         out.PushChar('\n')
     }
@@ -181,7 +181,7 @@ fn WithAttributes(ir String&, attrs String&, race Bool) String {
         if line.StartsWith("define ") and line.EndsWith("{") {
             dbg := try line.Find(" !dbg ") catch default -1
             cut := dbg if dbg >= 0 else line.Len() - 1
-            head := line[:cut]
+            head :~ line[:cut]
             plain := head.Contains("@__olang_crash_handler(") or head.Contains("@__olang_crash_say(") or head.Contains("@__olang_san_handler(")
             out.Push(head)
             if dbg >= 0 {
@@ -298,7 +298,7 @@ fn Windows(text String&, arch String&) String ? Bad {
 fn symbolOf(line String&) String {
     at := try line.FindByte('@') catch default -1
     if at < 0: return ""
-    rest := line[at + 1:]
+    rest :~ line[at + 1:]
     open := try rest.FindByte('(') catch default rest.Len()
     return $rest[:open]
 }
@@ -357,9 +357,9 @@ fn declare(out mut StringBuilder&, line String&) {
                 depth--
             } else if ch == ')' and depth > 0 { depth-- } else if (ch == ',' or ch == ')') and depth == 0 {
                 # a parameter's type, its name dropped
-                part := line[start:p].Trim()
+                part :~ line[start:p].Trim()
                 sp := try part.FindLast(" ") catch default -1
-                if sp >= 0 and part[sp + 1] == '%': part = part[:sp].TrimEnd()
+                if sp >= 0 and part[sp + 1] == '%': part ~ part[:sp].TrimEnd()
                 if part.Len() > 0 {
                     if not first: out.Push(", ")
                     out.Push(part)
@@ -371,7 +371,7 @@ fn declare(out mut StringBuilder&, line String&) {
             p++
         }
         # what follows the parameters, the brace opening the body left out: the function's attributes
-        attrs := line[p + 1:]
+        attrs :~ line[p + 1:]
         brace := try attrs.FindLast("{") catch default attrs.Len()
         out.Push($")" + $attrs[:brace].TrimEnd() + "\n")
         return
@@ -379,13 +379,13 @@ fn declare(out mut StringBuilder&, line String&) {
     if line.StartsWith("@") {
         eq := try line.Find(" = ") catch { return }
         out.Push($line[:eq] + " = external ")
-        r := line[eq + 3:]
+        r :~ line[eq + 3:]
         if r.StartsWith("thread_local(") {
             close := try r.Find(")") catch { return }
             out.Push($r[:close + 1] + " ")
-            r = r[close + 2:]
+            r ~ r[close + 2:]
         }
-        if r.StartsWith("unnamed_addr "): r = r[13:]
+        if r.StartsWith("unnamed_addr "): r ~ r[13:]
         sp := try r.Find(" ") catch default r.Len()
         e := typeEnd(r, sp + 1) if sp + 1 < r.Len() else r.Len()
         out.Push($r[:sp + 1] + $r[sp + 1:e] + "\n")

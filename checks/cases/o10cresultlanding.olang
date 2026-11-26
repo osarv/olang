@@ -14,7 +14,7 @@ fn Rec.mk(t String&) mut Rec& {
     r mut Rec& = Rec(t)
     return r
 }
-fn keep(s mut H&, r mut Rec&) { s.k = r }
+fn keep(s mut H&, r mut Rec&) { s.k ~ r }
 fn main() ? {
     h mut H& = H()
     for i in range 3 {

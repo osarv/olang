@@ -40,7 +40,7 @@ fn hasAt(text String&, i I64, s String&) Bool {
 # the line after it) - or "" when it imports no std/math. In a file of std a relative "math" is std/math too
 fn mathImport(text String&, path String&) String, I64, I64 {
     n := text.Len()
-    dir := filepath.Dir(srcmask.AbsPath(path))
+    dir :~ filepath.Dir(srcmask.AbsPath(path))
     at I64 = 0
     for at < n {
         next := at + (try text[at:].FindByte('\n') catch default (n - at)) + 1
@@ -60,7 +60,7 @@ fn mathImport(text String&, path String&) String, I64, I64 {
             if k < n and text[k] == '"' {
                 close := k + 1
                 for close < n and text[close] != '"' and text[close] != '\n': close++
-                target := text[k + 1:close]
+                target :~ text[k + 1:close]
                 resolved := $filepath.Clean(filepath.Join(dir, target))
                 if target == "std/math" or resolved.EndsWith("/std/math") {
                     return (alias if alias.Len() > 0 else "math"), at, (next if next <= n else n)
@@ -93,7 +93,7 @@ fn isSignedLit(t String&) Bool {
 
 # whether a literal is an integer one: digits alone (no point, no exponent, not hexadecimal or binary)
 fn isIntLit(t String&) Bool {
-    body := srcmask.StripStart(t[1:]) if t.StartsWith("-") else t
+    body :~ srcmask.StripStart(t[1:]) if t.StartsWith("-") else t
     if body.Len() == 0: return false
     for c in body {
         if not c.IsDigit() and c != '_': return false
@@ -138,7 +138,7 @@ fn splitArgs(t String&) Vec<String&> {
             start = i + 1
         }
     }
-    last := srcmask.Strip(t[start:])
+    last :~ srcmask.Strip(t[start:])
     if last.Len() > 0 or out.Len() > 0: out.Push($last)
     return out
 }
@@ -168,7 +168,7 @@ fn migrate(text String&, alias String&, first I64, notes mut Vec<String&>&) Stri
         s := i + alias.Len() + 1
         e := s
         for e < text.Len() and srcmask.IsWord(text[e]): e++
-        name := text[s:e]
+        name :~ text[s:e]
         if name.Len() == 0 or not name[0].IsUpper() {
             i++
             continue
@@ -203,14 +203,14 @@ fn migrate(text String&, alias String&, first I64, notes mut Vec<String&>&) Stri
             if not isSignedLit(args[a]): otherValue = true
         }
         if recvLit and otherValue and (name == "Min" or name == "Max" or name == "Hypot") {
-            t := args[0]
+            t :~ args[0]
             args[0] = args[1]
             args[1] = t
         } else if recvLit and otherValue {
             notes.Push($line + ": " + $name + " of the literal " + $args[0] + " - a receiver of its own type now; convert it if another is meant")
         }
         if isSignedLit(args[0]) and isIntLit(args[0]) and not AnyNumber.Has(name): args[0] = $args[0] + ".0"
-        recv := args[0] if simple(args[0]) else $("(" + $args[0] + ")")
+        recv :~ args[0] if simple(args[0]) else $("(" + $args[0] + ")")
         out.Push(text[last:i])
         out.Push(recv)
         out.PushChar('.')
@@ -256,7 +256,7 @@ fn migrateFile(path String&, dry Bool, notes mut Vec<String&>&) I64 {
 fn main() ? {
     dry := false
     paths Vec<String&>
-    args := os.Args()
+    args :~ os.Args()
     for i in range 1, args.Len() {
         if args[i] == "--dry" { dry = true } else { paths.Push($args[i]) }
     }

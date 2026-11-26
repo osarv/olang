@@ -118,7 +118,7 @@ fn main() ? {
     assert a.c16 == 2000 and a.cu16 == 3000 and a.cu32 == 4000 and a.cu64 == 5000, $a.c16 + " " + $a.cu16
     assert a.ch == 1000.0, $a.ch
     assert a.cb == 256.0, $a.cb
-    c := a.codes
+    c :~ a.codes
     assert viewed(c, c) == 10000
     assert c[0] == Code(10) and c[n - 1] == Code(10), $c[0]
     try io.PutLn("narrow: ok")

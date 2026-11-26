@@ -13,12 +13,12 @@ type W struct(h mut H&) {
 }
 fn main() ? {
     h0 := H()
-    h0.kid = Node("z")
+    h0.kid ~ Node("z")
     w := W(h0)
     {
         h := H()
         x := $5 + "abc"
-        h.kid = Node(x)
+        h.kid ~ Node(x)
         w = W(h)
     }
     a := Array<I64>(64, 9)

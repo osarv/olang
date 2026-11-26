@@ -65,7 +65,7 @@ type Tool struct(Std String, Prelude String) {
 
 # the module at path, read once with what it imports; -1 where there is no such file
 fn (t mut Tool&) load(path String&) I64 {
-    real := try os.RealPath(path) catch os.Error { return -1 }
+    real :~ try os.RealPath(path) catch os.Error { return -1 }
     for i in range t.mods.Len() {
         if t.mods[i].Path == real: return i
     }
@@ -80,9 +80,9 @@ fn (t mut Tool&) read(i I64) {
     aliases Vec<String>
     path := t.mods[i].Path.Copy()
     {
-        m := t.mods.RefMut(i)
+        m :~ t.mods.RefMut(i)
         names := source.Names()
-        decls := try parsed($m.Path, $m.Text, $t.Std, $t.Prelude, names) catch Unparsable { return }
+        decls :~ try parsed($m.Path, $m.Text, $t.Std, $t.Prelude, names) catch Unparsable { return }
         m.ok = true
         importsOf(m)
         declared Map<String, Bool>
@@ -160,7 +160,7 @@ fn parsed(path String&, text String&, std String&, prelude String&, names mut so
     file := d.AddFile(src.Path, src.Text)
     ts := scan.Tokens.Scan(src.Text)
     p := parse.Parser(src, ts, names, o, d, file)
-    decls := p.File()
+    decls :~ p.File()
     if ts.Diags.Len() > 0 or d.AllSaid().Len() > 0: error Unparsable.Syntax
     return decls
 }
@@ -171,7 +171,7 @@ fn eligible(decls Array<ast.Decl&>&, names source.Names&, out mut Map<String, Bo
     for d in decls {
         match d {
             case ast.Decl.Type(_, td) {
-                if td.Body == null: continue
+                if td.Body is null: continue
                 match td.Body {
                     case ast.TypeBody.Struct(_), ast.TypeBody.Enum(_, _), ast.TypeBody.Over(_, _) { out.Put($names.Text(td.Name), true) }
                     case _ { }
@@ -184,9 +184,9 @@ fn eligible(decls Array<ast.Decl&>&, names source.Names&, out mut Map<String, Bo
 }
 
 fn eligibleIf(ti ast.TopIf?&, names source.Names&, out mut Map<String, Bool>&) {
-    if ti == null: return
-    if ti.Then != null: eligible(ti.Then!.Decls, names, out)
-    if ti.Else != null: eligible(ti.Else!.Decls, names, out)
+    if ti is null: return
+    if ti.Then is not null: eligible(ti.Then!.Decls, names, out)
+    if ti.Else is not null: eligible(ti.Else!.Decls, names, out)
     eligibleIf(ti.ElseIf, names, out)
 }
 
@@ -214,9 +214,9 @@ fn collectDecls(m mut Mod&, decls Array<ast.Decl&>&, names source.Names&, types 
 }
 
 fn collectIf(m mut Mod&, ti ast.TopIf?&, names source.Names&, types Map<String, Bool>&) {
-    if ti == null: return
-    if ti.Then != null: collectDecls(m, ti.Then!.Decls, names, types)
-    if ti.Else != null: collectDecls(m, ti.Else!.Decls, names, types)
+    if ti is null: return
+    if ti.Then is not null: collectDecls(m, ti.Then!.Decls, names, types)
+    if ti.Else is not null: collectDecls(m, ti.Else!.Decls, names, types)
     collectIf(m, ti.ElseIf, names, types)
 }
 
@@ -287,8 +287,8 @@ fn leftName(name String&, left String&) String {
 
 # an enum's cases and a trait's methods are names of their own, never a use of a function's
 fn skipMembers(m mut Mod&, td ast.TypeDecl&, names source.Names&) {
-    if td.Body == null: return
-    ty := names.Text(td.Name)
+    if td.Body is null: return
+    ty :~ names.Text(td.Name)
     match td.Body {
         case ast.TypeBody.Enum(cases, _) {
             for c in cases {
@@ -313,7 +313,7 @@ fn judge(m mut Mod&, f ast.Func&, names source.Names&, types Map<String, Bool>&)
         m.every.Push(mv)
         return
     }
-    if f.Recv != null {
+    if f.Recv is not null {
         m.skips.Put(nameAfter(m, f.Recv!.Sp.End), true)
         m.locals.Put($names.Text(f.Recv!.Name), true)
         return
@@ -321,8 +321,8 @@ fn judge(m mut Mod&, f ast.Func&, names source.Names&, types Map<String, Bool>&)
     name := $names.Text(f.Name)
     m.tops.Put(name.Copy(), true)
     if f.Export or name == "main" or f.S.Results.Len() != 1 or ast.FirstYield(f.Body).Start >= I32(0): return
-    base := plain(f.S.Results[0])
-    if base == null: return
+    base :~ plain(f.S.Results[0])
+    if base is null: return
     match base {
         case ast.TypeRef.Named(sp, path, args) {
             if path.Len() != 1: return
@@ -337,7 +337,7 @@ fn judge(m mut Mod&, f ast.Func&, names source.Names&, types Map<String, Bool>&)
             err := false
             for tp in f.TypeParams {
                 ps.Push($names.Text(tp.Name))
-                moved.Push(tp.Ty == null and tp.Also.Len() == 0 and mentions(base, tp.Name))
+                moved.Push(tp.Ty is null and tp.Also.Len() == 0 and mentions(base, tp.Name))
                 if tp.ErrSet: err = true
             }
             generic := false
@@ -390,7 +390,7 @@ fn nameAfter(m Mod&, from I32) I64 {
 
 # a result's type less its reference marker and permission
 fn plain(t ast.TypeRef?&) ast.TypeRef?& {
-    if t == null: return null
+    if t is null: return null
     match t {
         case ast.TypeRef.Ref(_, of, _, _) { return plain(of) }
         case ast.TypeRef.Perm(_, of, _) { return plain(of) }
@@ -400,7 +400,7 @@ fn plain(t ast.TypeRef?&) ast.TypeRef?& {
 
 # whether a written type names n anywhere in it
 fn mentions(t ast.TypeRef?&, n source.NameId) Bool {
-    if t == null: return false
+    if t is null: return false
     match t {
         case ast.TypeRef.Named(_, path, args) {
             if path.Len() == 1 and path[0] == n: return true
@@ -574,7 +574,7 @@ fn methodEdits(text String&, toks Array<token.Token>&, out mut Vec<Edit>&) {
     n := toks.Len()
     for i in range 1, n - 2 {
         if toks[i].Kind != token.Tok.Dot or toks[i + 1].Kind != token.Tok.Iden: continue
-        name := text[toks[i + 1].Start:toks[i + 1].End]
+        name :~ text[toks[i + 1].Start:toks[i + 1].End]
         float := name == "F64FromBits" or name == "F32FromBits" or name == "F16FromBits" or name == "BF16FromBits"
         if not float and name != "StringFromC" and name != "ParseAs": continue
         s := recvStart(toks, i)
@@ -586,17 +586,17 @@ fn methodEdits(text String&, toks Array<token.Token>&, out mut Vec<Edit>&) {
             if toks[at].Kind != token.Tok.Lt: continue
             g := angleClose(toks, at)
             if g < 0: continue
-            ty = $text[toks[at + 1].Start:toks[g - 1].End]
+            ty ~ $text[toks[at + 1].Start:toks[g - 1].End]
             at = g + 1
         }
         if at >= n or toks[at].Kind != token.Tok.LParen: continue
         c := closeOf(toks, at)
         if c < 0: continue
-        args := $text[toks[at].End:toks[c].Start] if c > at + 1 else ""
+        args :~ $text[toks[at].End:toks[c].Start] if c > at + 1 else ""
         with String& = ""
-        if float: with = $name[:name.Len() - 8] + ".FromBits(" + $recv + ")"
-        if name == "StringFromC": with = $"String.FromC(" + $recv + ", " + $args + ")"
-        if name == "ParseAs" { with = $ty + ".Parse(" + $recv + $(", " + $args if args.Len() > 0 else "") + ")" }
+        if float: with ~ $name[:name.Len() - 8] + ".FromBits(" + $recv + ")"
+        if name == "StringFromC": with ~ $"String.FromC(" + $recv + ", " + $args + ")"
+        if name == "ParseAs" { with ~ $ty + ".Parse(" + $recv + $(", " + $args if args.Len() > 0 else "") + ")" }
         out.Push(Edit(I64(toks[s].Start), I64(toks[c].End), with))
     }
 }
@@ -612,11 +612,11 @@ fn (t mut Tool&) rewrite(i I64) String {
     }
     if text != t.mods[i].Text {
         # the moves' offsets are the old text's: read the file again before moving
-        mm := t.mods.RefMut(i)
+        mm :~ t.mods.RefMut(i)
         mm.Text = text.Copy()
         mm.toks = scan.Tokens.Scan(text).Toks
         names := source.Names()
-        decls := try parsed($mm.Path, text, $t.Std, $t.Prelude, names) catch Unparsable { return text }
+        decls :~ try parsed($mm.Path, text, $t.Std, $t.Prelude, names) catch Unparsable { return text }
         declared Map<String, Bool>
         eligible(decls, names, declared)
         mm.moves = Map<String, Move>()
@@ -665,7 +665,7 @@ fn (t mut Tool&) rewrite(i I64) String {
 fn (t Tool&) viaAlias(m Mod&, text String&, toks Array<token.Token>&, k I64, name String&, edits mut Vec<Edit>&) {
     if k < 2 or toks[k - 2].Kind != token.Tok.Iden: return
     if k >= 3 and toks[k - 3].Kind == token.Tok.Dot: return
-    alias := text[toks[k - 2].Start:toks[k - 2].End]
+    alias :~ text[toks[k - 2].Start:toks[k - 2].End]
     target := try m.imports.Get(alias) catch default -1
     if target < 0 or not t.mods[target].ok: return
     o := t.mods[target]
@@ -727,9 +727,9 @@ fn declEdit(text String&, toks Array<token.Token>&, k I64, name String&, mv Move
     kept Vec<String&>
     keptErr String& = ""
     for j in range items.Len() {
-        it := items[j]
+        it :~ items[j]
         if j < mv.Moved.Len() and mv.Moved[j]: continue
-        if it.StartsWith("?") { keptErr = $it } else { kept.Push($it) }
+        if it.StartsWith("?") { keptErr ~ $it } else { kept.Push($it) }
     }
     with := StringBuilder()
     if kept.Len() > 0 or keptErr != "" {
@@ -760,10 +760,10 @@ fn useEdit(text String&, toks Array<token.Token>&, k I64, name String&, mv Move,
         a String& = ""
         if isErr {
             for x in args {
-                if x.StartsWith("?"): a = $x[1:].Trim()
+                if x.StartsWith("?"): a ~ $x[1:].Trim()
             }
         } else if ai < args.Len() and not args[ai].StartsWith("?") {
-            a = $args[ai]
+            a ~ $args[ai]
             ai++
         }
         if ownerHas(mv.Owner, mv.Params[j]) {
@@ -773,7 +773,7 @@ fn useEdit(text String&, toks Array<token.Token>&, k I64, name String&, mv Move,
         }
     }
     owner := substituted(mv.Owner, given) if given.Len() > 0 else (mv.Type if mv.Generic else mv.Owner)
-    tail := $"<" + $own.Join(", ") + ">" if own.Len() > 0 else ""
+    tail :~ $"<" + $own.Join(", ") + ">" if own.Len() > 0 else ""
     edits.Push(Edit(I64(toks[k].Start), I64(toks[g].End), $owner + "." + $mv.Name + $tail))
 }
 
@@ -801,7 +801,7 @@ fn substituted(owner String&, given Map<String, String>&) String {
         if srcmask.IsIdStart(owner[i]) {
             j := i
             for j < owner.Len() and srcmask.IsWord(owner[j]): j++
-            w := owner[i:j]
+            w :~ owner[i:j]
             out.Push(try given.Get(w) catch default $w)
             i = j
             continue
@@ -826,7 +826,7 @@ fn splitTop(t String&) Vec<String&> {
             start = i + 1 if c == ',' else i
         }
     }
-    last := t[start:].Trim()
+    last :~ t[start:].Trim()
     if last.Len() > 0: out.Push($last)
     return out
 }
@@ -840,17 +840,17 @@ fn run() I32 {
     verbose := false
     std String& = ""
     paths Vec<String&>
-    args := os.Args()
+    args :~ os.Args()
     i I64 = 1
     for i < args.Len() {
-        a := args[i]
+        a :~ args[i]
         if a == "--check" {
             check = true
         } else if a == "-v" {
             verbose = true
         } else if a == "--std" and i + 1 < args.Len() {
             i++
-            std = $args[i]
+            std ~ $args[i]
         } else {
             paths.Push($a)
         }
@@ -860,7 +860,7 @@ fn run() I32 {
         srcmask.SayErr("usage: tools_builder_migrate [--std DIR] [--check] [-v] FILE|DIR...")
         return 2
     }
-    if std == "" { std = "std" if os.IsDir("std/prelude") else (try os.Env("OLANG_STD") catch default "std") }
+    if std == "" { std ~ "std" if os.IsDir("std/prelude") else (try os.Env("OLANG_STD") catch default "std") }
     t := Tool(std, layout.PreludeTypes(std))
     files Vec<String&>
     for p in paths {
@@ -937,7 +937,7 @@ test "the prelude's methods become builders" {
 }
 
 test "an error type's case is no call of a builder named the same" {
-    dir := os.MkTemp(dir = "/tmp", prefix = "builder_migrate.")!
+    dir :~ os.MkTemp(dir = "/tmp", prefix = "builder_migrate.")!
     path := dir + "/runlog.olang"
     text := "type E error {\n    Open(path String)\n}\ntype Log struct() { }\nfn Log.Open(path String&) Log ? E { return Log() }\nfn f() { l := Log.Open(\"x\")! }\n"
     os.WriteFile(path, text)!

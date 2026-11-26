@@ -30,12 +30,12 @@ helpWord Shade = Shade("195;232;141", "150", "1")          # green, bold
 
 # whether the terminal draws 24-bit colour: COLORTERM says so, or it is Windows Terminal (WT_SESSION)
 fn Deep() Bool {
-    c := try os.Env("COLORTERM") catch os.Error { return has("WT_SESSION") }
+    c :~ try os.Env("COLORTERM") catch os.Error { return has("WT_SESSION") }
     return c == "truecolor" or c == "24bit" or has("WT_SESSION")
 }
 
 fn has(name String&) Bool {
-    v := try os.Env(name) catch os.Error { return false }
+    v :~ try os.Env(name) catch os.Error { return false }
     return v != ""
 }
 
@@ -48,7 +48,7 @@ fn sgr(c Shade&, deep Bool) String {
 # whether what is written to fd is coloured: it is a terminal and NO_COLOR is unset or empty (no-color.org)
 fn Wanted(fd I32) Bool {
     if not os.IsTerminal(fd): return false
-    v := try os.Env("NO_COLOR") catch os.Error { return true }
+    v :~ try os.Env("NO_COLOR") catch os.Error { return true }
     return v == ""
 }
 

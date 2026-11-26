@@ -192,8 +192,8 @@ fn (s opts&) setValue(f mut opt&, value String&) {
 
 fn (s opts&) parse(arg String&) {
     f mut opt?& = null
-    f = try s.byName(arg[:3]) catch NotFound { return }
-    fl := f
+    f ~ try s.byName(arg[:3]) catch NotFound { return }
+    fl :~ f
     s.setValue(fl, arg[4:])
 }
 

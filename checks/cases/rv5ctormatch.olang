@@ -18,7 +18,7 @@ fn deep(n I64) I64 {
 type H struct(e E) {
     keep P& = P(0)
     match e {
-        case E.A(y) { keep = borrow(y) }
+        case E.A(y) { keep ~ borrow(y) }
         case _ { }
     }
 }

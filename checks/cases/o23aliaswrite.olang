@@ -23,8 +23,8 @@ fn main() ? {
         x mut N& = N(I32(42 + i))
         c := Cur(outer)
         arr Array<mut Cur&> = Array<Cur&>[c]
-        arr[0].at = x
-        keep = c.at
+        arr[0].at ~ x
+        keep ~ c.at
     }
     churn()
     assert $keep != ""

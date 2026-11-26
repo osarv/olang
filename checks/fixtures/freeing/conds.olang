@@ -18,7 +18,7 @@ fn main() {
     for i in range N {
         j := i % 4
         v[j].n = $"c" + $i + " padded out to some length" if i % 2 == 0 else $"d" + $i + " padded out"
-        r := v.RefMut((j + 2) % 4)
+        r :~ v.RefMut((j + 2) % 4)
         r.n = named(i) if i % 3 == 0 else ($"e" + $i if i % 3 == 1 else "")
         q.n = $"q" + $i + " padded out to some length" if j < 2 else named(i)
         a[j] = $"a" + $i + " padded out to some length" if i % 5 != 0 else $"b" + $i

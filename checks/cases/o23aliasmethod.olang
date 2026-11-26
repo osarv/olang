@@ -8,7 +8,7 @@ type N struct(v I32) {
 type Cur struct(of mut N&) {
     at mut N& = of
 }
-fn (c mut Cur&) Set(x mut N&) { c.at = x }
+fn (c mut Cur&) Set(x mut N&) { c.at ~ x }
 fn churn() {
     for i in range 50 {
         junk := Array<I64>(1000, i)
@@ -23,7 +23,7 @@ fn main() ? {
         c := Cur(outer)
         arr Array<mut Cur&> = Array<Cur&>[c]
         arr[0].Set(x)
-        keep = c.at
+        keep ~ c.at
     }
     churn()
     assert $keep != ""

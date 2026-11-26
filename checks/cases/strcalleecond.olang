@@ -23,7 +23,7 @@ type Bag struct(head mut Node&) {
     head
 }
 fn pick(n Node&) I64 {
-    x := n if n.v == 0 else Node(1, null)
+    x :~ n if n.v == 0 else Node(1, null)
     return x.v
 }
 fn (b Bag&) Str() String {

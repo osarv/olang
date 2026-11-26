@@ -96,7 +96,7 @@ fn receive(fd I32) String {
     buf mut Array<U8>& = Array<U8>(4096)
     got := StringBuilder()
     for {
-        chunk := try io.Read(fd, buf) catch { break }
+        chunk :~ try io.Read(fd, buf) catch { break }
         if chunk.Len() == 0: break
         got.Push(String(chunk))
         text := got.ToString()
@@ -114,8 +114,8 @@ type badRequest error {
 # the request in text, or badRequest.Line when it is not one
 fn Request.parse(text String&) Request ? {
     end := try text.Find("\r\n\r\n")
-    lines := text[:end].Split("\r\n")
-    parts := lines[0].Split(" ")
+    lines :~ text[:end].Split("\r\n")
+    parts :~ lines[0].Split(" ")
     if parts.Len() < 2: error badRequest.Line
     names Vec<String&>
     values Vec<String&>
@@ -147,8 +147,8 @@ fn serve(fd I32) {
     headers Vec<String&>
     code I64 = 200
     body := ""
-    path := req.Path
-    method := req.Method
+    path :~ req.Path
+    method :~ req.Method
     if not (method in Array<String&>["GET", "POST", "PUT", "DELETE", "HEAD", "PATCH"]) {
         send(fd, response(501, Vec<String&>(), "unsupported method " + $method, true))
         return
@@ -192,7 +192,7 @@ fn send(fd I32, data String&) {
 }
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     if args.Len() != 2 {
         try io.PutErrLn("usage: server PORTFILE")
         os.Exit(2)

@@ -56,14 +56,14 @@ fn Serve(cfg mut build.Config&, exe String&) I32 {
 fn send(body String&) { try io.Write(1, $body + "\n") catch io.Error { } }
 
 fn handle(line String&, cfg mut build.Config&, exe String&) {
-    msg := try json.Json.Parse(line) catch json.Error {
+    msg :~ try json.Json.Parse(line) catch json.Error {
         send(errorReply("null", -32700, "the message is not JSON"))
         return
     }
-    method := str(msg, "method")
+    method :~ str(msg, "method")
     id := idOf(msg)
     if method == "initialize" {
-        version := try msg["params"]["protocolVersion"].AsStr() catch json.Error default "2025-06-18"
+        version :~ try msg["params"]["protocolVersion"].AsStr() catch json.Error default "2025-06-18"
         b := StringBuilder()
         b.Push("{\"protocolVersion\":")
         session.JsonStr(b, version)
@@ -86,8 +86,8 @@ fn handle(line String&, cfg mut build.Config&, exe String&) {
         return
     }
     if method == "tools/call" {
-        name := try msg["params"]["name"].AsStr() catch json.Error default ""
-        args := try msg["params"]["arguments"] catch json.Error default json.Json.Null
+        name :~ try msg["params"]["name"].AsStr() catch json.Error default ""
+        args :~ try msg["params"]["arguments"] catch json.Error default json.Json.Null
         send(reply(id, call(name, args, cfg, exe)))
         return
     }
@@ -96,22 +96,22 @@ fn handle(line String&, cfg mut build.Config&, exe String&) {
 
 # a tool call's result, CallToolResult as JSON
 fn call(name String&, args json.Json&, cfg mut build.Config&, exe String&) String {
-    file := str(args, "file")
+    file :~ str(args, "file")
     if name == "test" {
         if file == "": return toolError("test needs a file")
         out := try os.Output.Exec(exe, "test", file) catch os.Error { return toolError("the compiler could not be run") }
         return testResult($out.Stdout + $out.Stderr, out.Status)
     }
     if name == "explain" and file == "" {
-        rule := str(args, "name")
+        rule :~ str(args, "name")
         out := try os.Output.Exec(exe, "explain", rule) catch os.Error { return toolError("the compiler could not be run") }
         return textResult($out.Stdout + $out.Stderr, out.Status != 0)
     }
     if name != "check" and name != "explain" and name != "doc" and name != "format" { return toolError($"no tool " + $name) }
     if file == "": return toolError($name + " needs a file")
     hasText := (try args["text"] catch json.Error default json.Json.Null) != json.Json.Null
-    text := str(args, "text")
-    item := str(args, "name")
+    text :~ str(args, "text")
+    item :~ str(args, "name")
     out, status := session.ChildOutput(fn() String { return run(name, file, hasText, text, item, cfg) })
     if status != 0 { return toolError($"the compiler ended while running " + $name + " (status " + $status + ") - a bug in the compiler") }
     return out
@@ -119,19 +119,19 @@ fn call(name String&, args json.Json&, cfg mut build.Config&, exe String&) Strin
 
 # a tool run, in its own process: its CallToolResult
 fn run(name String&, file String&, hasText Bool, text String&, item String&, cfg mut build.Config&) String {
-    path := file
-    if name == "doc" and not file.EndsWith(".olang"): path = $session.StdModule(file)
+    path :~ file
+    if name == "doc" and not file.EndsWith(".olang"): path ~ $session.StdModule(file)
     overlay := Map<String&, String&>()
     if hasText: overlay.Put(session.RealOf(path), text)
     if name == "format" {
-        given := text if hasText else (try os.ReadFile(path) catch os.Error { return toolError($"cannot read " + $path) })
+        given :~ text if hasText else (try os.ReadFile(path) catch os.Error { return toolError($"cannot read " + $path) })
         formatted := try session.Format(path, given) catch { return textResult($path + " does not parse - check it for its diagnostics", true) }
         return textResult(formatted, false)
     }
     d mut diag.Diagnostics& = diag.Diagnostics(false)
-    a := session.Analysis.Analyze(path, cfg, d, overlay, kept = true)
+    a :~ session.Analysis.Analyze(path, cfg, d, overlay, kept = true)
     if name == "check": return checkResult(a, d)
-    if d.Errors() > 0 or a.C == null or a.Sc == null: return textResult($d.Render() + $d.Summary(), true)
+    if d.Errors() > 0 or a.C is null or a.Sc is null: return textResult($d.Render() + $d.Summary(), true)
     if name == "explain" {
         t := try explain.Item(a.C!, a.Sc!, a.X!, a.L.Root, item) catch explain.Missing {
             return textResult($"'" + $item + "' is no top-level item of " + $path, true)
@@ -173,7 +173,7 @@ fn checkResult(a session.Analysis&, d mut diag.Diagnostics&) String {
         b.Push("]}")
     }
     b.Push($"],\"errors\":" + $n + "}")
-    text := "no errors" if n == 0 else $d.Render() + $d.Summary()
+    text :~ "no errors" if n == 0 else $d.Render() + $d.Summary()
     r := StringBuilder()
     r.Push("{\"content\":[{\"type\":\"text\",\"text\":")
     session.JsonStr(r, text)
@@ -239,7 +239,7 @@ fn toolError(text String&) String { return textResult(text, true) }
 fn str(j json.Json&, key String&) String& { return try j[key].AsStr() catch json.Error default "" }
 
 fn idOf(msg json.Json&) String {
-    v := try msg["id"] catch json.Error { return "" }
+    v :~ try msg["id"] catch json.Error { return "" }
     return json.Encode(v)
 }
 
@@ -263,14 +263,14 @@ test "a test run read as outcomes" {
 
 # the compiler under test: $OLANG, else build/olang
 fn compilerUnderTest() String {
-    c := try os.Env("OLANG") catch default ""
+    c :~ try os.Env("OLANG") catch default ""
     if c != "": return c
     # (absolute: a test running it from a directory of its own finds it too)
     return $(try os.Cwd() catch os.Error default ".") + "/build/olang"
 }
 
 test "olang serve mcp answers a scripted session: tools/list, check, explain, doc, format, test (B16)" {
-    dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
+    dir :~ try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
     defer: try os.RemoveAll(dir) catch os.Error { }
     bad := $dir + "/bad.olang"
     good := $dir + "/good.olang"
@@ -296,7 +296,7 @@ test "olang serve mcp answers a scripted session: tools/list, check, explain, do
     assert out.Status == 0, out.Stderr
     got := Map<String&, String&>()
     for line in out.Stdout.Lines() {
-        msg := try json.Json.Parse(line) catch json.Error { unreachable "a line that is no JSON: " + $line }
+        msg :~ try json.Json.Parse(line) catch json.Error { unreachable "a line that is no JSON: " + $line }
         got.Put(idOf(msg), line)
     }
     assert (got.Get("1")!).Contains("\"tools\":{\"listChanged\":false}")

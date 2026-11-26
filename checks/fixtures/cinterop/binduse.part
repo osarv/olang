@@ -17,11 +17,11 @@ fn main() {
     bind_grow(r, 1.0)
     io.PutLn("grown " + $bind_area(r) + " " + $r.label[0])!
     io.PutLn("sum " + $bind_sum(Array<I32>[1, 2, 3, 4], 4) + " length " + $bind_length("abcdef".ToC()))!
-    g := bind_greeting()
-    if g != null { io.PutLn(String.FromC(g, 100))! }
+    g :~ bind_greeting()
+    if g is not null { io.PutLn(String.FromC(g, 100))! }
     out := Array<bind_counter?&>(1)
     if bind_open("c".ToC(), out) != 0 { return }
-    c := out[0]
+    c :~ out[0]
     for i in range 3 { bind_count(c, U8(i + 1)) }
     io.PutLn("total " + $bind_total(c) + " each " + $bind_each(c, visit, null))!
     bind_close(c)

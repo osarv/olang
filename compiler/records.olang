@@ -20,9 +20,9 @@ import typecheck "check"
 # it was made), the build's modes, target and constants, where it runs and where the standard library is, and the
 # runtime's files there (runtimeStamp)
 fn BuildInputs(cfg build.Config&, tests Bool) String {
-    exe := try os.RealPath("/proc/self/exe") catch default ""
+    exe :~ try os.RealPath("/proc/self/exe") catch default ""
     info := try os.FileInfo.Stat(exe) catch os.Error { return "" }
-    cwd := try os.Cwd() catch default ""
+    cwd :~ try os.Cwd() catch default ""
     t := cfg.Target
     return ($exe + " " + $info.Size + " " + $info.ModTime + "\n" + $cfg.Debug + " " + $cfg.Race + " " + $cfg.San + " " + $cfg.Quick + " " + $cfg.Library + " " + $tests + $(" prof" if cfg.Profile else "") + $(" listing" if cfg.Listing else "") + $(" fuzz" if cfg.Fuzz != "" else "") + $(" bench" if cfg.Bench else "") + $(" checked" if cfg.Checked else "") + $(" late" if cfg.Late else "") + "\n" + $
             t.Triple + "\n" + $t.Arch + "\n" + $t.Cpu + "\n" + $t.Attrs + $(" pairdot" if t.PairDot else "") + "\n" + $cfg.Consts.Fingerprint() + "\n" + $cwd + "\n" + $load.StdDir() + "\n" + $runtimeStamp())
@@ -33,7 +33,7 @@ fn BuildInputs(cfg build.Config&, tests Bool) String {
 # no more
 fn runtimeStamp() String {
     dir := $load.StdDir() + "/runtime"
-    found := try os.ReadDir(dir) catch os.Error { return "" }
+    found :~ try os.ReadDir(dir) catch os.Error { return "" }
     names Vec<String&>
     for n in found: names.Push(n)
     names.Sort(fn(a String&, b String&) Bool { return a < b })
@@ -59,15 +59,15 @@ fn ModuleKeys(l mut load.Loader&, cfg mut build.Config&, tests Bool) Array<Strin
     inputs := $base + $("\nroot " + $mods[l.Root].Identity + " " + $mods[l.Root].Path if cfg.Debug else "")
     hashOf := Array<String&>(n, "")
     for m in range n {
-        md := mods[m]
+        md :~ mods[m]
         parts Vec<String&>
         parts.Push(md.Identity)
         parts.Push(md.Path)
         parts.Push(md.Real)
-        parts.Push(md.Src!.Text if md.Src != null else "")
+        parts.Push(md.Src!.Text if md.Src is not null else "")
         # E38: the files its embeds read are part of what its object is made from
         for e in md.Embeds { parts.Push($"embed " + $e + " " + $build.IrHash(String(l.Embedded(e)))) }
-        hashOf[m] = build.HashOf(parts)
+        hashOf[m] ~ build.HashOf(parts)
     }
     for m in range n {
         if m == l.Root: continue
@@ -75,7 +75,7 @@ fn ModuleKeys(l mut load.Loader&, cfg mut build.Config&, tests Bool) Array<Strin
         parts.Push(inputs)
         parts.Push(hashOf[m])
         for x in Reached(mods, m): parts.Push($mods[x].Identity + " " + $hashOf[x])
-        keys[m] = build.HashOf(parts)
+        keys[m] ~ build.HashOf(parts)
     }
     return keys
 }
@@ -113,7 +113,7 @@ fn ReaderRecords(l mut load.Loader&, c typecheck.Checker&) Array<String&>& {
         for x in lines {
             if out.Len() == 0 or out[out.Len() - 1] != x: out.Push(x)
         }
-        reads[m] = out.Join("\n")
+        reads[m] ~ out.Join("\n")
     }
     return reads
 }
@@ -157,11 +157,11 @@ fn frontStem(cfg build.Config&, identity String&, key String&) String {
 
 # the records under each module's key, as candidates the checker takes where their reads hold (views.Kept.TakeHolding)
 fn FrontRecords(l mut load.Loader&, cfg build.Config&, keys Array<String&>&, kept mut views.Kept&) {
-    names := try os.ReadDir($cfg.Dir + "/rec") catch os.Error { return }
+    names :~ try os.ReadDir($cfg.Dir + "/rec") catch os.Error { return }
     for m in range keys.Len() {
         if keys[m] == "" or l.Mods[m].File < 0: continue
         stem := frontStem(cfg, l.Mods[m].Identity, keys[m])
-        lead := stem[cfg.Dir.Len() + 5:]
+        lead :~ stem[cfg.Dir.Len() + 5:]
         for name in names {
             if not name.StartsWith(lead) or name[lead.Len():].Contains("."): continue
             cand := try frontRecord($cfg.Dir + "/rec/" + $name, l.Mods[m].File) catch Stale { continue }
@@ -172,14 +172,14 @@ fn FrontRecords(l mut load.Loader&, cfg build.Config&, keys Array<String&>&, kep
 
 # the front record at path, for the module of file: whole (its sum the hash of what is before it) or not read at all
 fn frontRecord(path String&, file I64) views.Cand ? Stale {
-    text := try os.ReadFile(path) catch os.Error { error Stale }
+    text :~ try os.ReadFile(path) catch os.Error { error Stale }
     sumAt := try text.Find("\nsum ") catch { error Stale }
     if text[sumAt + 5:].Trim() != build.IrHash(text[:sumAt + 1]): error Stale
-    lines := text[:sumAt].Lines().ToVec()
+    lines :~ text[:sumAt].Lines().ToVec()
     if lines.Len() < 2 or lines[0] != "olang front record" or lines[lines.Len() - 1] != "end": error Stale
     cand := views.Cand(file)
     for i in range 1, lines.Len() - 1 {
-        line := lines[i]
+        line :~ lines[i]
         if line.StartsWith("read "): cand.Reads.Push(line)
         else if line.StartsWith("body "): cand.Bodies.Push($line[5:])
         else if line.StartsWith("sig ") or line.StartsWith("baked "): cand.Others.Push(line)
@@ -195,7 +195,7 @@ fn KeepFront(l mut load.Loader&, c mut typecheck.Checker&, cfg build.Config&, ke
     baked Map<I64, eval.Image>&) {
     if kept.Afresh: checkOthers(l, c, kept, baked)
     if kept.Lines.Len() == 0 or keys.Len() == 0: return
-    reads := ReaderRecords(l, c)
+    reads :~ ReaderRecords(l, c)
     try os.MkDirAll($cfg.Dir + "/rec") catch os.Error { return }
     pid := build.Pid()
     for m in range keys.Len() {
@@ -332,7 +332,7 @@ fn TrimRecords(cfg build.Config&, l load.Loader&, keys Array<String&>&) {
 # the records in dir trimmed: per module the most keys of its records kept, what is over cap after them going as
 # build.Trim says, none of a key keep names ("MODULE.KEY") or used since since
 fn TrimRecordDir(dir String&, keep Map<String&, Bool>&, since I64, most I64, cap I64) {
-    names := try os.ReadDir(dir) catch os.Error default Array<String&>(0)
+    names :~ try os.ReadDir(dir) catch os.Error default Array<String&>(0)
     for n in names {
         if not n.EndsWith(".tmp"): continue
         info := try os.FileInfo.Stat($dir + "/" + $n) catch os.Error { continue }
@@ -343,7 +343,7 @@ fn TrimRecordDir(dir String&, keep Map<String&, Bool>&, since I64, most I64, cap
     seen Map<String&, I64>
     left Vec<build.Held>
     for h in held {
-        module := build.StemOf(h.Stem, 1)
+        module :~ build.StemOf(h.Stem, 1)
         n := (try seen.Get(module) catch default 0) + 1
         seen.Put(module, n)
         if n <= most or keep.Has(h.Stem) or h.Time >= since: left.Push(h)
@@ -353,7 +353,7 @@ fn TrimRecordDir(dir String&, keep Map<String&, Bool>&, since I64, most I64, cap
 }
 
 test "B3i: a module's records are kept for its keys used last, never this build's, and within the cap" {
-    dir := try os.MkTemp("", "olang-rec-")
+    dir :~ try os.MkTemp("", "olang-rec-")
     defer: try os.RemoveAll(dir) catch os.Error { }
     for n in Array<String&>["a.k1.v1", "a.k1.v1.p0.ll", "a.k2.f1", "a.k3.f1", "a.k4.s1", "b.k1.f1", "a.k5.v1.p0.ll.77.tmp"] {
         try os.WriteFile($dir + "/" + $n, "0123456789")
@@ -389,7 +389,7 @@ fn sumOf(text String&) String { return $text.Len() + "-" + $U64(text.Hash()) }
 # the records under each module's key, their judgings given to the pass: by file, the text of the record read
 fn ScopeRecords(c mut typecheck.Checker&, cfg build.Config&, keys Array<String&>&, sc mut scope.Scoper&) Map<I64, String&> {
     loaded Map<I64, String&>
-    l := c.P.L
+    l :~ c.P.L
     sc.DiskWrite = true
     sc.DiskAfresh = (try os.Env("OLANG_CHECKINCR") catch default "") != ""
     for m in range keys.Len() {
@@ -397,12 +397,12 @@ fn ScopeRecords(c mut typecheck.Checker&, cfg build.Config&, keys Array<String&>
         sc.Keyed.Put(l.Mods[m].File, true)
         sc.FileKeys.Put(l.Mods[m].File, keys[m])
     }
-    names := try os.ReadDir($cfg.Dir + "/rec") catch os.Error { return loaded }
+    names :~ try os.ReadDir($cfg.Dir + "/rec") catch os.Error { return loaded }
     sc.DiskOn = true
     for m in range keys.Len() {
         if keys[m] == "" or l.Mods[m].File < 0: continue
         stem := scopeStem(cfg, l.Mods[m].Identity, keys[m])
-        lead := stem[cfg.Dir.Len() + 5:]
+        lead :~ stem[cfg.Dir.Len() + 5:]
         for name in names {
             if not name.StartsWith(lead) or name[lead.Len():].Contains("."): continue
             text := try scopeRecord(c, $cfg.Dir + "/rec/" + $name) catch Stale { continue }
@@ -418,11 +418,11 @@ fn ScopeRecords(c mut typecheck.Checker&, cfg build.Config&, keys Array<String&>
 
 # the record at path, whole and with every fact it names reading as it did: the lines before its sum
 fn scopeRecord(c mut typecheck.Checker&, path String&) String ? Stale {
-    text := try os.ReadFile(path) catch os.Error { error Stale }
+    text :~ try os.ReadFile(path) catch os.Error { error Stale }
     # (the last line's sum: a judging's summaries are "sum" lines too)
     sumAt := (try text.Find("\nend\nsum ") catch { error Stale }) + 4
     if text[sumAt + 5:].Trim() != sumOf(text[:sumAt + 1]): error Stale
-    body := text[:sumAt + 1]
+    body :~ text[:sumAt + 1]
     if not body.StartsWith("olang scope record\n") or not body.EndsWith("end\n"): error Stale
     # (the facts its checking read come before its first judging, whose "read" lines are summaries)
     reads Vec<String&>
@@ -440,13 +440,13 @@ fn scopeRecord(c mut typecheck.Checker&, path String&) String ? Stale {
 fn KeepScope(c mut typecheck.Checker&, cfg build.Config&, keys Array<String&>&, sc mut scope.Scoper&, loaded Map<I64, String&>&) {
     texts := sc.Records()
     if texts.Len() == 0: return
-    l := c.P.L
-    reads := ReaderRecords(l, c)
+    l :~ c.P.L
+    reads :~ ReaderRecords(l, c)
     try os.MkDirAll($cfg.Dir + "/rec") catch os.Error { return }
     pid := build.Pid()
     for m in range keys.Len() {
         if keys[m] == "" or l.Mods[m].File < 0: continue
-        runs := try texts.Get(l.Mods[m].File) catch { continue }
+        runs :~ try texts.Get(l.Mods[m].File) catch { continue }
         head := $"olang scope record\n" + $($reads[m] + "\n" if reads[m] != "" else "")
         body := $head + $runs
         if body == (try loaded.Get(l.Mods[m].File) catch default ""): continue

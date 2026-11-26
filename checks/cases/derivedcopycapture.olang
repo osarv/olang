@@ -13,11 +13,11 @@ type View struct(ns Array<mut Node&>&) {
 }
 fn run(f fn&()) { f() }
 fn visit(w View&) {
-    x := w.at[0]
-    run(fn() { x.next = Node(x.v + 100) })
+    x :~ w.at[0]
+    run(fn() { x.next ~ Node(x.v + 100) })
 }
 fn visit2(w View&) {
-    for x in w.at { run(fn() { x.next = Node(x.v + 200) }) }
+    for x in w.at { run(fn() { x.next ~ Node(x.v + 200) }) }
 }
 fn main() ? {
     a := Array<mut Node&>(1, Node(3))

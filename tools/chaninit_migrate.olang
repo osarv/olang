@@ -11,10 +11,10 @@ import "std/io"
 import "srcmask"
 
 fn main() ? io.Error {
-    args := os.Args()
+    args :~ os.Args()
     for k in range 1, args.Len() {
-        path := args[k]
-        text := try os.ReadFile(path) catch os.Error {
+        path :~ args[k]
+        text :~ try os.ReadFile(path) catch os.Error {
             try io.PutErrLn("chaninit_migrate: " + $path + ": cannot be read")
             continue
         }
@@ -27,7 +27,7 @@ fn main() ? io.Error {
 
 # the text without its lines calling chan's Init - "Init(" itself where own (std/chan.olang)
 fn migrate(text String&, own Bool) String {
-    call := "Init(" if own else aliasOf(text) + ".Init("
+    call :~ "Init(" if own else aliasOf(text) + ".Init("
     if call == ".Init(" or not text.Contains(call): return $text
     mask := srcmask.Mask(text, true)
     b := StringBuilder()
@@ -43,9 +43,9 @@ fn migrate(text String&, own Bool) String {
 # the name std/chan is imported by, "" where it is not imported
 fn aliasOf(text String&) String {
     for line in text.Lines() {
-        t := srcmask.Strip(line)
+        t :~ srcmask.Strip(line)
         if not t.StartsWith("import ") or not t.EndsWith("\"std/chan\""): continue
-        words := t.Split(" ")
+        words :~ t.Split(" ")
         return $words[1] if words.Len() == 3 else "chan"
     }
     return ""
@@ -53,11 +53,11 @@ fn aliasOf(text String&) String {
 
 # whether a line is code holding only call, one name in its parentheses
 fn initLine(line String&, mask String&, call String&) Bool {
-    t := srcmask.Strip(line)
+    t :~ srcmask.Strip(line)
     if not t.StartsWith(call) or not t.EndsWith(")"): return false
     lead := line.Len() - srcmask.StripStart(line).Len()
     if mask[lead] != 'c': return false
-    name := t[call.Len():t.Len() - 1]
+    name :~ t[call.Len():t.Len() - 1]
     if name.Len() == 0: return false
     for ch in name {
         if not srcmask.IsWord(ch): return false

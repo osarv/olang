@@ -32,13 +32,13 @@ fn main() ? {
     churn()
     assert k.y == "6-in-the-instance"
     c := CB()
-    x := c.text
+    x :~ c.text
     h := H.mk(x)
     h2 := H(x, 6)
     churn()
     assert h.y == "5-in-x"
     assert h2.y == "6-in-x"
-    c.text = $2 + "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    c.text ~ $2 + "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     churn()
     assert c.text == "2-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     try io.PutLn("ok")

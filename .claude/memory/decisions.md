@@ -21,11 +21,6 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 
 Open questions:
 
-2. (2026-11-24, asked via the Orchestrator; from oagent's chatview.View.Relay) Replacing a whole value through a
-   `mut T&` can only be written field by field (S4a: `p = v` repoints the parameter). Add a supplied method
-   (`p.Replace(v)`, running the old value's destructor) or keep field by field? Default: field by field (and S4e now
-   refuses pointing a reference parameter at a fresh value). Recommendation: the supplied method, so `=` keeps one meaning.
-
 3. (2026-11-26, via the Orchestrator; docs/freeing.md 2.4 "O23b's equality, per declaration") Where an instance is
    reached through an element, a global, an `any` or a capture, a shared field's scope binding is dropped for the whole
    declaration, so storage built through that field lives as long as the longest-lived instance's (builtref). Freeing
@@ -37,3 +32,8 @@ Open questions:
 5. (2026-11-26, same) A view rooted at a parameter, field or global is judged per declaration (parameters of one type may
    name one value). Per value needs per-call-site facts, so an edit recompiles callers (against B3i). Default and
    recommendation: per declaration until a real program shows the growth; then measure both.
+6. (2026-11-26, wt-assign stage 2; HISTORY "links and contents, stage 2") `r ~ x` with `x` a new value (a constructor's
+   call, a literal, a call giving a value): the decision said an error, but the compiler alone holds 351 such links
+   (`p ~ typed.Lvalue.Deref(...)`), and a local plus a link for each would double those statements. Default in effect:
+   `~` builds the new value where the reference is held (E12c, the old repoint's placement); `:~` of a new value stays
+   an error (`:=` declares it). Recommendation: keep the default.

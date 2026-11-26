@@ -20,13 +20,13 @@ fn (c mut Cache&) Put(k String&) { c.keys.Push(k) }
 
 fn (c mut Cache&) Evict() {
     for k in c.keys {
-        if c.onEvict != null: c.onEvict!(k)
+        if c.onEvict is not null: c.onEvict!(k)
     }
     c.keys.Clear()
 }
 
 # b kept in a
-fn link(a mut N&, b N&) { a.next = b }
+fn link(a mut N&, b N&) { a.next ~ b }
 
 # a declared function type with a promise (T21b)
 type Linker fn(a mut N&, b N&) keeps b in a
@@ -85,7 +85,7 @@ fn first(a N&, b N&) N& { return a }
 
 fn pickFirst(f fn&(a N&, b N&) N& borrows a, n I64) I64 {
     x := N(n)
-    r := f(x, N(n + 100))
+    r :~ f(x, N(n + 100))
     churn()
     return r.v
 }
@@ -98,7 +98,7 @@ fn keptPast(f fn&(a N&, b N&) N& noborrow, n I64) I64 {
     {
         x := N(n)
         y := N(1)
-        r = f(x, y)
+        r ~ f(x, y)
     }
     churn()
     return r.v

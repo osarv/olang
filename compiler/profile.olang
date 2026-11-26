@@ -36,7 +36,7 @@ extern { fn signal(sig I32, handler I64) I64 }
 # build's where it did not build
 fn Run<F build.Frontend>(fe mut F&, c mut build.Config&, file String&, args Array<String&>&, d mut diag.Diagnostics&) I32 {
     html := $c.Output                   # -output names the flame graph here, not the program
-    c.Output = ""
+    c.Output ~ ""
     c.Quiet = true
     c.Profile = true
     status := build.BuildProgram(fe, c, file, d)
@@ -48,9 +48,9 @@ fn Run<F build.Frontend>(fe mut F&, c mut build.Config&, file String&, args Arra
         return build.Finish(d)
     }
     # the program's name: its binary's, without the build's mode (".quick.prof")
-    name := filepath.Base(c.Built)
+    name :~ filepath.Base(c.Built)
     dot := try name.Find(".") catch default name.Len()
-    name = name[:dot]
+    name ~ name[:dot]
     samples := $dir + "/" + $name + ".samples"
     if html == "": html = $dir + "/" + $name + ".html"
     try os.Remove(samples) catch os.Error { }
@@ -59,7 +59,7 @@ fn Run<F build.Frontend>(fe mut F&, c mut build.Config&, file String&, args Arra
         d.Fatal(diag.Where.Nowhere, msgs.CannotRun("it cannot be started"))
         return build.Finish(d)
     }
-    bytes := try os.ReadFile(samples) catch os.Error {
+    bytes :~ try os.ReadFile(samples) catch os.Error {
         say($"olang profile: " + $name + " wrote no profile - it ended by a signal (" + $build.SignalName(status - 128) + ")\n")
         return status
     }
@@ -175,7 +175,7 @@ fn Profile.Read(b Array<U8>&) Profile ? Bad {
         for k in range n: p.Addrs.Push(word(b, 5 + i + 1 + k))
         i += n + 1
     }
-    p.Maps = String(b[40 + words * 8:])
+    p.Maps ~ String(b[40 + words * 8:])
     return p
 }
 
@@ -242,7 +242,7 @@ fn mappings(maps String&) Vec<mapping> {
 # symbolizer knows - an executable's own and a shared library's alike, wherever the system put it
 fn segments(path String&) Vec<I64> {
     out Vec<I64>
-    b := try os.ReadFile(path) catch os.Error { return out }
+    b :~ try os.ReadFile(path) catch os.Error { return out }
     if b.Len() < 64 or b[0] != U8(0x7F) or b[1] != U8('E') or b[4] != U8(2): return out
     phoff := word(b, 4)
     size := I64(b[54]) | (I64(b[55]) << 8)
@@ -278,7 +278,7 @@ type elfFn struct(Addr I64, Size I64, Name String&) {
 # the file, says "??"
 fn functionSymbols(path String&) Vec<elfFn> {
     out Vec<elfFn>
-    b := try os.ReadFile(path) catch os.Error { return out }
+    b :~ try os.ReadFile(path) catch os.Error { return out }
     if b.Len() < 64 or b[0] != U8(0x7F) or b[1] != U8('E') or b[4] != U8(2): return out
     shoff := le(b, 0x28, 8)
     shsize := le(b, 0x3A, 2)
@@ -312,7 +312,7 @@ fn functionSymbols(path String&) Vec<elfFn> {
 # Resolve's function at address a of the file at path, by its symbol table (read once per file); "??" where none holds it
 fn symbolIn(syms mut Map<String&, Vec<elfFn>>&, path String&, a I64) String {
     if not syms.Has(path): syms.Put($path, functionSymbols(path))
-    ss := try syms.Ref(path) catch default Vec<elfFn>()
+    ss :~ try syms.Ref(path) catch default Vec<elfFn>()
     fun := symbolAt(ss, a)
     if fun == "": fun = "??"
     return fun
@@ -336,7 +336,7 @@ fn symbolAt(syms Vec<elfFn>&, a I64) String {
 fn Symbolizer() String {
     clang := target.FindClang()
     if clang != "" {
-        real := try os.RealPath(target.WhereIs(clang)) catch default ""
+        real :~ try os.RealPath(target.WhereIs(clang)) catch default ""
         if real != "" {
             beside := $filepath.Dir(real) + "/llvm-symbolizer"
             if target.WhereIs(beside) != "": return beside
@@ -378,7 +378,7 @@ fn Places.Resolve(p Profile&, tool String&) Places {
             off := a - m.Start + m.Offset
             if not path.StartsWith("/"): break
             if not segs.Has(path): segs.Put(path, segments(path))
-            ss := try segs.Ref(path) catch default Vec<I64>()
+            ss :~ try segs.Ref(path) catch default Vec<I64>()
             for j in range 0, ss.Len(), 3 {
                 if off >= ss[j] and off < ss[j] + ss[j + 1]: r = off - ss[j] + ss[j + 2]
             }
@@ -412,13 +412,13 @@ fn Places.Resolve(p Profile&, tool String&) Places {
         frames I64 = 0
         if rel[i] >= 0 and at < said.Len() {
             for at + 1 < said.Len() and said[at] != "" {
-                fun := said[at]
-                place := said[at + 1]
+                fun :~ said[at]
+                place :~ said[at + 1]
                 at += 2
                 file, line := fileLine(place)
-                if fun == "??" and files[i].StartsWith("/"): fun = symbolIn(syms, files[i], rel[i])
-                if fun == "??": fun = $"0x" + $U64(keys[i]).Format(16) + " (" + $filepath.Base(files[i]) + ")"
-                else: fun = Readable(fun)
+                if fun == "??" and files[i].StartsWith("/"): fun ~ symbolIn(syms, files[i], rel[i])
+                if fun == "??": fun ~ $"0x" + $U64(keys[i]).Format(16) + " (" + $filepath.Base(files[i]) + ")"
+                else: fun ~ Readable(fun)
                 pl.Frames.Push(Frame(pl.name(fun), pl.name(file), line))
                 frames++
             }
@@ -427,7 +427,7 @@ fn Places.Resolve(p Profile&, tool String&) Places {
         if frames == 0 and rel[i] >= 0 and files[i].StartsWith("/") {
             # no symbolizer: the symbol table alone
             if not syms.Has(files[i]): syms.Put($files[i], functionSymbols(files[i]))
-            ss := try syms.Ref(files[i]) catch default Vec<elfFn>()
+            ss :~ try syms.Ref(files[i]) catch default Vec<elfFn>()
             fun := symbolAt(ss, rel[i])
             if fun != "" {
                 pl.Frames.Push(Frame(pl.name(Readable(fun)), pl.name("??"), 0))
@@ -435,7 +435,7 @@ fn Places.Resolve(p Profile&, tool String&) Places {
             }
         }
         if frames == 0 {
-            where := filepath.Base(files[i]) if files[i] != "" else "no file"
+            where :~ filepath.Base(files[i]) if files[i] != "" else "no file"
             pl.Frames.Push(Frame(pl.name($"0x" + $U64(keys[i]).Format(16) + " (" + $where + ")"), pl.name("??"), 0))
             frames = 1
         }
@@ -448,7 +448,7 @@ fn Places.Resolve(p Profile&, tool String&) Places {
 fn fileLine(place String&) String, I64 {
     c2 := try place.FindLast(":") catch default -1
     if c2 < 0: return place, 0
-    head := place[:c2]
+    head :~ place[:c2]
     c1 := try head.FindLast(":") catch default -1
     if c1 < 0: return head, 0
     return $head[:c1], try head[c1 + 1:].ParseInt(10) catch default 0
@@ -470,8 +470,8 @@ fn Readable(sym String&) String {
     dot := try text[from:].Find(".") catch default -1
     if dot < 0: return text
     lead := from + dot
-    rest := text[lead + 1:]
-    id := text[:lead]
+    rest :~ text[lead + 1:]
+    id :~ text[:lead]
     q := qualifier(id)
     # a method's receiver names its own module
     restColon := try rest.Find(":") catch default -1
@@ -652,7 +652,7 @@ fn Report(name String&, p Profile&, pl mut Places&) String {
 
 # a place's file written from where olang runs, where it is under it: "src/hot.olang:12"
 fn shortPath(place String&) String {
-    cwd := try os.Cwd() catch default ""
+    cwd :~ try os.Cwd() catch default ""
     if cwd != "" and place.StartsWith($cwd + "/"): return $place[cwd.Len() + 1:]
     return place
 }
@@ -736,8 +736,8 @@ fn FlameGraph(name String&, p Profile&, pl mut Places&) String {
         }
     }
     for id in order {
-        n := nodes.Ref(id)
-        label := "all" if id == 0 else pl.Names[n.Fn]
+        n :~ nodes.Ref(id)
+        label :~ "all" if id == 0 else pl.Names[n.Fn]
         tip := $label + " - " + $millis(n.Weight, p.PeriodNs) + " ms, " + $pct(n.Weight, total)
         hue := (label.Hash() & 0xFFFF)
         r := 205 + hue % 50

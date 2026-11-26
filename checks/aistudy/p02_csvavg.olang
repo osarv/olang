@@ -2,7 +2,7 @@
 type Person struct(name String, age I64, city String) { name, age, city }
 
 fn Person.parseLine(line String&) Person ? ParseError {
-    f := line.Split(",")
+    f :~ line.Split(",")
     return Person(f[0], try f[1].ParseInt(), f[2])
 }
 

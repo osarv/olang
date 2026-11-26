@@ -109,8 +109,8 @@ fn (g mut migration&) brackets() {
             m[i] = o
         }
     }
-    g.m = m
-    g.enc = enc
+    g.m ~ m
+    g.enc ~ enc
 }
 
 # whether the "(" at i opens a list (arguments, parameters, a payload, old results) rather than a parenthesized
@@ -319,7 +319,7 @@ fn (g mut migration&) run() {
 
 fn (g migration&) applied() String {
     reps Vec<String&>& = g.reps
-    sorted := g.edits.ToArray()
+    sorted :~ g.edits.ToArray()
     sorted.Sort(fn(a Edit, b Edit) Bool {
         if a.start != b.start: return a.start < b.start
         ai := a.end == a.start
@@ -370,11 +370,11 @@ fn migrate(src String&, total mut Counts&) String {
 # a Markdown text with its "```olang" blocks migrated
 fn migrateMarkdown(src String&, total mut Counts&) String {
     out := StringBuilder()
-    lines := src.Split("\n")
+    lines :~ src.Split("\n")
     inBlock := false
     block := StringBuilder()
     for k in range lines.Len() {
-        line := lines[k]
+        line :~ lines[k]
         last := k == lines.Len() - 1
         if inBlock and line.StartsWith("```") {
             out.Push(migrate(block.ToString(), total))
@@ -398,9 +398,9 @@ fn main() ? {
     check := false
     verbose := false
     paths Vec<String&>
-    args := os.Args()
+    args :~ os.Args()
     for i in range 1, args.Len() {
-        a := args[i]
+        a :~ args[i]
         if a == "--check": check = true
         else if a == "-v": verbose = true
         else: paths.Push($a)
@@ -436,7 +436,7 @@ fn main() ? {
             }
         }
     }
-    verb := "would change " if check else "changed "
+    verb :~ "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files: " + $total.Describe())
     if check and changed > 0: os.Exit(1)
 }

@@ -25,8 +25,8 @@ fn churn() {
     }
 }
 fn top(path String&, n I64) String {
-    dir := path
-    for i in range n: dir = $dir + "/" + $i
+    dir :~ path
+    for i in range n: dir ~ $dir + "/" + $i
     return $(try real(dir) catch default dir)
 }
 fn main() ? {
@@ -34,9 +34,9 @@ fn main() ? {
     n := os.Args().Len()
     {
         b mut Node& = Node(2)
-        d := a
-        if n > 0: d = b
-        m := try Node.make(n - 5) catch default d
+        d :~ a
+        if n > 0: d ~ b
+        m :~ try Node.make(n - 5) catch default d
         m.v = 3
         churn()
         try io.PutLn($b.v + " " + $m.v)

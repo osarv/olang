@@ -19,7 +19,7 @@ fn main() {
     v Vec<String&>
     for i in range 3 {
         t := $i
-        w := g(v, t)
+        w :~ g(v, t)
         w.Push(t)
     }
     churn()

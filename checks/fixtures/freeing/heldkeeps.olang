@@ -60,7 +60,7 @@ fn direct(n I64, base String&) I64 {
     o := KO(K(mkA(0), mkB(0), base), 0)
     t := 0
     for i in range n {
-        o.inner.r = o.inner.a[0]
+        o.inner.r ~ o.inner.a[0]
         t += I64(o.inner.r[1])
         o.inner.a = mkA(i)
         t += o.inner.r.Len()
@@ -68,7 +68,7 @@ fn direct(n I64, base String&) I64 {
     return t
 }
 
-fn setSelf(o mut KO&) { o.inner.r = o.inner.a[1] }
+fn setSelf(o mut KO&) { o.inner.r ~ o.inner.a[1] }
 
 # the same through a writable reference lent to a call: kept
 fn lent(n I64, base String&) I64 {

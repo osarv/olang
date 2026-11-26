@@ -2,12 +2,12 @@
 # S8e: after "for p == null { }" p is known not null only where the loop holds no break - a break may leave with p null
 type N struct(v I64) { v }
 fn f(a Array<N?&>&) I64 {
-    p := a[0]
+    p :~ a[0]
     i I64 = 0
-    for p == null {
+    for p is null {
         i++
         if i == a.Len(): break
-        p = a[i]
+        p ~ a[i]
     }
     return p.v
 }

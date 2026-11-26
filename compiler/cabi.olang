@@ -70,13 +70,13 @@ fn Flatten(t mut types.Table&, ty types.TypeId, base I64, out mut Vec<Scalar>&) 
         return
     }
     if t.KindOf(r) == types.Kind.Named and t.DeclKindOf(t.DeclOf(r)) == types.DeclKind.Struct {
-        fs := t.Items(t.Fields(r))
+        fs :~ t.Items(t.Fields(r))
         offs := t.Offsets(r)
         for i in range fs.Len(): Flatten(t, fs[i], base + offs[i], out)
         return
     }
     sz := t.Size(r)
-    ll := "i8" if r == types.BoolT else $t.Llvm(r)
+    ll :~ "i8" if r == types.BoolT else $t.Llvm(r)
     out.Push(Scalar(base, sz, ll, t.IsFloat(r)))
 }
 
@@ -149,7 +149,7 @@ fn Way.Classify(t mut types.Table&, arch String&, ty types.TypeId, result Bool) 
             if not s.IsFloat or s.Size != sc[0].Size: hfa = false
         }
         if hfa {
-            ft := sc[0].Llvm
+            ft :~ sc[0].Llvm
             if result {
                 b := StringBuilder()
                 b.Push("{ ")
@@ -254,7 +254,7 @@ fn intAt(sc Vec<Scalar>&, off I64, size I64) String, I64 {
 # an SSE eightbyte's type (clang's GetSSETypeAtOffset): float, double, <2 x float>, a 16-bit float or a vector of them
 fn sseAt(sc Vec<Scalar>&, off I64) String, I64 {
     i := at(sc, off)
-    t0 := sc[i].Llvm if i >= 0 else "double"
+    t0 :~ sc[i].Llvm if i >= 0 else "double"
     half := ""
     for s in sc {
         if s.Off >= off and s.Off < off + 8 and s.Size == 2 and half == "": half = $s.Llvm

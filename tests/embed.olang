@@ -13,7 +13,7 @@ Word := embed ($Dir + "/word.txt")
 fn total(t String&) I64 {
     s I64 = 0
     for line in t.Lines() {
-        parts := line.Split(" ")
+        parts :~ line.Split(" ")
         if parts.Len() == 2 { s += try parts[1].ParseInt() catch default 0 }
     }
     return s

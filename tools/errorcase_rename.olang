@@ -53,7 +53,7 @@ type Words struct() {
 
 fn (ws mut Words&) add(name String&, word String&) {
     if not ws.byType.Has(name): ws.byType.Put($name, Map<String&, String&>())
-    m := ws.byType.RefMut(name)!
+    m :~ ws.byType.RefMut(name)!
     m.Put($word, Camel(word))
 }
 
@@ -77,7 +77,7 @@ fn skipSpaces(t String&, i I64) I64 {
 fn declAt(t String&, i I64) I64, String& {
     if identAt(t, i) != "type": return -1, ""
     j := skipSpaces(t, i + 4)
-    name := identAt(t, j)
+    name :~ identAt(t, j)
     if name.Len() == 0: return -1, ""
     j = skipSpaces(t, j + name.Len())
     if identAt(t, j) != "error": return -1, ""
@@ -106,7 +106,7 @@ fn collect(t String&, ws mut Words&) {
             i = open + 1 if open >= 0 else i + 1
             continue
         }
-        words := wordsIn(t, open + 1, close)
+        words :~ wordsIn(t, open + 1, close)
         for w in words {
             if upperWord(w): ws.add(name, w)
         }
@@ -120,7 +120,7 @@ fn wordsIn(t String&, from I64, to I64) Vec<String&>& {
     out mut Vec<String&>& = Vec<String&>()
     j := from
     for j < to {
-        w := identAt(t, j)
+        w :~ identAt(t, j)
         if w.Len() == 0 {
             j++
             continue
@@ -157,7 +157,7 @@ fn rename(t String&, ws Words&, c mut Count&) String {
                 declEnd = close
             }
         }
-        w := identAt(t, i)
+        w :~ identAt(t, i)
         if w.Len() == 0 {
             i++
             continue
@@ -184,13 +184,13 @@ fn rename(t String&, ws Words&, c mut Count&) String {
 
 # whether the braces from open to close hold one word, the type name's own
 fn oneOwnWord(t String&, open I64, close I64, name String&) Bool {
-    words := wordsIn(t, open + 1, close)
+    words :~ wordsIn(t, open + 1, close)
     return words.Len() == 1 and Camel(words[0]) == name
 }
 
 # whether the word w at i is a one-word type's own word written after "NAME."
 fn loneUse(t String&, i I64, w String&, ws Words&) Bool {
-    name := nameBefore(t, i)
+    name :~ nameBefore(t, i)
     if name.Len() == 0 or not ws.lone.Has(name): return false
     return w == ws.lone.Get(name)! or w == name
 }
@@ -211,7 +211,7 @@ fn newWord(t String&, i I64, w String&, owner String&, ws Words&) String {
         m := ws.byType.Get(owner)!
         if m.Has(w) and inBraces(t, i): return $m.Get(w)!
     }
-    name := nameBefore(t, i)
+    name :~ nameBefore(t, i)
     if name.Len() == 0 or not ws.byType.Has(name): return ""
     m := ws.byType.Get(name)!
     if not m.Has(w): return ""
@@ -235,7 +235,7 @@ fn wanted(path String&) Bool {
 
 # the files under a directory with one of the extensions read, build/ and .git/ left out
 fn walk(dir String&, out mut Vec<String&>&, all Bool) {
-    names := try os.ReadDir(dir) catch default Array<String&>(0)
+    names :~ try os.ReadDir(dir) catch default Array<String&>(0)
     for n in names {
         if n.StartsWith(".") or n == "build": continue
         p := srcmask.PathJoin(dir, n)
@@ -256,10 +256,10 @@ fn main() ? {
     verbose := false
     std := ""
     paths Vec<String&>
-    args := os.Args()
+    args :~ os.Args()
     i := 1
     for i < args.Len() {
-        a := args[i]
+        a :~ args[i]
         if a == "--check" {
             check = true
         } else if a == "-v" {
@@ -304,7 +304,7 @@ fn main() ? {
             os.Exit(1)
         }
     }
-    verb := "would change " if check else "changed "
+    verb :~ "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files: " + $total.n + " words")
     if check and changed > 0: os.Exit(1)
 }

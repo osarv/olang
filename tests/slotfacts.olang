@@ -87,8 +87,8 @@ type Pair struct(a View&, b View&) {
 }
 
 fn reassigned(v View&) I64 {
-    u := v
-    for u.depth > 0: u = u.Inner()
+    u :~ v
+    for u.depth > 0: u ~ u.Inner()
     return u.depth
 }
 
@@ -98,10 +98,10 @@ fn fresh(v View&) I64 {
 }
 
 fn walked(v View&) I64 {
-    u := v
+    u :~ v
     s := 0
     for u.depth > 0 {
-        u = u.Inner()
+        u ~ u.Inner()
         s = s * 10 + u.Depth()
     }
     return s
@@ -109,18 +109,18 @@ fn walked(v View&) I64 {
 
 # named by another local, or kept in a struct: each value has storage of its own
 fn aliased(v View&) I64 {
-    u := v
-    u = u.Inner()
-    w := u
-    u = u.Inner()
+    u :~ v
+    u ~ u.Inner()
+    w :~ u
+    u ~ u.Inner()
     return w.depth * 10 + u.depth
 }
 
 fn kept(v View&) I64 {
-    u := v
-    u = u.Inner()
+    u :~ v
+    u ~ u.Inner()
     p := Pair(u, v)
-    u = u.Inner()
+    u ~ u.Inner()
     return p.a.depth * 10 + p.b.depth + u.depth * 100
 }
 

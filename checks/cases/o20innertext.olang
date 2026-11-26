@@ -19,10 +19,10 @@ type CB struct() {
 }
 fn main() ? {
     c := CB()
-    b := c.box
+    b :~ c.box
     for i in range 3 {
         s := $i + "-new-text"
-        b.s = s
+        b.s ~ s
     }
     try io.PutLn(b.s)
 }

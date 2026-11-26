@@ -27,7 +27,7 @@ fn get(seed Node) Node& {
 }
 fn main() ? {
     s := Node(3)
-    r := get(s)
+    r :~ get(s)
     s.v = 4
     churn()
     try io.PutLn($r.v + " " + $s.v)

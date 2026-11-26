@@ -353,7 +353,7 @@ fn migrate(path String&, text String&, old Bool, c mut Result&) String {
             at = e
             c.changes++
         } else {
-            after := " after '" + $lop + "'" if lop.Len() > 0 else ""
+            after :~ " after '" + $lop + "'" if lop.Len() > 0 else ""
             c.left.Push($path + ":" + $lineOf(src, i) + ": a try" + $after + " read only up to '" + $op + "' when written before 2026-10-25, and reads on past it now - write '(try ...)' for the first, nothing for the second: " + $srcmask.Strip(lineText(src, i)))
         }
         i = e
@@ -367,9 +367,9 @@ fn main() ? {
     check := false
     verbose := false
     paths Vec<String&>
-    args := os.Args()
+    args :~ os.Args()
     for k in range 1, args.Len() {
-        a := args[k]
+        a :~ args[k]
         if a == "--old": old = true
         else if a == "--check": check = true
         else if a == "-v": verbose = true
@@ -402,7 +402,7 @@ fn main() ? {
             }
         }
     }
-    verb := "would change " if check else "changed "
+    verb :~ "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files: " + $total.changes + " rewrites")
     for l in total.left: srcmask.Say("by hand: " + $l)
     if check and changed > 0: os.Exit(1)

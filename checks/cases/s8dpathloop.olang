@@ -4,7 +4,7 @@ type N struct(v I64, next N?&) { v, next }
 fn touch(h N&) I64 { return h.v }
 fn sum(h N&) I64 {
     t I64 = 0
-    if h.next != null {
+    if h.next is not null {
         for i in range 3 {
             t += h.next.v
             t += touch(h)

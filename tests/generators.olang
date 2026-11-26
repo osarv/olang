@@ -367,8 +367,8 @@ test "D18c: a generator's elements borrowed from what it was given live where th
     assert kept.Len() == 6 and kept[0] == "alpha" and kept[4] == "beta" and kept[5] == "gamma"
     assert spans(t).Count(fn(w) { return w.Len() == 5 }) == 2
     g := spans(t)
-    a := try g.Next() catch default ""
-    b := try g.Next() catch default ""
+    a :~ try g.Next() catch default ""
+    b :~ try g.Next() catch default ""
     churnText()
     assert a == "alpha" and b == "beta"
     lens := Array<I64>[w.Len() for w in spans(t)]
@@ -409,10 +409,10 @@ LabelTotal := labelTotal(3) # baked while compiling (K2)
 
 test "D18c: a generator's elements kept by its walk live where the generator does" {
     g := labels(3)
-    a := try g.Next() catch default ""
-    b := try g.Next() catch default ""
+    a :~ try g.Next() catch default ""
+    b :~ try g.Next() catch default ""
     churnText()
-    c := try g.Next() catch default ""
+    c :~ try g.Next() catch default ""
     churnText()
     assert a == "label 0" and b == "label 1" and c == "label 2"
     pg := points(3)
@@ -696,7 +696,7 @@ fn walkedHeld() String {
     return s.Text()
 }
 
-fn unstarted(g Generator<I64>&) Bool { return g == g }
+fn unstarted(g Generator<I64>&) Bool { return g is g }
 
 fn walkedOwned() String {
     s := Seen()

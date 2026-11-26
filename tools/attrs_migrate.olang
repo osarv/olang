@@ -21,11 +21,11 @@ import "std/io"
 import "srcmask"
 
 fn main() ? io.Error {
-    args := os.Args()
+    args :~ os.Args()
     notes Vec<String>
     for k in range 1, args.Len() {
-        path := args[k]
-        text := try os.ReadFile(path) catch os.Error {
+        path :~ args[k]
+        text :~ try os.ReadFile(path) catch os.Error {
             try io.PutErrLn("attrs_migrate: " + $path + ": cannot be read")
             continue
         }
@@ -81,11 +81,11 @@ fn result.Of(text String&) result {
 fn aliases(text String&) Map<String, String> {
     out Map<String, String>
     for line in text.Lines() {
-        s := srcmask.Strip(line)
+        s :~ srcmask.Strip(line)
         if not s.StartsWith("import "): continue
         for lib in Array<String&>["json", "csv", "flags"] {
             if not s.EndsWith($"\"std/" + $lib + "\""): continue
-            words := s.Split(" ")
+            words :~ s.Split(" ")
             out.Put($lib, $words[1] if words.Len() == 3 else $lib)
         }
     }
@@ -119,7 +119,7 @@ fn attr.At(t String&, mask String&, i I64, libs Map<String, String>&) attr ? noA
         j := i + 1 + a.Len() + 1
         w := j
         for w < t.Len() and srcmask.IsWord(t[w]): w++
-        word := t[j:w]
+        word :~ t[j:w]
         if word == "Naming" {
             for w < t.Len() and (srcmask.IsWord(t[w]) or t[w] == '.'): w++
         }
@@ -150,7 +150,7 @@ fn declStart(t String&, mask String&, i I64) I64 {
     at := i
     for {
         k := lineStartAt(t, at)
-        s := srcmask.StripStart(t[k:])
+        s :~ srcmask.StripStart(t[k:])
         if s.StartsWith("type "): return k
         if k == 0: return k
         at = k - 1
@@ -177,7 +177,7 @@ fn typeMigrated(t String&, mask String&, at I64, libs Map<String, String>&) Stri
     n := kw + 5
     e := n
     for e < t.Len() and srcmask.IsWord(t[e]): e++
-    name := t[n:e]
+    name :~ t[n:e]
     if e < t.Len() and t[e] == '<': return $t, "an attribute on the generic type " + $name + " - give its key enum by hand, as a member alias"
     body := try bodyOpen(t, mask, e) catch noBody { return $t, "the type " + $name + " has no body the attributes stand in" }
     close := srcmask.CloseOf(t, mask, body)
@@ -301,9 +301,9 @@ fn declares(t String&, mask String&, p pair, libs Map<String, String>&) Bool {
     if i >= p.B or not srcmask.IsIdStart(t[i]) or mask[i] != 'c': return false
     j := i
     for j < p.B and srcmask.IsWord(t[j]): j++
-    word := t[i:j]
+    word :~ t[i:j]
     if word == "fn" or word == "if" or word == "for" or word == "assert" or word == "error" or word == "return": return false
-    rest := srcmask.Strip(t[j:p.B])
+    rest :~ srcmask.Strip(t[j:p.B])
     if rest == "" or rest.StartsWith(":=") or rest.StartsWith("#"): return true
     return srcmask.IsIdStart(rest[0]) or rest[0] == '['
 }

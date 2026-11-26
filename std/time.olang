@@ -83,7 +83,7 @@ fn Duration.Elapsed(t I64) Duration { return Duration(Now() - t) }
 fn (d Duration) Str() String {
     n := I64(d)
     if n == 0: return "0s"
-    sign := "-" if n < 0 else ""
+    sign :~ "-" if n < 0 else ""
     u U64 = U64(-n) if n < 0 else U64(n)            # the most negative I64 too
     if u < 1000: return $sign + $u + "ns"
     if u < 1000000: return $sign + $fraction(u, 1000) + "us"
@@ -361,7 +361,7 @@ fn LocalOffset(wall I64 = Wall()) I64 {
 if TargetOs != "windows" {
     # the offset localtime and strftime's %z give for the instant t holds, in seconds east of UTC
     fn offsetOf(t Array<I64>&) I64 {
-        tm := ctime.localtime(t)
+        tm :~ ctime.localtime(t)
         buf := Array<U8>(16)
         n := ctime.strftime(buf, 16, "%z\0", tm!)
         if n < 5: return 0                                    # "+hhmm"

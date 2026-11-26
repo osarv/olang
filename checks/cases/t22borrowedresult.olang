@@ -11,7 +11,7 @@ type N struct(v I64) {
 fn self(a mut N&) mut N& { return a }
 fn keep(f fn&(a mut N&) mut N&, out mut N&, i I64) {
     t := N(i)
-    out.next = f(t)
+    out.next ~ f(t)
 }
 fn churn() I64 {
     t := 0

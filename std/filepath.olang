@@ -148,10 +148,10 @@ type Error error {
 # ".". Fails with UNRELATED where no such path can be known without asking the file system: one path is absolute and
 # the other is not, or "base" climbs out of where "target" is through ".." ("../x" from "a")
 fn Rel(base String&, target String&) String ? Error {
-    b := Clean(base)
-    t := Clean(target)
+    b :~ Clean(base)
+    t :~ Clean(target)
     if t == b: return "."
-    if b == ".": b = b[:0]
+    if b == ".": b ~ b[:0]
     if IsAbs(b) != IsAbs(t): error Error.Unrelated
     bl := b.Len()
     tl := t.Len()
@@ -174,7 +174,7 @@ fn Rel(base String&, target String&) String ? Error {
     for i in range b0, bl {
         if b[i] == '/': ups++
     }
-    rest := t[t0:]
+    rest :~ t[t0:]
     out := Array<Char>(ups * 3 - 1 + (rest.Len() + 1 if rest.Len() > 0 else 0))
     w I64 = 0
     for k in range ups {
@@ -254,9 +254,9 @@ cleanCases := Array<String&>[
 fn cleanMisses() String {
     b := StringBuilder()
     for i in range 0, cleanCases.Len(), 2 {
-        got := Clean(cleanCases[i])
+        got :~ Clean(cleanCases[i])
         if got != cleanCases[i + 1] { b.Push($cleanCases[i] + " -> " + $got + "; ") }
-        again := Clean(got)                                     # cleaning a clean path changes nothing
+        again :~ Clean(got)                                     # cleaning a clean path changes nothing
         if again != got { b.Push($got + " again -> " + $again + "; ") }
     }
     return b.ToString()
@@ -269,10 +269,10 @@ test "Clean follows Go's rules, case for case" {
 
 test "Clean borrows the path where its clean form is the path's own beginning, and builds otherwise" {
     p String& = "a/b/c//"
-    q := Clean(p)
+    q :~ Clean(p)
     assert q == "a/b/c" and q == p[:5]
     r String& = "x/./y/../z"
-    s := Clean(r)
+    s :~ Clean(r)
     assert s == "x/z"
     t String& = "/usr/lib/"                                 # its last element is the empty one after its slash
     assert Dir(t) == t[:8] and Base(t) == t[5:8] and Ext("a.txt") == ".txt"
@@ -306,7 +306,7 @@ partCases := Array<String&>[
 fn partMisses() String {
     b := StringBuilder()
     for i in range 0, partCases.Len(), 3 {
-        p := partCases[i]
+        p :~ partCases[i]
         if Base(p) != partCases[i + 1] { b.Push("Base(" + $p + ") = " + $Base(p) + "; ") }
         if Dir(p) != partCases[i + 2] { b.Push("Dir(" + $p + ") = " + $Dir(p) + "; ") }
     }
@@ -398,8 +398,8 @@ test "Rel makes one path relative to another, Go's table case for case" {
 livePath mut String& = "x//y/./z/../w/"
 
 test "what filepath gives lives where it is put, evaluated at run time" {
-    c := Clean(livePath)
-    d := Dir(livePath)
+    c :~ Clean(livePath)
+    d :~ Dir(livePath)
     j := Join(livePath, "v")
     r := try Rel("x", livePath) catch default "!"
     assert churn() > 0

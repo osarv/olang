@@ -38,9 +38,9 @@ fn ints(a Array<F64>&) Array<I32> {
 }
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     if args.Len() < 5: error Usage.Args
-    mode := args[1]
+    mode :~ args[1]
     lanes := args[2] == "lanes"
     n := try args[3].ParseInt()
     passes := try args[4].ParseInt()

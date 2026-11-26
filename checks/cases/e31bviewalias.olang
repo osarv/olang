@@ -9,7 +9,7 @@ type Vs struct(d mut Array<I64>&) {
 }
 fn (s Vs&) At(i I64) V { return V(s.d, i) }
 fn f(v mut V&) {
-    w := v
+    w :~ v
     w.n = 3
 }
 

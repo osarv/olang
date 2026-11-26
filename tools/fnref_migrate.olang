@@ -58,11 +58,11 @@ fn migrate(path String&, src String&, marked mut Count&) String {
 # a Markdown text with its "```olang" blocks migrated
 fn migrateMarkdown(path String&, src String&, marked mut Count&) String {
     out := StringBuilder()
-    lines := src.Split("\n")
+    lines :~ src.Split("\n")
     inBlock := false
     block := StringBuilder()
     for k in range lines.Len() {
-        line := lines[k]
+        line :~ lines[k]
         if inBlock and line.StartsWith("```") {
             out.Push(migrate(path, block.ToString(), marked))
             block.Clear()
@@ -85,9 +85,9 @@ fn main() ? {
     check := false
     verbose := false
     paths Vec<String>
-    args := os.Args()
+    args :~ os.Args()
     for i in range 1, args.Len() {
-        a := args[i]
+        a :~ args[i]
         if a == "--check": check = true
         else if a == "-v": verbose = true
         else: paths.Push($a)
@@ -119,7 +119,7 @@ fn main() ? {
             os.Exit(1)
         }
     }
-    verb := "would change " if check else "changed "
+    verb :~ "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files: " + $total + " function types marked")
     if check and changed > 0: os.Exit(1)
 }

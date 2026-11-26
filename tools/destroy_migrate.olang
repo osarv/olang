@@ -16,10 +16,10 @@ import "std/io"
 import "srcmask"
 
 fn main() ? io.Error {
-    args := os.Args()
+    args :~ os.Args()
     for k in range 1, args.Len() {
-        path := args[k]
-        text := try os.ReadFile(path) catch os.Error {
+        path :~ args[k]
+        text :~ try os.ReadFile(path) catch os.Error {
             try io.PutErrLn("destroy_migrate: " + $path + ": cannot be read")
             continue
         }
@@ -35,7 +35,7 @@ fn main() ? io.Error {
 # the text without the lines that are only a Destroy() the holder's end does; what stays is added to left
 fn migrate(path String&, text String&, left mut Vec<String&>&) String {
     mask := srcmask.Mask(text, false)
-    lines := text.Split("\n")
+    lines :~ text.Split("\n")
     codes Vec<String&>
     for i in range lines.Len(): codes.Push(codeOf(lines, mask, i))
     drop := Array<Bool>(lines.Len(), false)
@@ -70,15 +70,15 @@ fn codeOf(lines Array<String&>&, mask String&, i I64) String& {
 
 # the variable a line `x.Destroy()`, `defer x.Destroy()` or `errdefer x.Destroy()` ends; "" for any other line
 fn destroyed(code String&) String {
-    rest := code
+    rest :~ code
     for p in Array<String&>["errdefer ", "defer "] {
         if rest.StartsWith(p) {
-            rest = rest[p.Len():]
+            rest ~ rest[p.Len():]
             break
         }
     }
     if not rest.EndsWith(".Destroy()"): return ""
-    name := rest[:rest.Len() - 10]
+    name :~ rest[:rest.Len() - 10]
     if name.Len() == 0: return ""
     for c in name {
         if not srcmask.IsWord(c): return ""
@@ -108,7 +108,7 @@ fn declaredIn(lines Array<String&>&, codes Vec<String&>&, i I64, name String&) B
         if codes[j] == "": continue
         if indent(lines[j]) < n: return false
         if indent(lines[j]) > n or not codes[j].StartsWith($name + " "): continue
-        after := codes[j][name.Len() + 1:]
+        after :~ codes[j][name.Len() + 1:]
         if after.StartsWith(":=") or (after.Len() > 0 and after[0].IsUpper()): return true
     }
     return false

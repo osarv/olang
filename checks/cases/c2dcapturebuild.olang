@@ -18,7 +18,7 @@ type Wr struct(h mut Node&) {
 }
 fn (b Bag&) Str() String {
     w := Wr(b.head)
-    f := fn() { w.hh.next = Node(5, null) }
+    f := fn() { w.hh.next ~ Node(5, null) }
     f()
     return "b"
 }

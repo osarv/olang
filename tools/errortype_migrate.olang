@@ -16,7 +16,7 @@ import "../compiler/token"
 type Count struct() { n I64 = 0 }
 
 fn migrate(src String&, c mut Count&) String {
-    ts := scan.Tokens.Scan(src).Toks
+    ts :~ scan.Tokens.Scan(src).Toks
     out := StringBuilder()
     at I64 = 0
     for i in range ts.Len() - 2 {
@@ -45,9 +45,9 @@ fn migrateMarkdown(src String&, n mut Count&) String {
     out := StringBuilder()
     block := StringBuilder()
     inBlock := false
-    lines := src.Split("\n")
+    lines :~ src.Split("\n")
     for k in range lines.Len() {
-        line := lines[k]
+        line :~ lines[k]
         last := k == lines.Len() - 1
         if inBlock and line.StartsWith("```") {
             out.Push(migrate(block.ToString(), n))
@@ -71,9 +71,9 @@ fn main() ? {
     check := false
     verbose := false
     paths Vec<String&>
-    args := os.Args()
+    args :~ os.Args()
     for i in range 1, args.Len() {
-        a := args[i]
+        a :~ args[i]
         if a == "--check": check = true
         else if a == "-v": verbose = true
         else: paths.Push($a)
@@ -106,7 +106,7 @@ fn main() ? {
             }
         }
     }
-    verb := "would change " if check else "changed "
+    verb :~ "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files: " + $total.n + " declarations")
     if check and changed > 0: os.Exit(1)
 }

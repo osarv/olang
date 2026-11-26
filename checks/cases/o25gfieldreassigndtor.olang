@@ -26,7 +26,7 @@ fn main() {
         inner := Tally()
         for k in range 100 {
             lg := Logged(k, inner)
-            lg.log = out
+            lg.log ~ out
         }
         inner.seen.Push(1)
     }

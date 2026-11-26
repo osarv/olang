@@ -64,8 +64,8 @@ fn outcome.compare(golden Vec<String&>&, got Vec<String&>&, allowed Array<String
             if not row.StartsWith("== "): r.same++
             continue
         }
-        gkey := key(g)
-        rkey := key(row)
+        gkey :~ key(g)
+        rkey :~ key(row)
         if rest(row) == "deferred" and rkey == gkey and rkey in ok {
             r.deferred++
             seen.Put(rkey, true)
@@ -84,7 +84,7 @@ fn outcome.compare(golden Vec<String&>&, got Vec<String&>&, allowed Array<String
             r.bad++
         }
     }
-    r.text = b.ToString()
+    r.text ~ b.ToString()
     return r
 }
 
@@ -110,7 +110,7 @@ fn field(row String&, n I64) String& {
 fn bodies(rows Vec<String&>&) Map<String&, String&> {
     m := Map<String&, String&>()
     for row in rows {
-        spelling := field(row, 2)
+        spelling :~ field(row, 2)
         if isInstance(spelling) and not m.Has(spelling): m.Put($spelling, $field(row, 3))
     }
     return m
@@ -123,7 +123,7 @@ fn isInstance(name String&) Bool { return genericLen(name) > 0 }
 # how much of an instance's name, after %", names its generic - 0 when the name is no instance's
 fn genericLen(name String&) I64 {
     if not name.StartsWith("%\"") or not name.EndsWith("\"") or name.Len() < 4: return 0
-    inner := name[2:name.Len() - 1]
+    inner :~ name[2:name.Len() - 1]
     lt := try inner.FindByte('<') catch default -1
     if lt > 0: return lt
     if inner.Len() <= 33 or inner[inner.Len() - 33] != '.': return 0
@@ -145,14 +145,14 @@ fn laidOut(row String&, names Map<String&, String&>&, depth I64) String {
         close := try row[start + 2:].FindByte('"') catch default -1
         if close < 0: break
         end := start + 2 + close + 1
-        name := row[start:end]
+        name :~ row[start:end]
         b.Push(row[at:start])
         n := genericLen(name)
         if n == 0 {
             b.Push(name)
         } else {
             b.Push("%\"" + $name[2:2 + n] + "<>\"")
-            body := try names.Get(name) catch default "?"
+            body :~ try names.Get(name) catch default "?"
             b.Push(laidOut(body, names, depth + 1) if depth < 16 else "...")
         }
         at = end

@@ -16,10 +16,10 @@ fn churn() I64 {
 }
 fn main() ? {
     b := B()
-    b.data = Array<P>(3)
+    b.data ~ Array<P>(3)
     for i in range 3: b.data[i] = P("p" + $i, i)
     e := b.data[1]
-    b.data = Array<P>(5)
+    b.data ~ Array<P>(5)
     churn()
     assert e.s == "p1" and e.n == 1 and b.data.Len() == 5 and b.data[0].n == 0
 }

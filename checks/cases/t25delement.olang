@@ -17,7 +17,7 @@ fn main() ? {
     keep := Vec<String&>()
     for k in range 3: keep.Push(Array<String&>["a", "b", "c"][k])
     w String& = "x"
-    for k in range 3: w = Array<String&>["a", "b", "c"][k]
+    for k in range 3: w ~ Array<String&>["a", "b", "c"][k]
     for nm in Array<String&>["ann", "bob"]: keep.Push(nm)
     op := " < "
     for k in range 5 {

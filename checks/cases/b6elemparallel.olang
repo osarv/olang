@@ -11,7 +11,7 @@ fn main() ? {
     for i in range 3 {
         x String& = "w" + $i
         k I64 = 0
-        cells[i].s, k = x, 1
+        cells[i].s, k ~ x, 1
         assert k == 1
     }
 }

@@ -16,7 +16,7 @@ type CB struct() {
 fn (c CB&) Text() String& { return c.text }
 fn (c CB&) Pick(trim Bool) String& {
     if trim: return c.Text()
-    t := c.Text()
+    t :~ c.Text()
     return t
 }
 G mut CB& = CB()
@@ -25,15 +25,15 @@ fn main() ? {
     v := Vec<I64>()
     v.Push(10)
     v.Push(20)
-    d := v.View()
+    d :~ v.View()
     s := d[0] + d[1]
     v.Push(30)
     churn()
     assert s == 30 and v.Len() == 3
     c := CB()
-    t := c.Pick(false)
+    t :~ c.Pick(false)
     n := t.Len()
-    c.text = "zzzz"
+    c.text ~ "zzzz"
     churn()
     assert n == 2 and c.Pick(true) == "zzzz" and GLen == 2
 }

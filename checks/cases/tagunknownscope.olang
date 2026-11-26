@@ -12,7 +12,7 @@ fn main() ? {
     k := a.v == 1
     {
         b Node& = Node(2)
-        l := a if k else b
+        l :~ a if k else b
         x Node& = Node(3)
         try io.PutLn($x.v + " " + $l.v)
     }

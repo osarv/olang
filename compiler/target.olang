@@ -50,7 +50,7 @@ AndroidApi I64 = 29
 # directory holding one)
 fn NdkClang() String {
     for name in Array<String&>["ANDROID_NDK_HOME", "ANDROID_NDK_ROOT"] {
-        dir := try os.Env(name) catch default ""
+        dir :~ try os.Env(name) catch default ""
         if dir == "": continue
         clang := $dir + "/toolchains/llvm/prebuilt/linux-x86_64/bin/clang"
         if executable(clang): return clang
@@ -63,7 +63,7 @@ fn NdkClang() String {
 fn androidLevel(triple String&) I64 {
     at := try triple.Find("-linux-android") catch default -1
     if at < 0: return 0
-    digits := triple[at + 14:]
+    digits :~ triple[at + 14:]
     if digits == "": return AndroidApi
     level I64 = 0
     for ch in digits {
@@ -125,9 +125,9 @@ fn cField(buf Array<U8>&) String {
 # release bundles beside the compiler (its directory's "../llvm/bin/clang"); else the newest of clang-20, clang-19,
 # clang-18 and clang found on PATH, by name (os.Exec looks it up the same way); "" when there is none
 fn FindClang() String {
-    env := try os.Env("OLANG_CLANG") catch default ""
+    env :~ try os.Env("OLANG_CLANG") catch default ""
     if env != "" { return $env if executable(env) else "" }
-    exe := try os.ReadLink("/proc/self/exe") catch default ""
+    exe :~ try os.ReadLink("/proc/self/exe") catch default ""
     slash := try exe.FindLast("/") catch default -1
     if slash >= 0 {
         bundled := $exe[:slash] + "/../llvm/bin/clang"
@@ -155,8 +155,8 @@ fn executable(name String&) Bool { return whereIs(name) != "" }
 # this process may run
 fn whereIs(name String&) String {
     if name.Contains("/") { return $name if unistd.access($name + "\0", unistd.X_OK) == 0 else "" }
-    path := try os.Env("PATH") catch default ""
-    dirs := path if path != "" else "/usr/local/bin:/usr/bin:/bin"
+    path :~ try os.Env("PATH") catch default ""
+    dirs :~ path if path != "" else "/usr/local/bin:/usr/bin:/bin"
     for dir in dirs.Split(":") {
         cand := $dir + "/" + $name if dir != "" else $name
         if unistd.access($cand + "\0", unistd.X_OK) == 0: return cand
@@ -176,7 +176,7 @@ fn Sysroot() String { return try os.Env("OLANG_SYSROOT") catch default "" }
 fn (t Target&) Runner() Array<String&> ? Bad {
     out Vec<String&>
     if not t.Foreign: return out.ToArray()
-    env := try os.Env("OLANG_EMULATOR") catch default ""
+    env :~ try os.Env("OLANG_EMULATOR") catch default ""
     if env != "" {
         for w in env.Split(" ") {
             if w != "": out.Push(w)
@@ -231,7 +231,7 @@ fn Target.Resolve(spec String&, clang String&, interpreting Bool, d mut diag.Dia
 fn Target.ResolveOn(spec String&, clang String&, interpreting Bool, hostOs String&, hostArch String&
     d mut diag.Diagnostics&, here String& = "") Target ? Bad {
     t := Target()
-    t.Spec = spec
+    t.Spec ~ spec
     # a triple begins with an architecture and a '-'; anything else is a CPU of this machine's architecture
     triple String& = ""
     cpu String& = spec
@@ -241,9 +241,9 @@ fn Target.ResolveOn(spec String&, clang String&, interpreting Bool, hostOs Strin
     if dash >= 0: ai = archIndex(spec[:dash])
     if ai >= 0 {
         colon := try spec.FindByte(':') catch default -1
-        triple = $spec[:colon] if colon >= 0 else $spec
+        triple ~ $spec[:colon] if colon >= 0 else $spec
         hasCpu = colon >= 0
-        cpu = $spec[colon + 1:] if colon >= 0 else ""
+        cpu ~ $spec[colon + 1:] if colon >= 0 else ""
         # the operating system part: Linux with the GNU C library, or Android's bionic on aarch64 (B12e) - the C
         # libraries whose facts the runtime knows
         t.Api = androidLevel(triple)
@@ -251,13 +251,13 @@ fn Target.ResolveOn(spec String&, clang String&, interpreting Bool, hostOs Strin
             if Archs[ai] != "aarch64": try refuse(d, msgs.TargetUnsupported(spec))
             if t.Api < AndroidApi: try refuse(d, msgs.TargetAndroidApi(spec))
             at := try triple.Find("-linux-android") catch default 0
-            triple = $triple[:at] + "-linux-android" + $t.Api
-            t.Os = "android"
+            triple ~ $triple[:at] + "-linux-android" + $t.Api
+            t.Os ~ "android"
         } else if windowsTriple(triple) {
             # B12f: Windows on x86-64, with mingw-w64's C runtime and import libraries - one triple however it is spelled
             if Archs[ai] != "x86_64": try refuse(d, msgs.TargetUnsupported(spec))
-            triple = "x86_64-w64-windows-gnu"
-            t.Os = "windows"
+            triple ~ "x86_64-w64-windows-gnu"
+            t.Os ~ "windows"
         } else if not (triple.Len() > 10 and triple.EndsWith("-linux-gnu")) {
             try refuse(d, msgs.TargetUnsupported(spec))
         }
@@ -271,14 +271,14 @@ fn Target.ResolveOn(spec String&, clang String&, interpreting Bool, hostOs Strin
         ai = archIndex(hostArch)
         if ai < 0: try refuse(d, msgs.TargetUnsupported(hostArch))
     }
-    t.Arch = $Archs[ai]
+    t.Arch ~ $Archs[ai]
     t.Foreign = Archs[ai] != hostArch or hostOs != "linux" or t.Os != "linux"
     # a triple naming this machine's architecture and system is this machine, with the triple's baseline CPU unless one
     # is given: built and linked as any other build for this machine
     if triple != "" and not t.Foreign {
-        triple = ""
+        triple ~ ""
         if not hasCpu {
-            cpu = $ArchDefaultCpus[ai]
+            cpu ~ $ArchDefaultCpus[ai]
             hasCpu = true
         }
     }
@@ -287,10 +287,10 @@ fn Target.ResolveOn(spec String&, clang String&, interpreting Bool, hostOs Strin
     if t.Foreign and here != "": try refuse(d, msgs.TargetForeignMode(here, spec))
     # B12e: Android is built for by the NDK's clang alone, whatever clang the build would use
     if t.Os == "android" {
-        t.Clang = NdkClang()
+        t.Clang ~ NdkClang()
         if t.Clang == "": try refuse(d, msgs.TargetNoNdk(spec))
     }
-    cc := t.Clang if t.Clang != "" else clang
+    cc :~ t.Clang if t.Clang != "" else clang
     # interpret runs the program without clang and needs one only to know the target: this machine's own CPU, or an
     # x86-64 level, it knows without - the level this processor supports standing for its CPU
     if cc == "" {
@@ -313,7 +313,7 @@ fn Target.ResolveOn(spec String&, clang String&, interpreting Bool, hostOs Strin
     # another architecture is built for only where this clang can generate all the code the runtime holds - BF16 among
     # it, which LLVM 18's AArch64 back end cannot select: an object it could not compile at the link is not built
     if t.Foreign and not canCompileBf16(cc, t.Triple): try refuse(d, msgs.TargetNoBackend(spec))
-    t.CpuFlag = $ArchCpuFlags[ai] + $t.Cpu # resolved: native is looked up once
+    t.CpuFlag ~ $ArchCpuFlags[ai] + $t.Cpu # resolved: native is looked up once
     return t
 }
 
@@ -331,16 +331,16 @@ type Probe error {
 # the triple, CPU, features and the attributes every function carries, read from what clang compiled the probe to: its
 # "target triple", "target datalayout" and "attributes #0" lines
 fn (t mut Target&) FromProbe(out String&) ? Probe {
-    tl := try field(out, "target triple = \"") catch { error Probe.Unknown }
-    dl := try field(out, "target datalayout = \"") catch { error Probe.Unknown }
+    tl :~ try field(out, "target triple = \"") catch { error Probe.Unknown }
+    dl :~ try field(out, "target datalayout = \"") catch { error Probe.Unknown }
     at := try out.Find("attributes #0 = {") catch { error Probe.Unknown }
     nl := try out[at:].FindByte('\n') catch default (out.Len() - at)
-    al := out[at:at + nl]
+    al :~ out[at:at + nl]
     # the layouts the compiler gives its types assume a 64-bit, little-endian machine (T4)
     if dl.Len() == 0 or dl[0] != 'e' or dl.Contains("-p:32") or dl.Contains("-p:16"): error Probe.Unsupported
-    t.Triple = tl
-    t.Cpu = $(try attrValue(al, "target-cpu") catch { error Probe.Unknown })
-    raw := try attrValue(al, "target-features") catch default ""
+    t.Triple ~ tl
+    t.Cpu ~ $(try attrValue(al, "target-cpu") catch { error Probe.Unknown })
+    raw :~ try attrValue(al, "target-features") catch default ""
     features := StripUnsafe(raw)
     t.PairDot = HasFeature(raw, "avx512bf16")
     t.TileDot = HasFeature(raw, "amx-bf16") and HasFeature(raw, "amx-tile")
@@ -355,18 +355,18 @@ fn (t mut Target&) FromProbe(out String&) ? Probe {
     # what every generated function carries: the CPU and features (and how far a scalable vector may reach), and the
     # vector width - told to the code generator outright, so the width the program reads (TargetVectorBits) is the one
     # its loops are vectorized for, whatever a CPU's own tuning would have preferred
-    tune := try attrValue(al, "tune-cpu") catch default ""
-    tuneAttr := $" \"tune-cpu\"=\"" + $tune + "\"" if tune != "" else ""
+    tune :~ try attrValue(al, "tune-cpu") catch default ""
+    tuneAttr :~ $" \"tune-cpu\"=\"" + $tune + "\"" if tune != "" else ""
     vsAttr String& = ""
     vs := try al.Find("vscale_range(") catch default -1
     if vs >= 0 {
         close := try al[vs:].FindByte(')') catch default -1
-        if close >= 0: vsAttr = $" " + $al[vs:vs + close + 1]
+        if close >= 0: vsAttr ~ $" " + $al[vs:vs + close + 1]
     }
     width := t.VectorBits if t.VectorBits > 0 else 128
-    t.Attrs = ($"\"target-cpu\"=\"" + $t.Cpu + "\" \"target-features\"=\"" + $features + "\"" + $tuneAttr + $vsAttr +
+    t.Attrs ~ ($"\"target-cpu\"=\"" + $t.Cpu + "\" \"target-features\"=\"" + $features + "\"" + $tuneAttr + $vsAttr +
         " \"prefer-vector-width\"=\"" + $width + "\"")
-    if t.Arch == "aarch64": t.Attrs = $t.Attrs + BranchProtection
+    if t.Arch == "aarch64": t.Attrs ~ $t.Attrs + BranchProtection
 }
 
 # what LLVM's linker (19 on) writes on every AArch64 function it moves from one module into another - a ThinLTO
@@ -444,9 +444,9 @@ fn HasRaceRuntime(clang String&, arch String&) Bool {
 # Only an answer with status 0 is kept, and only where keep is (interpret writes no file)
 fn ClangSays(args Array<String&>&, input String&, keep Bool) os.Output ? os.Error {
     key := probeKey(args, input)
-    path := $probeDir() + "/" + $U64(key.Hash()).Format(16) if key != "" else ""
+    path :~ $probeDir() + "/" + $U64(key.Hash()).Format(16) if key != "" else ""
     if path != "" {
-        text := try os.ReadFile(path) catch default ""
+        text :~ try os.ReadFile(path) catch default ""
         if text.Len() > key.Len() and text.StartsWith(key): return os.Output(0, $text[key.Len():], "")
     }
     out := try os.Output.Exec(...args, input = input)
@@ -460,9 +460,9 @@ fn ClangSays(args Array<String&>&, input String&, keep Bool) os.Output ? os.Erro
 }
 
 fn probeDir() String {
-    c := try os.Env("OLANG_CACHE") catch default ""
+    c :~ try os.Env("OLANG_CACHE") catch default ""
     if c != "": return $c + "/probe"
-    home := try os.Env("HOME") catch default "."
+    home :~ try os.Env("HOME") catch default "."
     return $home + "/.cache/olang/probe"
 }
 
@@ -472,7 +472,7 @@ fn probeKey(args Array<String&>&, input String&) String {
     if args.Len() == 0: return ""
     exe := whereIs(args[0])
     if exe == "": return ""
-    real := try os.RealPath(exe) catch default ""
+    real :~ try os.RealPath(exe) catch default ""
     info := try os.FileInfo.Stat(real) catch os.Error { return "" }
     b := StringBuilder()
     b.Push($"olang probe 1\n" + $real + " " + $info.Size + " " + $info.ModTime + "\n")
@@ -483,7 +483,7 @@ fn probeKey(args Array<String&>&, input String&) String {
 
 # this processor's model, as /proc/cpuinfo names it ("" where it cannot be read)
 fn cpuModel() String {
-    info := try os.ReadFile("/proc/cpuinfo") catch os.Error { return "" }
+    info :~ try os.ReadFile("/proc/cpuinfo") catch os.Error { return "" }
     for line in info.Lines() {
         if line.StartsWith("model name"): return $line
     }
@@ -494,7 +494,7 @@ fn cpuModel() String {
 
 # the flags of this processor, as /proc/cpuinfo lists them ("" where it cannot be read)
 fn cpuFlags() String {
-    info := try os.ReadFile("/proc/cpuinfo") catch os.Error { return "" }
+    info :~ try os.ReadFile("/proc/cpuinfo") catch os.Error { return "" }
     for line in info.Lines() {
         if line.StartsWith("flags") {
             colon := try line.FindByte(':') catch { return "" }
@@ -523,10 +523,10 @@ fn X86Level(flags String&) I64 {
 # B12: the target without clang (interpret only): "native" or an x86-64 level on an x86_64 machine - native the level
 # the processor whose flags are given supports - and "native" or "generic" on an aarch64 one. False for any other
 fn (t mut Target&) withoutClang(cpu String&, flags String&) Bool {
-    t.Triple = $t.Arch + "-unknown-linux-gnu"
+    t.Triple ~ $t.Arch + "-unknown-linux-gnu"
     if t.Arch == "aarch64" {
         if cpu != "native" and cpu != "generic": return false
-        t.Cpu = "generic"
+        t.Cpu ~ "generic"
         t.VectorBits = 128
         t.Fma = true
         return true
@@ -540,7 +540,7 @@ fn (t mut Target&) withoutClang(cpu String&, flags String&) Bool {
         case _: 0
     }
     if level == 0: return false
-    t.Cpu = "x86-64" if level == 1 else $"x86-64-v" + $level
+    t.Cpu ~ "x86-64" if level == 1 else $"x86-64-v" + $level
     t.VectorBits = 512 if level == 4 else (256 if level == 3 else 128)
     t.Fma = level >= 3
     return true
@@ -558,20 +558,20 @@ fn quiet() diag.Diagnostics { return diag.Diagnostics(false) }
 
 test "a probe gives the triple, the CPU, the features without the IEEE-unsafe ones, and the vector width" {
     t := Target()
-    t.Arch = "x86_64"
+    t.Arch ~ "x86_64"
     try t.FromProbe(SkylakeProbe) catch { unreachable }
     assert t.Triple == "x86_64-pc-linux-gnu"
     assert t.Cpu == "skylake-avx512"
     assert t.VectorBits == 512 and t.Fma and t.PairDot and not t.TileDot
     amx := Target()
-    amx.Arch = "x86_64"
+    amx.Arch ~ "x86_64"
     try amx.FromProbe(SkylakeProbe.Replace("+avx512f,", "+amx-bf16,+amx-tile,+avx512f,")) catch { unreachable }
     assert amx.TileDot and amx.Attrs.Contains("+amx-bf16")
     assert t.Attrs == "\"target-cpu\"=\"skylake-avx512\" \"target-features\"=\"+avx,-avx512bf16,+avx512f,+fma," + $
         "-avxneconvert,+sse2\" \"tune-cpu\"=\"generic\" \"prefer-vector-width\"=\"512\""
     # B3i: an AArch64 function carries what LLVM's linker writes on one it imports, so the one inlines into the other
     arm := Target()
-    arm.Arch = "aarch64"
+    arm.Arch ~ "aarch64"
     try arm.FromProbe(SkylakeProbe) catch { unreachable }
     assert arm.Attrs.EndsWith(BranchProtection) and not t.Attrs.Contains("sign-return-address")
     # a 32-bit machine's layout, and no attributes at all
@@ -583,7 +583,7 @@ test "a probe gives the triple, the CPU, the features without the IEEE-unsafe on
 # what FromProbe makes of a probe's output, as a word
 fn probeOutcome(text String&) String {
     t := Target()
-    t.Arch = "x86_64"
+    t.Arch ~ "x86_64"
     try t.FromProbe(text) catch Probe.Unknown { return "unknown" } catch Probe.Unsupported { return "unsupported" }
     return "ok"
 }
@@ -598,12 +598,12 @@ test "features read as clang lists them, and the x86-64 levels read from /proc/c
     assert X86Level(v3) == 3
     assert X86Level($v3 + "avx512f avx512bw avx512cd avx512dq avx512vl ") == 4
     t := Target()
-    t.Arch = "x86_64"
+    t.Arch ~ "x86_64"
     assert t.withoutClang("native", v3) and t.Cpu == "x86-64-v3" and t.VectorBits == 256 and t.Fma
     assert t.withoutClang("x86-64", "") and t.Cpu == "x86-64" and t.VectorBits == 128 and not t.Fma
     assert not t.withoutClang("skylake", v3)
     a := Target()
-    a.Arch = "aarch64"
+    a.Arch ~ "aarch64"
     assert a.withoutClang("native", "") and a.Cpu == "generic" and a.Triple == "aarch64-unknown-linux-gnu"
 }
 
@@ -690,7 +690,7 @@ test "B12a: this machine's programs run as they are, another architecture's thro
     here := Target()
     assert (try here.Runner() catch Bad { unreachable }).Len() == 0
     arm := Target()
-    arm.Arch = "aarch64"
+    arm.Arch ~ "aarch64"
     arm.Foreign = true
     run := try arm.Runner() catch Bad { return } # no emulator on this machine: nothing to run through
     assert run.Len() > 0 and run[0].Contains("/")

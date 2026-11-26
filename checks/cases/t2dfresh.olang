@@ -7,7 +7,7 @@ type Node struct(v I64) {
 }
 fn main() {
     n := Node(1)
-    n.next = Node(2)
-    n.prev = Node(0)
+    n.next ~ Node(2)
+    n.prev ~ Node(0)
     assert n.v == 1
 }

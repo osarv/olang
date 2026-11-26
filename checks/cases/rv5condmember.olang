@@ -21,10 +21,10 @@ fn churn() I64 {
     }
     return t
 }
-fn grow(b mut Box&) { b.head.next = Node(43) }
-fn growv(b Box) { b.head.next = Node(44) }
+fn grow(b mut Box&) { b.head.next ~ Node(43) }
+fn growv(b Box) { b.head.next ~ Node(44) }
 fn rd(n Node&) I64 {
-    if n.next == null: return 0
+    if n.next is null: return 0
     return n.next!.v
 }
 type W struct() { b Box = Box() }
@@ -33,7 +33,7 @@ fn pickwv(w mut W&) W { return w }
 fn main() ? {
     c := churn() < 0
     w1 mut W& = W()
-    k1 := w1.b.head
+    k1 :~ w1.b.head
     {
         w2 mut W& = W()
         h := (w1 if c else w2).b

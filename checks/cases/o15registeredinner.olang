@@ -20,7 +20,7 @@ type Grip unique struct(id I64) {
     id
     held Lamp?& = null
 } destruct {
-    if held != null {
+    if held is not null {
         assert held!.alive, "a Grip read its Lamp ended"
         held!.log.n += held!.id * 10
     }
@@ -30,7 +30,7 @@ fn run(t mut Tally&) {
     l Lamp = Lamp(10, t)
     {
         g := Grip(9)
-        g.held = l
+        g.held ~ l
     }
     assert t.n == 100
 }

@@ -263,7 +263,7 @@ fn (q mut parser&) escapedRune(c Char) U32 ? SyntaxError.BadEscape {
 # the ranges of [:name:], at the parser just after "[:"
 fn (q mut parser&) posixClass() ? SyntaxError.UnclosedClass, SyntaxError.BadRange {
     end := try q.t[q.at:].Find(":]") catch TextError { error SyntaxError.UnclosedClass(q.at) }
-    name := q.t[q.at:q.at + end]
+    name :~ q.t[q.at:q.at + end]
     q.at += end + 2
     match name {
         case "alnum" {
@@ -580,7 +580,7 @@ fn (q mut parser&) group() I64 ? SyntaxError {
             if not q.more() or q.peek() != '<': error SyntaxError.BadName(q.at)
             q.at++
             end := try q.t[q.at:].FindByte('>') catch TextError { error SyntaxError.BadName(q.at) }
-            name := q.t[q.at:q.at + end]
+            name :~ q.t[q.at:q.at + end]
             q.at += end + 1
             if name.Len() == 0 or name[0].IsDigit(): error SyntaxError.BadName(q.at)
             for c in name {
@@ -626,7 +626,7 @@ fn (q mut parser&) group() I64 ? SyntaxError {
 # ---- compiling ----
 
 fn (q mut parser&) emitNode(i I64) ? SyntaxError.TooBig {
-    p := q.p
+    p :~ q.p
     if p.op.Len() > maxProgram: error SyntaxError.TooBig(0)
     n := q.nodes[i]
     match n.kind {
@@ -713,7 +713,7 @@ fn (p mut prog&) findPrefix() {
         b.Push(try utf8.Encode(utf8.Rune(U32(p.x[pc]))) catch utf8.Error default "")
         pc++
     }
-    p.prefix = b.ToString()
+    p.prefix ~ b.ToString()
     p.anchored = pc < p.op.Len() and p.op[pc] == opAssert and p.x[pc] == atTextStart
 }
 
@@ -735,13 +735,13 @@ fn Regex.Compile(pattern String&) Regex ? SyntaxError {
     q.p.names.Push("")
     root := try q.alternation()
     if q.more() { error SyntaxError.UnmatchedParen(q.at) }        # only a ')' stops the top level early
-    p := q.p
+    p :~ q.p
     p.emit(opSave, 0, 0, 0)
     try q.emitNode(root)
     p.emit(opSave, 1, 0, 0)
     p.emit(opMatch, 0, 0, 0)
     p.findPrefix()
-    p.code = p.pack()
+    p.code ~ p.pack()
     p.dfaOK = true
     for pc in range p.op.Len() {
         if p.op[pc] == opAssert and not (pc == 1 and p.x[pc] == atTextStart): p.dfaOK = false
@@ -753,8 +753,8 @@ fn Regex.Compile(pattern String&) Regex ? SyntaxError {
     q.reverse = true
     try q.emitNode(root)
     p.emit(opMatch, 0, 0, 0)
-    p.rcode = p.pack()
-    p.rng = p.ranges.ToArray()
+    p.rcode ~ p.pack()
+    p.rng ~ p.ranges.ToArray()
     return Regex(p)
 }
 
@@ -792,8 +792,8 @@ fn runeAt(t String&, i I64) I64, I64 {
 }
 
 fn (p prog&) inClass(pc I64, r I64) Bool {
-    code := p.code
-    rng := p.rng
+    code :~ p.code
+    rng :~ p.rng
     from := code[4 * pc + 1]
     hit := false
     for k in range code[4 * pc + 2] {
@@ -821,7 +821,7 @@ type machine struct(of prog&, text String&, ncap I64) {
 
 # whether assertion a holds at byte i
 fn (m machine&) holds(a I64, i I64) Bool {
-    t := m.t
+    t :~ m.t
     match a {
         case atTextStart { return i == 0 }
         case atTextEnd { return i == t.Len() }
@@ -838,9 +838,9 @@ fn (m machine&) holds(a I64, i I64) Bool {
 # the thread at pc, with the captures in work, added to l at byte i - following jumps, splits (the preferred side
 # first), saves and assertions there and then, so a list holds only threads waiting on a code point or a match
 fn (m mut machine&) add(l mut threads&, pc0 I64, i I64) {
-    p := m.p
-    code := p.code
-    st := m.stack
+    p :~ m.p
+    code :~ p.code
+    st :~ m.stack
     sp I64 = 1
     st[0] = pc0
     for sp > 0 {
@@ -887,9 +887,9 @@ fn (m mut machine&) add(l mut threads&, pc0 I64, i I64) {
 # the leftmost-first match starting at or after byte from, its captures in m.best; whether there is one.
 # With "any", the first sign of a match is enough (ncap may be 0)
 fn (m mut machine&) run(from I64, found Bool) Bool {
-    p := m.p
-    code := p.code
-    t := m.t
+    p :~ m.p
+    code :~ p.code
+    t :~ m.t
     i := from
     m.clist.n = 0
     for {
@@ -932,9 +932,9 @@ fn (m mut machine&) run(from I64, found Bool) Bool {
             }
         }
         if r < 0: break
-        swap := m.clist
-        m.clist = m.nlist
-        m.nlist = swap
+        swap :~ m.clist
+        m.clist ~ m.nlist
+        m.nlist ~ swap
         i += w
     }
     return m.found
@@ -978,8 +978,8 @@ type dfa struct(of prog&, code Array<I64>&, longest Bool) {
 # the threads waiting on a code point that following pc reaches, appended to work - jumps, splits (preferred first),
 # saves, the leading ^ followed; each pc once per list (gen marks them)
 fn (d mut dfa&) closure(pc0 I64) {
-    c := d.c
-    st := d.stack
+    c :~ d.c
+    st :~ d.stack
     sp I64 = 1
     st[0] = pc0
     for sp > 0 {
@@ -1051,12 +1051,12 @@ fn (d mut dfa&) initial(none Bool) I64 {
 }
 
 fn (d dfa&) takes(pc I64, r I64) Bool {
-    c := d.c
+    c :~ d.c
     op := c[4 * pc]
     if op == opChar: return c[4 * pc + 1] == r
     if op == opAny: return r != '\n' or c[4 * pc + 2] == 1
     if op != opClass: return false
-    rng := d.p.rng
+    rng :~ d.p.rng
     base := c[4 * pc + 1]
     hit := false
     for k in range c[4 * pc + 2] {
@@ -1125,7 +1125,7 @@ fn (d mut dfa&) end(t String&, from I64, found Bool) I64 {
     s := start
     i := from
     last I64 = -1
-    prefix := d.p.prefix
+    prefix :~ d.p.prefix
     for {
         if s == start and prefix.Len() > 0 and last < 0 {
             at := try t[i:].Find(prefix) catch TextError default -1
@@ -1178,7 +1178,7 @@ fn locate(fw mut dfa&, bw mut dfa&, t String&, from I64) I64, I64 {
 
 # whether the pattern matches anywhere in t
 fn (re Regex&) Matches(t String&) Bool {
-    p := re.s
+    p :~ re.s
     if p.dfaOK and t.Len() >= dfaMinText {
         d := dfa(p, p.code, false)
         e := d.end(t, 0, true)
@@ -1239,7 +1239,7 @@ type searcher struct(of prog&, text String&, ncap I64) {
 
 # the leftmost-first match at or after byte from, in m.best; whether there is one
 fn (s mut searcher&) next(from I64) Bool {
-    m := s.m
+    m :~ s.m
     m.found = false
     m.only = -1
     if s.useDfa {
@@ -1279,7 +1279,7 @@ fn onFrom(t String&, start I64, end I64) I64 {
 fn (re Regex&) FindAll(t String&) Vec<Match> {
     out := Vec<Match>()
     sr := searcher(re.s, t, 2 * re.s.names.Len())
-    best := sr.m.best
+    best :~ sr.m.best
     from I64 = 0
     lastEnd I64 = -1
     for from <= t.Len() {
@@ -1298,7 +1298,7 @@ fn (re Regex&) FindAll(t String&) Vec<Match> {
 # how many matches FindAll would give
 fn (re Regex&) Count(t String&) I64 {
     sr := searcher(re.s, t, 2)
-    best := sr.m.best
+    best :~ sr.m.best
     n I64 = 0
     from I64 = 0
     lastEnd I64 = -1
@@ -1362,12 +1362,12 @@ fn expand(b mut StringBuilder&, re Regex&, m Match&, repl String&) {
                 i++
                 continue
             }
-            name = repl[i + 2:i + 2 + close]
+            name ~ repl[i + 2:i + 2 + close]
             i += close + 3
         } else if d.IsDigit() {
             j := i + 1
             for j < repl.Len() and repl[j].IsDigit(): j++
-            name = repl[i + 1:j]
+            name ~ repl[i + 1:j]
             i = j
         } else {
             b.PushChar(c)
@@ -1391,10 +1391,10 @@ fn (re Regex&) Split(t String&) mut Array<String&>& {
     pieces mut Array<String&>& = Array<String&>(all.Len() + 1)
     last I64 = 0
     for i, m in all {
-        pieces[i] = t[last:m.Start]
+        pieces[i] ~ t[last:m.Start]
         last = m.End
     }
-    pieces[all.Len()] = t[last:]
+    pieces[all.Len()] ~ t[last:]
     return pieces
 }
 
@@ -1528,7 +1528,7 @@ fn spans(re Regex&, t String&, dfaToo Bool) String {
     b := StringBuilder()
     from I64 = 0
     lastEnd I64 = -1
-    best := sr.m.best
+    best :~ sr.m.best
     for from <= t.Len() {
         if not sr.next(from): break
         if not (best[0] == best[1] and best[0] == lastEnd) {

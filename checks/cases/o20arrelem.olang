@@ -7,10 +7,10 @@ type B struct() {
     data mut Array<String&>& = Array<String&>(0)
 }
 fn fill(b mut B&) {
-    b.data = Array<String&>(2)
+    b.data ~ Array<String&>(2)
     for i in range 2 {
         t := $i
-        b.data[i] = t
+        b.data[i] ~ t
     }
 }
 fn main() ? {

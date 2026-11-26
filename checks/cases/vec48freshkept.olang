@@ -11,7 +11,7 @@ fn churn() I64 {
 }
 fn flat(v Vec<String&>&) mut Array<String&>& { return v.ToArray() }
 fn flat2(v Vec<String&>&) mut Array<String&>& {
-    a := v.ToArray()
+    a :~ v.ToArray()
     return a
 }
 fn fresh(n I64) mut Array<I64>& {
@@ -23,16 +23,16 @@ fn main() ? {
     v := Vec<String&>()
     v.Push("a")
     v.Push($2 + "b")
-    a := v.ToArray()
-    b := flat(v)
-    c := flat2(v)
+    a :~ v.ToArray()
+    b :~ flat(v)
+    c :~ flat2(v)
     d := v
     for _ in range 100: v.Push("y")
     churn()
     assert a[1] == "2b" and b[0] == "a" and c[1] == "2b" and d.Len() == 2 and v.Len() == 102
     w := Vec<I64>()
     w.Push(1)
-    e := fresh(w.Len() + 2)
+    e :~ fresh(w.Len() + 2)
     for i in range 100: w.Push(i)
     churn()
     assert e[2] == 20 and w.Len() == 101

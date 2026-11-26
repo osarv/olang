@@ -43,7 +43,7 @@ test "Repeat and Reverse" {
     s[0] = 'a'
     s.Reverse()                                          # text reverses byte by byte
     assert s == "xxa"
-    words := "c b a".Split(" ")
+    words :~ "c b a".Split(" ")
     words.Reverse()
     assert words.Join(" ") == "a b c"
 }
@@ -85,7 +85,7 @@ fn sortRecs(n I64, k I64) Array<sortRec> {
     keep := Array<String&>(n, "")
     out := Array<sortRec>(n, sortRec(0, 0, keep[0]))
     for i in range n {
-        keep[i] = $i
+        keep[i] ~ $i
         out[i] = sortRec((i * 7919 + 13) % k, i, keep[i])
     }
     return out
@@ -124,7 +124,7 @@ test "Sort orders elements holding references through positions, in blocks, stab
         a.Sort(fn(x, y) { return x.key < y.key })
         assert sortedStably(a), "records out of order at " + $n
     }
-    words := "pear fig apple kiwi banana fig date".Split(" ")
+    words :~ "pear fig apple kiwi banana fig date".Split(" ")
     words.Sort(fn(x, y) { return x < y })
     assert words.Join(" ") == "apple banana date fig fig kiwi pear"
 }
@@ -158,12 +158,12 @@ test "Chunks cuts an array into consecutive pieces, the last holding what is lef
     assert chunkLens(a, 10) == "10 " and chunkLens(a, 99) == "10 "
     e := Array<I64>(0)
     assert chunkLens(e, 3) == "" and e.Chunks(3).Len() == 0
-    p := a.Chunks(4)
+    p :~ a.Chunks(4)
     assert p[1][0] == 4 and p[2][1] == 9 and $p[2] == "Array<I64>[8, 9]"
     p[1][0] = 40                                         # a piece is a view: writing it writes the array
     assert a[4] == 40
     t Array<Char> = "abcdefg"                            # (writable pieces: text that may be written, T13a)
-    s := t.Chunks(3)
+    s :~ t.Chunks(3)
     assert s.Len() == 3 and String(s[2]) == "g" and String(s[0]) == "abc"     # text cut into pieces of Chars
 }
 

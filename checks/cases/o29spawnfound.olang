@@ -20,7 +20,7 @@ fn main() ? io.Error {
     total := 0
     for i in range 4 {
         inner mut Array<Node&>& = Array<Node&>(1, Node(0))
-        arr := outer if i < 2 else inner
+        arr :~ outer if i < 2 else inner
         join { spawn arr[0] = Node.mkNode(i + 50) }
         t := churn(20)
         total += inner[0].v + t

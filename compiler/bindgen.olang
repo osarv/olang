@@ -146,8 +146,8 @@ fn member(j json.Json&, key String&) json.Json?& {
 }
 
 fn text(j json.Json&, key String&) String {
-    m := member(j, key)
-    if m == null: return ""
+    m :~ member(j, key)
+    if m is null: return ""
     match m {
         case json.Json.Str(s) { return $s }
         case _ { return "" }
@@ -155,8 +155,8 @@ fn text(j json.Json&, key String&) String {
 }
 
 fn flag(j json.Json&, key String&) Bool {
-    m := member(j, key)
-    if m == null: return false
+    m :~ member(j, key)
+    if m is null: return false
     match m {
         case json.Json.Bool(v) { return v }
         case _ { return false }
@@ -165,15 +165,15 @@ fn flag(j json.Json&, key String&) Bool {
 
 # the type a declaration has, as clang spells it, its typedef names kept
 fn typeOf(j json.Json&) String {
-    t := member(j, "type")
-    if t == null: return ""
+    t :~ member(j, "type")
+    if t is null: return ""
     return text(t, "qualType")
 }
 
 # a node's children
 fn inner(j json.Json&) Array<json.Json&> {
-    m := member(j, "inner")
-    if m != null {
+    m :~ member(j, "inner")
+    if m is not null {
         match m {
             case json.Json.Arr(items) { return items }
             case _ { }
@@ -188,7 +188,7 @@ fn (g mut gen&) track(j json.Json&, probe String&) {
     match j {
         case json.Json.Obj(o) {
             for i in range o.Len() {
-                v := o.Values[i]
+                v :~ o.Values[i]
                 if o.Keys[i] == "includedFrom" { continue }     # the file that included this one: no location
                 if o.Keys[i] == "file" {
                     g.trackFile(v, probe)
@@ -235,12 +235,12 @@ fn noReturnOf(t String&) String {
 # the top-level declarations: each read once its location says which file it is in
 fn (g mut gen&) read(root json.Json&, probe String&) {
     for n in inner(root) {
-        loc := member(n, "loc")
-        if loc != null: g.track(loc, probe)
+        loc :~ member(n, "loc")
+        if loc is not null: g.track(loc, probe)
         where := g.file
         for k in Array<String&>["range", "type", "inner"] {
-            m := member(n, k)
-            if m != null: g.track(m, probe)
+            m :~ member(n, k)
+            if m is not null: g.track(m, probe)
         }
         kind := text(n, "kind")
         name := text(n, "name")
@@ -249,13 +249,13 @@ fn (g mut gen&) read(root json.Json&, probe String&) {
             g.typedefs.Put(name, t)
             # an unnamed struct a typedef names takes the typedef's name: "typedef struct { ... } Pair"
             for x in inner(n) {
-                owned := member(x, "ownedTagDecl")
-                if owned == null: continue
+                owned :~ member(x, "ownedTagDecl")
+                if owned is null: continue
                 r := try g.unnamed.Get(text(owned, "id")) catch default -1
                 if r >= 0 and (t.StartsWith("struct ") or t.StartsWith("union ")) {
                     g.recIndex.Put(t, r)
-                    g.recs[r].Key = t
-                    if g.recs[r].Typedef == "": g.recs[r].Typedef = $name
+                    g.recs[r].Key ~ t
+                    if g.recs[r].Typedef == "": g.recs[r].Typedef ~ $name
                 }
             }
             continue
@@ -344,7 +344,7 @@ fn constValue(j json.Json&) String {
 
 fn (g mut gen&) constant(name String&, v I64) {
     if not usable(name) or name in g.constNames: return
-    ty := "I32" if v >= -2147483648 and v <= 2147483647 else "I64"
+    ty :~ "I32" if v >= -2147483648 and v <= 2147483647 else "I64"
     g.consts.Push($name + " " + $ty + " = " + $v)
     g.constNames.Put(name, 0)
     g.taken.Put(name, 0)
@@ -473,7 +473,7 @@ fn (g mut gen&) typeName(p mut ctp&, depth I64) I64 {
         if named == "" or named == "(": return g.bad($"a " + $tag + " with no name")
         base = g.node(CKind.Rec, $tag + " " + $named)
     } else if named != "" {
-        td := try g.typedefs.Get(named) catch default ""
+        td :~ try g.typedefs.Get(named) catch default ""
         if td == "": return g.bad($"'" + $named + "', a type no declaration names")
         base = g.parseType(td, depth + 1)
     } else {
@@ -709,7 +709,7 @@ fn (g mut gen&) flatFields(i I64) String {
 
 fn gapLine(at I64, n I64, align I64) String {
     w := gapWord(at, n, align)
-    elem := "I64" if w == 8 else "I32" if w == 4 else "I16" if w == 2 else "U8"
+    elem :~ "I64" if w == 8 else "I32" if w == 4 else "I16" if w == 2 else "U8"
     return $"    c_gap" + $at + " := Array<" + $elem + ">(" + $(n / w) + ")\n"
 }
 
@@ -860,7 +860,7 @@ fn (g mut gen&) unionAccessors(i I64, flat Bool) String {
     b := StringBuilder()
     for k in range names.Len() {
         t := g.memberNumber(types[k])
-        m := names[k]
+        m :~ names[k]
         if t == "" or at[k] < 0 or not usable(m) or $"set_" + $m in taken: continue
         s := numBytes(t)
         if not flat {
@@ -961,11 +961,11 @@ fn numBits(t String&) I64 {
 # whether a struct or a union is held as opaque words (X18): complete, given back by no function, not plain data - its
 # size and alignment asked of clang, an alignment of 8 at most
 fn (g mut gen&) opaque(i I64) Bool {
-    c := g.recs.Ref(i)
+    c :~ g.recs.Ref(i)
     if not c.Complete or c.Returned: return false
     # (plain may read more records, growing g.recs: the reference taken again after it - M19g)
     if g.plain(i): return false
-    r := g.recs.Ref(i)
+    r :~ g.recs.Ref(i)
     return r.Size > 0 and r.Align > 0 and r.Align <= 8 and r.Size % r.Align == 0
 }
 
@@ -977,7 +977,7 @@ fn (g mut gen&) name(i I64) String { return $g.recs[i].Name }
 fn voidRef(ro Bool) String { return "CVoid?&" if ro else "mut CVoid?&" }
 
 fn (g mut gen&) skip(why String&) ? Skip {
-    g.why = why
+    g.why ~ why
     error Skip.Why
 }
 
@@ -1029,9 +1029,9 @@ fn (g mut gen&) fnSpelled(n ctype) String ? Skip {
 # form, else C's pointer of no type ("CVoid?&") - one taking variable arguments, say
 fn (g mut gen&) cFunc(n ctype) String {
     if n.Text == "variadic": return "CVoid?&"
-    why := g.why
+    why :~ g.why
     f := try g.fnSpelled(n) catch Skip default ""
-    g.why = why
+    g.why ~ why
     return "extern " + $f if f != "" else "CVoid?&"
 }
 
@@ -1082,7 +1082,7 @@ fn (g mut gen&) pointerParam(t I64, ro Bool) String ? Skip {
     n := g.nodes[t]
     match n.Kind {
         case CKind.Num {
-            e := "U8" if n.Text == "char" else $n.Text
+            e :~ "U8" if n.Text == "char" else $n.Text
             return "Array<" + $e + ">" if ro else "mut Array<" + $e + ">&"
         }
         case CKind.Rec {
@@ -1117,7 +1117,7 @@ fn (g mut gen&) pointerParam(t I64, ro Bool) String ? Skip {
 # declaration of the output has
 fn (g mut gen&) nameRecords() {
     for k in g.typedefs.Keys() {
-        t := try g.typedefs.Get(k) catch default ""
+        t :~ try g.typedefs.Get(k) catch default ""
         if (t.StartsWith("struct ") or t.StartsWith("union ")) and t not in g.byKey and usable(k): g.byKey.Put(t, k)
     }
     for i in range g.recs.Len() {
@@ -1129,16 +1129,16 @@ fn (g mut gen&) nameRecords() {
 
 # record i's name: the typedef td naming it, else its tag, made a name no other declaration of the output has
 fn (g mut gen&) nameRecord(i I64, td String&) {
-    key := g.recs[i].Key
+    key :~ g.recs[i].Key
     n := $td
-    if n != "" and g.recs[i].Typedef == "": g.recs[i].Typedef = $n
+    if n != "" and g.recs[i].Typedef == "": g.recs[i].Typedef ~ $n
     if n == "" {
         sp := try key.Find(" ") catch default -1
         n = $key[sp + 1:] if sp >= 0 else $key
     }
     if not usable(n): n = "c_" + $n
     for g.taken.Has(n) or preludeName(n): n = $n + "_t"
-    g.recs[i].Name = n
+    g.recs[i].Name ~ n
     g.taken.Put(n, 0)
 }
 
@@ -1150,7 +1150,7 @@ fn preludeName(n String&) Bool { return n in preludeNames }
 
 # how a C type is spelled for a size probe (X18): the typedef naming it, else its tag
 fn (g gen&) spell(i I64) String {
-    r := g.recs.Ref(i)
+    r :~ g.recs.Ref(i)
     if r.Typedef != "": return $r.Typedef
     return r.Key
 }
@@ -1239,7 +1239,7 @@ fn resultText(t String&) String {
         i--
     }
     if i <= 0: return ""
-    r := t[:i].Trim()
+    r :~ t[:i].Trim()
     if r.Contains("(") or r == "": return ""
     return r
 }
@@ -1258,7 +1258,7 @@ fn (g mut gen&) structDecl(i I64) String {
     b.Push("type " + $r.Name + " struct() {\n")
     if not plain {
         # opaque words of its size and alignment (X18): C's to read, the program's to hold in place
-        elem := "I64" if r.Align == 8 else "I32" if r.Align == 4 else "I16" if r.Align == 2 else "U8"
+        elem :~ "I64" if r.Align == 8 else "I32" if r.Align == 4 else "I16" if r.Align == 2 else "U8"
         b.Push($"    bytes := Array<" + $elem + ">(" + $(r.Size / r.Align) + ")\n}\n")
         b.Push(g.unionAccessors(i, false))
         return b.ToString()
@@ -1313,9 +1313,9 @@ fn (g mut gen&) write(head String&) String {
             continue
         }
         if g.all and (f.Static or f.Symbol != "") {
-            sym := f.Symbol
+            sym :~ f.Symbol
             if f.Static {
-                sym = try g.wrapper(f) catch Skip {
+                sym ~ try g.wrapper(f) catch Skip {
                     g.skipped.Push($f.Name + ": " + $g.why)
                     continue
                 }
@@ -1356,7 +1356,7 @@ fn (g mut gen&) write(head String&) String {
 # whether a record is declared: one a declaration reaches, or one the header defines - for an import, every complete
 # one with a name of its own
 fn (g gen&) wantRecord(i I64) Bool {
-    r := g.recs.Ref(i)
+    r :~ g.recs.Ref(i)
     if r.Used: return true
     if not g.all: return r.Own and r.Complete
     return r.Complete and not r.Name.StartsWith("c_")
@@ -1437,30 +1437,30 @@ fn (g mut gen&) readMacros(out String&, probe String&, own String&, deps mut Vec
         }
         if file.StartsWith("<") or file == probe: continue
         if line.StartsWith("#undef ") {
-            nm := line[7:].Trim()
+            nm :~ line[7:].Trim()
             k := try g.macroAt.Get(nm) catch default -1
-            if k >= 0: g.macros[k].Name = ""
+            if k >= 0: g.macros[k].Name ~ ""
             continue
         }
         if not line.StartsWith("#define "): continue
-        rest := line[8:]
+        rest :~ line[8:]
         e I64 = 0
         for e < rest.Len() and (rest[e].IsLetter() or rest[e].IsDigit() or rest[e] == '_'): e++
         if e == 0: continue
-        nm := rest[:e]
+        nm :~ rest[:e]
         isFn := e < rest.Len() and rest[e] == '('
         ps mut Vec<String&>& = Vec<String&>()
         variadic := false
-        body := rest[e:]
+        body :~ rest[e:]
         if isFn {
             close := try rest.FindByte(')') catch default -1
             if close < 0: continue
             for p in rest[e + 1:close].Split(",") {
-                pt := p.Trim()
+                pt :~ p.Trim()
                 if pt == "..." or pt.EndsWith("..."): variadic = true
                 else if pt != "": ps.Push(pt)
             }
-            body = rest[close + 1:]
+            body ~ rest[close + 1:]
         }
         m mut cMacro& = cMacro(nm, isFn, ps.ToArray(), cLex(body).ToArray(), file == own or own == "")
         m.Variadic = variadic
@@ -1481,7 +1481,7 @@ fn (g mut gen&) expand(toks Array<String&>&, hide mut Vec<String&>&, depth I64) 
     out Vec<String&>
     i I64 = 0
     for i < toks.Len() {
-        t := toks[i]
+        t :~ toks[i]
         if t == "#" or t == "##" { try g.skip("it uses # or ##, which make text rather than an expression") }
         k := try g.macroAt.Get(t) catch default -1
         if k < 0 or g.macros[k].Name == "" or t in hide {
@@ -1509,7 +1509,7 @@ fn (g mut gen&) expand(toks Array<String&>&, hide mut Vec<String&>&, depth I64) 
         level I64 = 0
         j := i + 2
         for j < toks.Len() {
-            a := toks[j]
+            a :~ toks[j]
             if a == "(": level++
             if a == ")" {
                 if level == 0: break
@@ -1711,7 +1711,7 @@ fn (g mut gen&) cPrimary(p mut cparse&) cx ? Skip {
     v := try g.enumVals.Get(t) catch default I64.Min
     if v != I64.Min { return cx.lit($"(" + $v + ")" if v < 0 else $v, KInt) }
     if p.at() == "(" {
-        r := try g.fnResults.Get(t) catch default ""
+        r :~ try g.fnResults.Get(t) catch default ""
         if r == "": try g.skip($"it calls " + $t + ", which is no function of numbers here")
         p.pos++
         b := StringBuilder()
@@ -1743,7 +1743,7 @@ fn (g mut gen&) cNumber(t String&) cx ? Skip {
     e := s.Len()
     for e > 0 and (s[e - 1] == 'u' or s[e - 1] == 'l' or (isFloat and s[e - 1] == 'f')): e--
     if isFloat and e < s.Len() and s[e] == 'l': try g.skip("a long double")
-    d := s[:e]
+    d :~ s[:e]
     if isFloat {
         b := StringBuilder()
         if d.StartsWith("."): b.PushChar('0')
@@ -1761,7 +1761,7 @@ fn (g mut gen&) cNumber(t String&) cx ? Skip {
 # a character literal's value, as C reads it: 'a', '\n', '\x41', '\101'
 fn charValue(t String&) I64 ? Skip {
     if t.Len() < 3: error Skip.Why
-    b := t[1:t.Len() - 1]
+    b :~ t[1:t.Len() - 1]
     if b[0] != '\\' {
         if b.Len() != 1: error Skip.Why
         return I64(U8(b[0]))
@@ -1990,17 +1990,17 @@ type Translation struct() {
 fn Translation.Translate(include String&, own String&, clang String&, flags Array<String&>&, tag String&, display String&) Translation {
     tr := Translation()
     if clang == "" {
-        tr.Why = "a C import needs clang, and there is none on the PATH"
+        tr.Why ~ "a C import needs clang, and there is none on the PATH"
         return tr
     }
-    dir := try os.MkTemp("", "olang-cimport") catch os.Error {
-        tr.Why = "a temporary directory cannot be made"
+    dir :~ try os.MkTemp("", "olang-cimport") catch os.Error {
+        tr.Why ~ "a temporary directory cannot be made"
         return tr
     }
     defer { try os.RemoveAll(dir) catch os.Error { } }
     probe := filepath.Join(dir, "probe.c")
     try os.WriteFile(probe, $include + "\n") catch os.Error {
-        tr.Why = "the probe cannot be written"
+        tr.Why ~ "the probe cannot be written"
         return tr
     }
     g := gen($own if own != "" else "")
@@ -2008,20 +2008,20 @@ fn Translation.Translate(include String&, own String&, clang String&, flags Arra
     for f in flags {
         if f.StartsWith("--target=") and f.Contains("-windows"): g.llp64 = true
     }
-    g.tag = tag
-    g.include = include
+    g.tag ~ tag
+    g.include ~ include
     # the macros and the files read: the preprocessor's output with its definitions
     pre Vec<String&>
     pre.Push(clang)
     for f in flags: pre.Push(f)
     for a in Array<String&>["-E", "-dD", "-x", "c", "-w", probe]: pre.Push(a)
     o := try clangSays(pre.ToArray()) catch Skip {
-        tr.Why = "clang could not be run"
+        tr.Why ~ "clang could not be run"
         return tr
     }
     if o.Status != 0 {
         tr.NotFound = o.Stderr.Contains("file not found")
-        tr.Why = firstError(o.Stderr)
+        tr.Why ~ firstError(o.Stderr)
         return tr
     }
     g.readMacros(o.Stdout, probe, "", tr.Deps)
@@ -2031,11 +2031,11 @@ fn Translation.Translate(include String&, own String&, clang String&, flags Arra
     pb.Push($include + "\n")
     for i, k in ints { pb.Push("enum __olang_m" + $i + " : long long { __olang_v" + $i + " = (" + $g.macros[k].Name + ") };\n") }
     try os.WriteFile(probe, pb.ToString()) catch os.Error {
-        tr.Why = "the probe cannot be written"
+        tr.Why ~ "the probe cannot be written"
         return tr
     }
-    doc := try g.dump(clang, flags, probe) catch Skip {
-        tr.Why = g.why
+    doc :~ try g.dump(clang, flags, probe) catch Skip {
+        tr.Why ~ g.why
         return tr
     }
     g.read(doc, probe)
@@ -2055,12 +2055,12 @@ fn Translation.Translate(include String&, own String&, clang String&, flags Arra
     g.otherConsts()
     # the sizes of what is held as opaque words (X18), asked in a probe of its own
     try g.sizes(clang, flags, probe, include) catch Skip {
-        tr.Why = g.why
+        tr.Why ~ g.why
         return tr
     }
-    tr.Text = g.write($"# olang's translation of " + $display + " (X17), made by the compiler: C's declarations as olang declares them\n")
+    tr.Text ~ g.write($"# olang's translation of " + $display + " (X17), made by the compiler: C's declarations as olang declares them\n")
     if g.wrappers.Len() > 0 or own != "" {
-        tr.C = $"/* olang C import: " + $display + " */\n" + $include + "\n" + $g.wrappers.ToString()
+        tr.C ~ $"/* olang C import: " + $display + " */\n" + $include + "\n" + $g.wrappers.ToString()
     }
     return tr
 }
@@ -2072,12 +2072,12 @@ fn (g mut gen&) dump(clang String&, flags Array<String&>&, probe String&) json.J
     for f in flags: args.Push(f)
     for a in Array<String&>["-x", "c", "-fsyntax-only", "-w", "-ferror-limit=0", "-Xclang", "-ast-dump=json", probe] { args.Push(a) }
     o := try clangSays(args.ToArray()) catch Skip {
-        g.why = "clang could not be run"
+        g.why ~ "clang could not be run"
         error Skip.Why
     }
     if o.Stdout.Len() == 0: try g.skip(firstError(o.Stderr))
     return try json.Json.Parse(o.Stdout) catch json.Error {
-        g.why = "clang's tree could not be read"
+        g.why ~ "clang's tree could not be read"
         error Skip.Why
     }
 }
@@ -2093,10 +2093,10 @@ fn (g mut gen&) sizes(clang String&, flags Array<String&>&, probe String&, inclu
     }
     want Vec<I64>
     for i in range g.recs.Len() {
-        c := g.recs.Ref(i)
+        c :~ g.recs.Ref(i)
         if not c.Complete or c.Returned: continue
         if g.plain(i): continue
-        r := g.recs.Ref(i)    # (plain may have grown g.recs - M19g)
+        r :~ g.recs.Ref(i)    # (plain may have grown g.recs - M19g)
         if r.Key == "" and r.Typedef == "": continue
         want.Push(i)
     }
@@ -2133,7 +2133,7 @@ fn (g mut gen&) sizes(clang String&, flags Array<String&>&, probe String&, inclu
         }
     }
     try os.WriteFile(probe, pb.ToString()) catch os.Error { try g.skip("the probe cannot be written") }
-    doc := try g.dump(clang, flags, probe)
+    doc :~ try g.dump(clang, flags, probe)
     for n in inner(doc) {
         nm := text(n, "name")
         if text(n, "kind") == "EnumDecl" and nm.StartsWith("__olang_m"): g.member(want, nm, n)
@@ -2157,7 +2157,7 @@ fn (g mut gen&) sizes(clang String&, flags Array<String&>&, probe String&, inclu
 
 # a probe's answer for a member of a struct with anonymous members ("__olang_mK_J"): its offset, size and alignment
 fn (g mut gen&) member(want Vec<I64>&, nm String&, n json.Json&) {
-    ids := nm[9:].Split("_")
+    ids :~ nm[9:].Split("_")
     if ids.Len() != 2: return
     k := try ids[0].ParseInt() catch default -1
     j := try ids[1].ParseInt() catch default -1
@@ -2167,7 +2167,7 @@ fn (g mut gen&) member(want Vec<I64>&, nm String&, n json.Json&) {
 
 # a probe's answer for a member of a struct's anonymous union ("__olang_uK_J"): its offset
 fn (g mut gen&) unionMember(want Vec<I64>&, nm String&, n json.Json&) {
-    ids := nm[9:].Split("_")
+    ids :~ nm[9:].Split("_")
     if ids.Len() != 2: return
     k := try ids[0].ParseInt() catch default -1
     j := try ids[1].ParseInt() catch default -1
@@ -2190,7 +2190,7 @@ fn run(path String&, output String&, clang String&, said mut io.Writer&) I32 {
         said.Write("olang: bindgen needs clang, which is not on the PATH\n")
         return 2
     }
-    header := try os.RealPath(path) catch os.Error {
+    header :~ try os.RealPath(path) catch os.Error {
         said.Write("olang: " + $path + ": no such file\n")
         return 2
     }
@@ -2198,7 +2198,7 @@ fn run(path String&, output String&, clang String&, said mut io.Writer&) I32 {
         said.Write("olang: " + $path + ": no such file\n")
         return 2
     }
-    dir := try os.MkTemp("", "olang-bindgen") catch os.Error {
+    dir :~ try os.MkTemp("", "olang-bindgen") catch os.Error {
         said.Write("olang: bindgen: cannot make a temporary directory\n")
         return 2
     }
@@ -2228,7 +2228,7 @@ fn run(path String&, output String&, clang String&, said mut io.Writer&) I32 {
         said.Write("olang: bindgen: cannot write " + $probe + "\n")
         return 2
     }
-    doc := try g.dump(clang, Array<String&>(0), probe) catch Skip {
+    doc :~ try g.dump(clang, Array<String&>(0), probe) catch Skip {
         said.Write("olang: bindgen: clang could not read " + $path + ": " + $g.why + "\n")
         return 1
     }

@@ -11,8 +11,8 @@ type Box struct() {
 type W struct(b Box) { b }
 fn f(src mut W&) {
     b := src.b
-    v := b.items[0:2]
-    v[1]!.next = Node()
+    v :~ b.items[0:2]
+    v[1]!.next ~ Node()
 }
 fn main() ? {
 }

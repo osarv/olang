@@ -6,7 +6,7 @@ type Box<T> struct(n I64) {
     data mut Array<T>& = Array<T>(0)
 }
 
-fn (b mut Box<T>&) Fill() { b.data = Array<T>(b.n) }
+fn (b mut Box<T>&) Fill() { b.data ~ Array<T>(b.n) }
 
 assert Box<I64>.Fill.Allocates
 assert Box.Fill.Allocates

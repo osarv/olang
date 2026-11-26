@@ -8,7 +8,7 @@ type Holder struct() {
 fn Holder.make() Holder {
     a := "alpha" + $3
     h := Holder()
-    h.names[0] = a
+    h.names[0] ~ a
     return h
 }
 fn churn() I64 {

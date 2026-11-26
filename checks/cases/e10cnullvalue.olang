@@ -2,5 +2,5 @@
 # E10c: a number is never null
 fn main() {
     x I64 = 3
-    assert x != null
+    assert x is not null
 }

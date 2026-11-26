@@ -27,7 +27,7 @@ fn readsRef(x Vec<I64>&) I64 { return x[0] + x[1] }
 
 # the resident peak, in KB (VmHWM)
 fn peak() I64 {
-    st := try os.ReadFile("/proc/self/status") catch default ""
+    st :~ try os.ReadFile("/proc/self/status") catch default ""
     for line in st.Lines() {
         if line.StartsWith("VmHWM:"): return try line[6:line.Len() - 3].Trim().ParseInt(10) catch default 0
     }

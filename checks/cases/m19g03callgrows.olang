@@ -7,7 +7,7 @@ fn fill(w mut Vec<I64>&, n I64) { for i in range n { w.Push(i) } }
 fn main() ? {
     v := Vec<I64>()
     v.Push(1)
-    d := v.View()
+    d :~ v.View()
     fill(v, 100)
     try io.PutLn($d[0])
 }

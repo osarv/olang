@@ -10,7 +10,7 @@ type W struct(b Box) {
 }
 fn (b Box&) size() I64 { return b.Data.Len() }
 fn (b mut Box&) regrow(v I64) {
-    b.Data = Array<I64>(8, v)
+    b.Data ~ Array<I64>(8, v)
 }
 fn W.make(n I64) W {
     b := Box(n)

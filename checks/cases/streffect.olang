@@ -7,7 +7,7 @@ type Pt struct(n I32) {
 }
 fn (p Pt&) Str() String {
     Shown++
-    Seen = $Seen + $p.n
+    Seen ~ $Seen + $p.n
     return "pt"
 }
 type Two struct(a Pt, b Pt) {

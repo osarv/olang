@@ -20,8 +20,8 @@ fn overflowTask() {
 }
 
 fn main() ? {
-    args := os.Args()
-    how := args[1] if args.Len() > 1 else ""
+    args :~ os.Args()
+    how :~ args[1] if args.Len() > 1 else ""
     os.OnCrash("crash.olang crashed: " + $how + "\n")
     c mut Cell& = Cell()
     match how {

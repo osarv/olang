@@ -4,7 +4,7 @@ type N struct(v I64) { v }
 fn a() I64 {
     x N&
     f := fn() I64 { return x.v }
-    x = N(1)
+    x ~ N(1)
     return f()
 }
 fn main() { a() }

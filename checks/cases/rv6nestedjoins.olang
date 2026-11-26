@@ -11,7 +11,7 @@ fn inner(n Node&, f fn&(i I64) I64) I64 {
     s I64 = 0
     for i in range 10000 {
         s += f(i)
-        m := mk(n, i)
+        m :~ mk(n, i)
         s += m.v
     }
     return s
@@ -28,7 +28,7 @@ fn main() ? {
     root Node& = Node(0)
     n Node& = Node(1)
     f := fn(i I64) I64 {
-        m := mk(root, i)
+        m :~ mk(root, i)
         return m.v
     }
     x, y, z I64
@@ -37,7 +37,7 @@ fn main() ? {
         spawn y = outer(n, f)
         for i in range 10000 {
             z += f(i)
-            m := mk(n, i)
+            m :~ mk(n, i)
             z += m.v
         }
     }

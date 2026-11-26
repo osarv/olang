@@ -22,7 +22,7 @@ fn Println<T>(x T = "", at Place = Place.Here) { writeOut($x + "\n", at)! }
 fn writeOut(t String&, at Place) ? output {
     sent I64 = 0
     for sent < t.Len() {
-        tail := t[sent:]
+        tail :~ t[sent:]
         n := sysWrite(1, tail)
         if n < 0: error output.Refused($at)
         if n == 0: error output.Stalled($at)

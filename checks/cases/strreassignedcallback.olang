@@ -13,7 +13,7 @@ type Bag struct(head mut Node&) {
     head
 }
 fn hook(g fn&(x mut Node&), n mut Node&) {
-    g = fn(x mut Node&) { x.next = Node(x.v + 100) }
+    g = fn(x mut Node&) { x.next ~ Node(x.v + 100) }
     g(n)
 }
 fn (b Bag&) Str() String {

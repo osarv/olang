@@ -1,0 +1,14 @@
+# check: fail error[S4f]: '=' writes what 'r' names, and it is a Pt?&, which may be null
+# S4f: "=" given a reference writes the whole of what it names - a reference that may be null is written through only
+# where a test says it is not
+type Pt struct(x I64, y I64) {
+    x, y
+}
+
+fn main() {
+    p := Pt(1, 2)
+    r mut Pt?& = null
+    if p.x > 0: r ~ p
+    r = Pt(3, 4)
+    assert p.x == 3
+}

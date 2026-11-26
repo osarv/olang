@@ -3,6 +3,6 @@
 extern fn x13a_get() extern fn?&(x I32) I32
 
 fn main() {
-    p := x13a_get()
+    p :~ x13a_get()
     p(3)
 }

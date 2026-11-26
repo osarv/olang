@@ -27,7 +27,7 @@ test "a struct element is a copy over a ViewMut: the index form writes the slot"
     ps := Vec<P>[]
     ps.Push(P(1, $"a"))
     ps.Push(P(2, $"b"))
-    w := ps.ViewMut()
+    w :~ ps.ViewMut()
     for i, p in w {
         q := p
         q.x = 99            # a copy of the copy, read after
@@ -62,8 +62,8 @@ type Node struct(v I64, self mut Node?&) {
 
 test "a write through a held reference to the very slot: the name is the snapshot, the slot changes" {
     a := Array<Node>[Node(1, null), Node(2, null)]
-    a[0].self = a[0]
-    a[1].self = a[0]    # the other slot
+    a[0].self ~ a[0]
+    a[1].self ~ a[0]    # the other slot
     seen I64 = 0
     for x in a {
         x.self!.v += 10
@@ -111,8 +111,8 @@ type Named struct(n I64, name String, me mut Named?&) {
 
 test "an element holding text, written through its own reference: the name keeps what the slot held" {
     a := Array<Named>[Named(1, $"one", null), Named(2, $"two", null)]
-    a[0].me = a[0]
-    a[1].me = a[1]
+    a[0].me ~ a[0]
+    a[1].me ~ a[1]
     for x in a {
         was := $x.name
         x.me!.name = $x.name + "!" + $churn()
@@ -125,8 +125,8 @@ test "an element holding text, written through its own reference: the name keeps
 
 fn selfSlot() I64 {
     a := Array<Node>[Node(1, null), Node(2, null)]
-    a[0].self = a[0]
-    a[1].self = a[0]
+    a[0].self ~ a[0]
+    a[1].self ~ a[0]
     seen I64 = 0
     for x in a {
         x.self!.v += 10

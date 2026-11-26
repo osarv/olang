@@ -10,7 +10,7 @@ type Opt enum { None, Some(v F32) }
 type Packed struct(has Bool, v F32) { has, v }
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     n := try args[2].ParseInt()
     passes := try args[3].ParseInt()
     s F64 = 0.0

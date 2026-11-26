@@ -14,7 +14,7 @@ type Box struct() {
 type W struct(b Box) { b }
 fn tie(b mut Box&) {
     b.data[1] = 42
-    b.head.view = b.data
+    b.head.view ~ b.data
 }
 fn bump(src mut W&) {
     b := src.b

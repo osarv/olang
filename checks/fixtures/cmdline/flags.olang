@@ -6,6 +6,6 @@ Port I64 = 8080
 
 fn main() {
     Println("IO " + $IO + " port " + $Port)
-    args := os.Args()
+    args :~ os.Args()
     for i in range 1, args.Len(): Println("arg " + $args[i])
 }

@@ -14,7 +14,7 @@ type W struct(v V&) {
 }
 fn put(v V&) {
     w := W(v)
-    w.v.n.next = N(5)
+    w.v.n.next ~ N(5)
 }
 fn outer(v V) { put(v) }
 fn main() {

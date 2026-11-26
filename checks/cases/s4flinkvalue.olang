@@ -1,0 +1,8 @@
+# check: fail error[S4f]: '~' links a reference, and 'x' holds a value (I64)
+# S4f: "~" links a reference; a value is stored into with "="
+fn main() {
+    x I64 = 1
+    y I64 = 2
+    x ~ y
+    assert x == 1
+}

@@ -27,10 +27,10 @@ type Node struct(v I64, next Node?& = null) { v, next }
 
 fn total(n Node?&) I64 {
     s := 0
-    p := n
-    for p != null {
+    p :~ n
+    for p is not null {
         s += p.v
-        p = p.next
+        p ~ p.next
     }
     return s
 }
@@ -55,7 +55,7 @@ fn area(s any Shape&, k I64) I64 { return s.Area(scale = k) }
 type Log struct(b mut StringBuilder&) { b }
 fn steps(seed String&) String {
     lg := Log(StringBuilder())
-    b := lg.b
+    b :~ lg.b
     b.Push(seed)
     step := fn(c String&) I64 {
         b.Push(c)

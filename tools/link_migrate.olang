@@ -17,10 +17,10 @@ import "std/os"
 import "std/io"
 
 fn main() ? io.Error {
-    args := os.Args()
+    args :~ os.Args()
     for k in range 1, args.Len() {
-        path := args[k]
-        text := try os.ReadFile(path) catch os.Error {
+        path :~ args[k]
+        text :~ try os.ReadFile(path) catch os.Error {
             try io.PutErrLn("link_migrate: " + $path + ": cannot be read")
             continue
         }
@@ -35,9 +35,9 @@ fn main() ? io.Error {
 # the library a top-level link line names, its quotes kept - "" for any other line
 fn linkOf(line String&) String {
     if not line.StartsWith("link \""): return ""
-    t := line.Trim()
+    t :~ line.Trim()
     close := try t[6:].FindByte('"') catch { return "" }
-    rest := t[7 + close:].Trim()
+    rest :~ t[7 + close:].Trim()
     if rest != "" and not rest.StartsWith("#"): return ""
     return $t[5:7 + close]
 }
@@ -45,7 +45,7 @@ fn linkOf(line String&) String {
 fn isExtern(line String&) Bool { return line.StartsWith("extern fn ") or line.StartsWith("extern type ") }
 
 fn migrate(text String&) String {
-    lines := text.Split("\n")
+    lines :~ text.Split("\n")
     links Vec<String&>
     for l in lines {
         n := linkOf(l)

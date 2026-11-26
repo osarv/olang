@@ -40,7 +40,7 @@ fn fromPort(out String&) {
     kept I64 = 0
     dropped I64 = 0
     for i in range old.Len() {
-        row := got[i]
+        row :~ got[i]
         gone := row.EndsWith("\tunparsed") or row.EndsWith("\tdeferred") and typeOf(row) not in allowed
         if gone {
             toolkit.Say("layoutgold: dropped, no longer a type: " + $typeOf(row) + "\n")
@@ -48,7 +48,7 @@ fn fromPort(out String&) {
             continue
         }
         if row.EndsWith("\tdeferred") {
-            row = old[i]
+            row ~ old[i]
             kept++
         }
         b.Push(row)

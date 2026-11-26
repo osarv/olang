@@ -86,7 +86,7 @@ fn args(n I64) I64 {
         rows := Array<Vec<I64>>(2, Vec<I64>())
         for k in range 2: rows[k] = mk(k + i)
         w := W(mk(i * 5))
-        r := pick(rows, w)
+        r :~ pick(rows, w)
         w.v = mk(i * 3)
         t += r[1] + w.v[2]
     }

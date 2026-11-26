@@ -17,13 +17,13 @@ fn churn() I64 {
 }
 fn setg(i I64) I64 {
     k I64 = 0
-    G.next, k = Node(i), i
+    G.next, k ~ Node(i), i
     return k
 }
 fn main() ? {
     k := setg(5)
     x := churn()
-    G.next!.next, x = Node(9), x + 1
+    G.next!.next, x ~ Node(9), x + 1
     churn()
     assert not (k != 5 or G.next!.v != 5 or G.next!.next!.v != 9 or x != 1226)
 }

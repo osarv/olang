@@ -40,7 +40,7 @@ fn viaLocal(n I64) I64 {
     views := Vec<Array<I64>&>()
     for k in range n {
         h H = H(k + 1)
-        v := first2(h)
+        v :~ first2(h)
         views.Push(v)
     }
     churn()

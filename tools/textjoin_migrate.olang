@@ -165,9 +165,9 @@ fn migrateMarkdown(src String&, n mut Count&) String {
     out := StringBuilder()
     block := StringBuilder()
     fence := ""
-    lines := src.Split("\n")
+    lines :~ src.Split("\n")
     for k in range lines.Len() {
-        line := lines[k]
+        line :~ lines[k]
         if fence == "olang" and line.StartsWith("```") {
             out.Push(migrateFragment(block.ToString(), n))
             block.Clear()
@@ -195,17 +195,17 @@ fn migrateMarkdown(src String&, n mut Count&) String {
 fn main() ? {
     check := false
     verbose := false
-    std := try os.Env("OLANG_STD") catch default "std"
+    std :~ try os.Env("OLANG_STD") catch default "std"
     paths Vec<String&>
-    args := os.Args()
+    args :~ os.Args()
     i := 1
     for i < args.Len() {
-        a := args[i]
+        a :~ args[i]
         i++
         if a == "--check": check = true
         else if a == "-v": verbose = true
         else if a == "--std" and i < args.Len() {
-            std = $args[i]
+            std ~ $args[i]
             i++
         } else: paths.Push($a)
     }
@@ -238,7 +238,7 @@ fn main() ? {
             os.Exit(1)
         }
     }
-    verb := "would change " if check else "changed "
+    verb :~ "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files: " + $total.joins + " joins, " + $total.plus + " '+' written, " + $total.wrapped + " parenthesized")
     if check and changed > 0: os.Exit(1)
 }

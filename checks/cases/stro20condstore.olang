@@ -11,7 +11,7 @@ type Hold struct() {
     f P?& = null
     arr mut Array<P?&>& = Array<P?&>(2, null)
 }
-fn put(h mut Hold&, n P&) { h.f = n }
+fn put(h mut Hold&, n P&) { h.f ~ n }
 fn churn() I64 {
     t I64 = 0
     for _ in range 300 {
@@ -24,7 +24,7 @@ fn main() ? {
     h mut Hold& = Hold()
     for i in range 1 {
         local P& = P(42)
-        h.f = match i {
+        h.f ~ match i {
             case 0: local
             case _: P(7)
         }
@@ -33,7 +33,7 @@ fn main() ? {
     try io.PutLn($h.f!.v)
     for i in range 1 {
         local P& = P(43)
-        h.arr[0] = local if i == 0 else P(7)
+        h.arr[0] ~ local if i == 0 else P(7)
     }
     churn()
     try io.PutLn($h.arr[0]!.v)
@@ -45,14 +45,14 @@ fn main() ? {
     try io.PutLn($h.f!.v)
     for i in range 1 {
         local P& = P(45)
-        x := local if i == 0 else P(7)
-        h.f = x
+        x :~ local if i == 0 else P(7)
+        h.f ~ x
     }
     churn()
     try io.PutLn($h.f!.v)
     for i in range 1 {
         local P& = P(46)
-        h.f = (local if i == 0 else P(7)) if i < 5 else P(8)
+        h.f ~ (local if i == 0 else P(7)) if i < 5 else P(8)
     }
     churn()
     try io.PutLn($h.f!.v)

@@ -10,7 +10,7 @@ type View struct(of Node&) {
     n Node& = of
 }
 fn peek(w View&) I64 {
-    r := w.n
+    r :~ w.n
     x Node& = Node(5)
     return x.v + r.v
 }

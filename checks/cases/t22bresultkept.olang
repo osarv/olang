@@ -25,7 +25,7 @@ fn churn(n I64) I64 {
 }
 fn use(f fn&(a mut Vec<N&>&) N&, a mut Vec<N&>&) {
     {
-        r := f(a)
+        r :~ f(a)
         assert r.v == 5
     }
 }

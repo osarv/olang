@@ -1,0 +1,9 @@
+# check: fail error[S4f]: ':~' declares a reference to storage that exists, and 'Node(2)' is a new value
+# S4f: ":~" declares a reference to a variable, a field or what another reference names - a value built where it is
+# given is declared with ":=" ("r ~ Node(2)" links a reference held elsewhere to a new value, built where it is held)
+type Node struct(v I64) { v }
+
+fn main() {
+    r :~ Node(2)
+    assert r.v == 2
+}

@@ -12,8 +12,8 @@ fn gen(n I64) Iterator<I64> {
 }
 
 fn main() ? {
-    args := os.Args()
-    mode := args[1]
+    args :~ os.Args()
+    mode :~ args[1]
     n := try args[2].ParseInt()
     passes := try args[3].ParseInt()
     a := Array<I64>[(i * 7) % 1000 for i in range n]

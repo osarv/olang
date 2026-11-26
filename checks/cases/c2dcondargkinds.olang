@@ -60,7 +60,7 @@ fn W.orNull(t String&, at I64) W {
 }
 
 fn E.local(t String&, at I64) E {
-    b := mk(t) if at >= 0 else ""
+    b :~ mk(t) if at >= 0 else ""
     return E($t, b)
 }
 

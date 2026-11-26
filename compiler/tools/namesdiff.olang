@@ -15,7 +15,7 @@ fn main() {
     dump := toolkit.Env("NAMESDIFF_DUMP", "build/compiler_tools_dump")
     golden := "compiler/goldens/diag.txt"
     if not toolkit.Built(dump): toolkit.Die("namesdiff: " + $dump + " is not built (make " + $dump + ")")
-    root := try os.Cwd() catch os.Error {
+    root :~ try os.Cwd() catch os.Error {
         toolkit.Die("namesdiff: no working directory")
         unreachable
     }
@@ -28,8 +28,8 @@ fn main() {
     said := StringBuilder()
     plain := Vec<String&>()
     for c in cases {
-        text := try os.ReadFile("checks/cases/" + $c) catch default ""
-        args := flagArgs(flagsOf(text))
+        text :~ try os.ReadFile("checks/cases/" + $c) catch default ""
+        args :~ flagArgs(flagsOf(text))
         if args.Len() == 0: plain.Push(c)
         else: said.Push(names(root, dump, args, Array<String&>[c]))
     }
@@ -46,7 +46,7 @@ fn main() {
     }
     old := toolkit.Text(toolkit.Sorted(kept))
     if old != new {
-        work := toolkit.Scratch("namesdiff")
+        work :~ toolkit.Scratch("namesdiff")
         defer: toolkit.Clean(work)
         toolkit.Say("namesdiff: stage 0 (<) and the self-hosted load and names (>) differ:\n")
         toolkit.Say(toolkit.Head(toolkit.Changes(toolkit.Diff(work, old, new)), 40))
@@ -107,20 +107,20 @@ fn rows(text String&) Vec<String&> {
     c String& = ""
     for line in toolkit.Rows(text) {
         if line.StartsWith("=== ") {
-            c = $toolkit.Fields(line)[1]
+            c ~ $toolkit.Fields(line)[1]
             continue
         }
         if line.StartsWith("== ") {
-            c = $toolkit.Fields(line)[1]
+            c ~ $toolkit.Fields(line)[1]
             continue
         }
         e := try line.Find(": error[") catch default -1
         if e < 0: continue
-        head := line[0:e]
+        head :~ line[0:e]
         if (try head.FindByte(' ') catch default -1) >= 0: continue
         close := try line[e:].FindByte(']') catch default -1
         if close < 0: continue
-        rule := line[e + 8:e + close]
+        rule :~ line[e + 8:e + close]
         if not ownRule(rule) or line.Contains(": unknown name ") or line.Contains(": unknown function ") or line.Contains(" names the local being declared") { continue }   # the checker's, not names'
         out.Push($c + "\t" + $head + " " + $rule)
     }
@@ -130,7 +130,7 @@ fn rows(text String&) Vec<String&> {
 test "a case's flags become the dump's arguments" {
     assert flagsOf("# check: fail D3a\n# flags: -define X=1 -t\nfn f() {}\n") == "-define X=1 -t"
     assert flagsOf("fn f() {}\n") == ""
-    a := flagArgs("-debug -define X=1 -sanitize -t")
+    a :~ flagArgs("-debug -define X=1 -sanitize -t")
     assert a.Len() == 3
     assert a[0] == "-D"
     assert a[1] == "X=1"

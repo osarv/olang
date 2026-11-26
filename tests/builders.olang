@@ -26,7 +26,7 @@ type Node struct(V I64, Next Node?&) { V, Next }
 
 fn Node.Chain(n I64) Node& {
     head Node& = Node(0, null)
-    for i in range 1, n: head = Node(i, head)
+    for i in range 1, n: head ~ Node(i, head)
     return head
 }
 

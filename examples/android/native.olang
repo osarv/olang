@@ -117,14 +117,14 @@ fn log(text String&) { __android_log_write(4, "olang".ToC(), text.ToC()) }  # AN
 export fn ANativeActivity_onCreate(activity Activity&, saved U64, savedSize U64) {
     log("onCreate")
     table := Callbacks()
-    table.onDestroy = activityDestroyed
-    table.onNativeWindowCreated = windowCreated
-    table.onNativeWindowDestroyed = windowDestroyed
-    table.onInputQueueCreated = queueCreated
-    table.onInputQueueDestroyed = queueDestroyed
+    table.onDestroy ~ activityDestroyed
+    table.onNativeWindowCreated ~ windowCreated
+    table.onNativeWindowDestroyed ~ windowDestroyed
+    table.onInputQueueCreated ~ queueCreated
+    table.onInputQueueDestroyed ~ queueDestroyed
     memcpy(activity.callbacks, table, U64(Callbacks.Size))
-    files := activity.internalDataPath
-    if files != null: FilesDir = String.FromC(files, 4096)
+    files :~ activity.internalDataPath
+    if files is not null: FilesDir = String.FromC(files, 4096)
     runChecks()
 }
 
@@ -239,7 +239,7 @@ fn paint(result I64, y I32, band I32) {
 # where this library was loaded from - the app's nativeLibraryDir, where Android put libprobe.so beside it - read from
 # /proc/self/maps; "" where it is not found
 fn libraryDir() String {
-    maps := try os.ReadFile("/proc/self/maps") catch os.Error { return "" }
+    maps :~ try os.ReadFile("/proc/self/maps") catch os.Error { return "" }
     for line in maps.Lines() {
         if not line.EndsWith("/libnative.so"): continue
         slash := try line.FindByte('/') catch default -1
@@ -255,7 +255,7 @@ fn runChecks() {
     DirectExec = check("nativeLibraryDir exec", Array<String&>[probe, "direct"])
     copy := $FilesDir + "/probe"
     LinkerExec = 2
-    bytes := try os.ReadFile(probe) catch os.Error {
+    bytes :~ try os.ReadFile(probe) catch os.Error {
         log("cannot read " + probe)
         return
     }

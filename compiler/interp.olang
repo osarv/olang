@@ -39,16 +39,16 @@ import cstdlib "stdlib.h"
 fn LoadLibrary(link String&) String {
     path := $("lib" + $link[2:] + ".so") if link.StartsWith("-l") else $link
     if path.EndsWith(".a") or path.EndsWith(".o"): return "a static library or an object, which only a link takes"
-    if dlfcn.dlopen(path.ToC(), 258) != null: return ""
-    e := dlfcn.dlerror()
-    why := String.FromC(e, 400) if e != null else "dlopen failed"
+    if dlfcn.dlopen(path.ToC(), 258) is not null: return ""
+    e :~ dlfcn.dlerror()
+    why :~ String.FromC(e, 400) if e is not null else "dlopen failed"
     # a library that is a linker script (glibc's libm.so: "GROUP ( /lib/.../libm.so.6 ... )"): the first library it
     # names, as the link takes it
     at := try why.Find(": invalid ELF header") catch { return why }
-    script := try os.ReadFile(why[:at]) catch os.Error { return why }
+    script :~ try os.ReadFile(why[:at]) catch os.Error { return why }
     named := scriptLibrary(script)
     if named == "": return why
-    if dlfcn.dlopen(named.ToC(), 258) != null: return ""
+    if dlfcn.dlopen(named.ToC(), 258) is not null: return ""
     return why
 }
 
@@ -113,7 +113,7 @@ fn Analyze(l mut load.Loader&, tests Bool, kept mut views.Kept& = views.Kept()) 
 fn JudgeViews(c mut typecheck.Checker&, kept mut views.Kept&) { judgeViews(c, kept) }
 
 fn judgeViews(c mut typecheck.Checker&, kept mut views.Kept&) {
-    p := c.P
+    p :~ c.P
     kept.TakeHolding(fn(reads Array<String&>&) Bool { return p.Facts.Holds(reads) })
     vw mut views.Viewer& = views.Viewer(c.P, c.Bodies)
     vw.RunKept(kept)
@@ -168,7 +168,7 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
     # that does not check as a constant, is a length known only at run time, never an error (the program's own check
     # says what is wrong with it)
     for a in c.P.ConstAsks {
-        key := a.Key
+        key :~ a.Key
         if lengths.Has(key): continue
         made++
         b := c.ExprBodyIn(a.Mi, a.Owner, a.Names, a.Vals, a.Expr, a.Want)
@@ -184,8 +184,8 @@ fn decide(l mut load.Loader&, c mut typecheck.Checker&, decided mut Map<pair.Pai
         }
     }
     for t in tops {
-        ti := findIf(l.Mods[t.First].Decls, t.Second)
-        if ti == null: continue
+        ti :~ findIf(l.Mods[t.First].Decls, t.Second)
+        if ti is null: continue
         ch := chained.chain(x, c, t.First, ti)
         chosen, ok, why, at := ch.Chosen, ch.Decided, ch.Why, ch.At
         # one whose check already said why (B10's unknown name) stays pending: the last check says it again
@@ -252,11 +252,11 @@ fn CondErr.unseen(c mut typecheck.Checker&, at diag.Where) CondErr {
 # does not check in its module, else what stopped its evaluation and where (stage 0's ERR_COND_UNDECIDABLE), and where
 # the condition is
 fn chained.chain(x mut Exec&, c mut typecheck.Checker&, mi I64, ti ast.TopIf&) chained {
-    d := c.P.L.Diags
+    d :~ c.P.L.Diags
     file := c.P.L.Mods[mi].File
     k I64 = 0
     link ast.TopIf?& = ti
-    for link != null {
+    for link is not null {
         csp := link.Cond!.Span()
         at := diag.Where.Span(file, I64(csp.Start), I64(csp.End))
         b := c.CondBody(mi, link.Cond!)
@@ -270,8 +270,8 @@ fn chained.chain(x mut Exec&, c mut typecheck.Checker&, mi I64, ti ast.TopIf&) c
         }
         if x.Held(): return chained(k, true, "", at)
         k++
-        if link.ElseIf == null { return chained((k if link.Else != null else load.NoBranch), true, "", at) }
-        link = link.ElseIf
+        if link.ElseIf is null { return chained((k if link.Else is not null else load.NoBranch), true, "", at) }
+        link ~ link.ElseIf
     }
     return chained(load.NoBranch, true, "", diag.Where.Span(file, 0, 0))
 }
@@ -290,9 +290,9 @@ fn findIf(ds Array<ast.Decl&>&, at I32) ast.TopIf?& {
     for d in ds {
         match d {
             case ast.Decl.If(_, ti) {
-                if ti.Cond != null and ti.Cond!.Span().Start == at: return ti
-                f := findInIf(ti, at)
-                if f != null: return f
+                if ti.Cond is not null and ti.Cond!.Span().Start == at: return ti
+                f :~ findInIf(ti, at)
+                if f is not null: return f
             }
             case _ { }
         }
@@ -301,14 +301,14 @@ fn findIf(ds Array<ast.Decl&>&, at I32) ast.TopIf?& {
 }
 
 fn findInIf(ti ast.TopIf?&, at I32) ast.TopIf?& {
-    if ti == null: return null
-    if ti.Then != null {
-        f := findIf(ti.Then!.Decls, at)
-        if f != null: return f
+    if ti is null: return null
+    if ti.Then is not null {
+        f :~ findIf(ti.Then!.Decls, at)
+        if f is not null: return f
     }
-    if ti.Else != null {
-        f := findIf(ti.Else!.Decls, at)
-        if f != null: return f
+    if ti.Else is not null {
+        f :~ findIf(ti.Else!.Decls, at)
+        if f is not null: return f
     }
     return findInIf(ti.ElseIf, at)
 }
@@ -323,7 +323,7 @@ fn DecideAsserts(c mut typecheck.Checker&, decided mut Map<pair.Pair<I64, I64>, 
     if c.AssertAsks.Len() == 0 and c.ContractAsks.Len() == 0 and c.TopAsserts.Len() == 0: return 0
     # (facts read in a program with other errors are unsettled: nothing is decided on them, as D3b says nothing there)
     if c.FactsUnsettled(): return 0
-    d := c.P.L.Diags
+    d :~ c.P.L.Diags
     x mut Exec& = Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
     n I64 = decideContracts(c, x) + decideTopAsserts(c, x)
@@ -403,7 +403,7 @@ fn sayAt(d mut diag.Diagnostics&, a typecheck.AssertAsk&, at diag.Where, m diagm
 # an assert that aborts because a global it reads does: one cause, said at the global as K2 says it (the same error the
 # baking reports, so said once), never at each assert reading it
 fn globalAborts(x mut Exec&, d mut diag.Diagnostics&, g I64, kind mir.ExitKind, file I64, sp source.Span) {
-    b := x.Bodies[g]
+    b :~ x.Bodies[g]
     rec := d.Error(diag.Where.Span(b.File, I64(b.Sp.Start), I64(b.Sp.End)), msgs.GlobalAborts(AbortWhy(kind)))
     if file != b.File or d.LineAt(file, I64(sp.Start)) != d.LineAt(b.File, I64(b.Sp.Start)) {
         d.Note(rec, diag.Where.Span(file, I64(sp.Start), I64(sp.End)), msgs.NoteHere())
@@ -430,7 +430,7 @@ fn writtenMessage(a typecheck.AssertAsk&) diagmsg.Msg {
 # S17a: the top-level asserts, each decided here or an error - a false one, one that aborts, one reading a stale view,
 # and one the evaluator cannot decide, saying why. How many were decided
 fn decideTopAsserts(c mut typecheck.Checker&, x mut Exec&) I64 {
-    d := c.P.L.Diags
+    d :~ c.P.L.Diags
     n I64 = 0
     for a in c.TopAsserts {
         k := mir.FnKey.Body(typed.BodyId(I32(a.Cond)))
@@ -475,7 +475,7 @@ fn decideTopAsserts(c mut typecheck.Checker&, x mut Exec&) I64 {
 # body giving the condition's value): a false one an error at the call naming the condition, with a note at it; one
 # whose evaluation stops is the run time's. How many were decided
 fn decideContracts(c mut typecheck.Checker&, x mut Exec&) I64 {
-    d := c.P.L.Diags
+    d :~ c.P.L.Diags
     said Map<pair.Pair<I64, I64>, Bool>
     n I64 = 0
     for ai in range c.ContractAsks.Len() {
@@ -530,7 +530,7 @@ fn evaluatedWhole(c typecheck.Checker&, a typecheck.ContractAsk&) Bool {
 # that holds an address, which every element would share. How many were decided
 fn DecideValues(c mut typecheck.Checker&) I64 {
     if c.ValueAsks.Len() == 0: return 0
-    d := c.P.L.Diags
+    d :~ c.P.L.Diags
     x mut Exec& = Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
     said Map<pair.Pair<I64, I64>, Bool>
@@ -585,7 +585,7 @@ fn noteWhy(d mut diag.Diagnostics&, rec I64, file I64, sp source.Span, whyFile I
 # spelled with it held by reference ("Chan<Ticket&>"); the use itself and "" where it is not written there
 fn zeroUseArg(d mut diag.Diagnostics&, use diag.Where, ty String&) diag.Where, String {
     if use != diag.Where.Span: return use, ""
-    text := d.TextOf(use.file)
+    text :~ d.TextOf(use.file)
     i := use.start
     for i + ty.Len() <= use.end and i + ty.Len() <= text.Len() {
         fix := zeroFix(text, i, ty, use.start, use.end)
@@ -637,15 +637,15 @@ fn Bake(c mut typecheck.Checker&) Map<I64, eval.Image> {
     x mut Exec& = Exec(c.P, c.Bodies, eval.Mode.Compile)
     x.Faulty = c.Faulty
     x.start()
-    d := c.P.L.Diags
+    d :~ c.P.L.Diags
     abortsAt Map<pair.Pair<I64, I64>, Bool>
     whyNot Map<I64, String&>        # K3: why a comptime's global gave no value
     for i in x.Globals {
         of := x.Bodies[i].Of
         if of != typed.BodyOf.Global: continue
         m, n := of.module, of.name
-        gd := c.P.GlobalDecl(m, n)
-        if gd != null and generic.WrittenMut(gd.Ty) {
+        gd :~ c.P.GlobalDecl(m, n)
+        if gd is not null and generic.WrittenMut(gd.Ty) {
             mimg := try x.bakeMutable(m, n) catch eval.NotBaked { continue }
             out.Put(i, mimg)
             continue
@@ -660,9 +660,9 @@ fn Bake(c mut typecheck.Checker&) Map<I64, eval.Image> {
     # K3: a comptime's value is data or an error - never set at startup
     for e in c.ComptimeSites {
         if out.Has(e.Key) or x.Faulty.Has(e.Key): continue
-        b := x.Bodies[e.Key]
-        why := try whyNot.Get(e.Key) catch default ""
-        if why == "" { why = "its value is no data the program can hold - it reaches storage made elsewhere, or a destructor" }
+        b :~ x.Bodies[e.Key]
+        why :~ try whyNot.Get(e.Key) catch default ""
+        if why == "" { why ~ "its value is no data the program can hold - it reaches storage made elsewhere, or a destructor" }
         d.Error(diag.Where.Span(b.File, I64(e.Value.Start), I64(e.Value.End)), msgs.ComptimeNotBaked(why))
     }
     return out
@@ -673,7 +673,7 @@ fn Bake(c mut typecheck.Checker&) Map<I64, eval.Image> {
 # the other's)
 fn unbaked(x mut Exec&, c mut typecheck.Checker&, d mut diag.Diagnostics&, i I64
            abortsAt mut Map<pair.Pair<I64, I64>, Bool>&, whyNot mut Map<I64, String&>&) {
-    b := x.Bodies[i]
+    b :~ x.Bodies[i]
     if c.ComptimeSites.Has(i) {
         why, _, _ := valueWhy(x.M.Stopped, b.Sp)
         whyNot.Put(i, why)
@@ -713,7 +713,7 @@ fn firstAt(seen mut Map<pair.Pair<I64, I64>, Bool>&, file I64, sp source.Span) ?
 fn shareStorage(x mut Exec&, out mut Map<I64, eval.Image>&) {
     home Map<I64, pair.Pair<I64, I64>>        # an allocation: the global (body) whose image holds it, and its blob there
     for i in x.Globals {
-        img := try out.Ref(i) catch { continue }
+        img :~ try out.Ref(i) catch { continue }
         newIdx := Array<I64>(img.Blobs.Len(), -1)
         try homesKnown(x, img, home, globalModule(x.Bodies[i]), newIdx) catch HeldElsewhere {
             out.Remove(i)
@@ -936,16 +936,16 @@ fn (x mut Exec&) start() {
         if mo.Identity.StartsWith("std/"): x.M.Library.Put(mo.File, true)
     }
     for i in range x.Bodies.Len() {
-        b := x.Bodies[i]
+        b :~ x.Bodies[i]
         match b.Of {
             case typed.BodyOf.Dtor(t) { x.dtorOf.Put(t, i) }
             case typed.BodyOf.Global(m, n) {
-                if b.Root == null: continue
+                if b.Root is null: continue
                 ty := globalType(b, m, n)
                 if ty == types.UnknownT: continue
                 k := mir.FnKey.Body(typed.BodyId(I32(i)))
-                gd := x.P.GlobalDecl(m, n)
-                mutable := gd != null and generic.WrittenMut(gd.Ty)
+                gd :~ x.P.GlobalDecl(m, n)
+                mutable := gd is not null and generic.WrittenMut(gd.Ty)
                 x.M.DefineGlobal(m, n, ty, mutable, k)
                 if x.buildDefault(m, ty, mutable): x.M.BuildGlobal(m, n)
                 x.Globals.Push(i)
@@ -970,7 +970,7 @@ fn (x mut Exec&) start() {
 # value can have (Bool, I32, I64, U64, F64, String) - which a condition reading it depends on (S8a)
 fn (x mut Exec&) buildDefault(m I64, ty types.TypeId, mutable Bool) Bool {
     if mutable: return false
-    mod := x.P.L.Mods[m]
+    mod :~ x.P.L.Mods[m]
     if mod.Prelude or mod.Identity.StartsWith("std/"): return false
     for name in Array<String&>["Bool", "I32", "I64", "U64", "F64"] {
         if ty == x.P.T.Prim(name): return true
@@ -1015,7 +1015,7 @@ fn (x mut Exec&) Need(k mir.FnKey) {
             x.Unlowered.Push(key)
             continue
         }
-        f := x.Lw.LowerKey(key)
+        f :~ x.Lw.LowerKey(key)
         if x.Lw.Gapped {
             x.Unlowered.Push(key)
             continue
@@ -1090,7 +1090,7 @@ fn (x mut Exec&) reach(f mir.Fn&, work mut Vec<mir.FnKey>&) {
     }
     for t in f.Tasks: x.callee(t.Target, work)
     for blockIx in range f.Blocks.Len() {
-        bb := f.Blocks.Ref(blockIx)
+        bb :~ f.Blocks.Ref(blockIx)
         for s in bb.Stmts: x.reachStmt(f, s, work)
     }
 }
@@ -1101,7 +1101,7 @@ fn (x mut Exec&) callee(c mir.Callee, work mut Vec<mir.FnKey>&) {
         case mir.Callee.Extern(e, _) {
             if not x.externs.Has(e) {
                 x.externs.Put(e, true)
-                fd := x.P.FnDecl(e)
+                fd :~ x.P.FnDecl(e)
                 x.M.DefineExtern(e, x.P.ExternSymbol(e), fd.S.Params.Len() if fd.S.Variadic else -1)
             }
         }
@@ -1111,7 +1111,7 @@ fn (x mut Exec&) callee(c mir.Callee, work mut Vec<mir.FnKey>&) {
 
 # table ti defined for the machine, its functions reached
 fn (x mut Exec&) table(ti I64, work mut Vec<mir.FnKey>&) {
-    tab := x.P.AnyTables.Ref(ti)
+    tab :~ x.P.AnyTables.Ref(ti)
     keys mut Array<mir.FnKey>& = Array<mir.FnKey>(tab.Slots.Len() + types.AnySlotBase - 1)
     keys[0] = mir.FnKey.AnyRender(ti, false)
     keys[1] = mir.FnKey.AnyRender(ti, true)
@@ -1126,11 +1126,11 @@ fn (x mut Exec&) table(ti I64, work mut Vec<mir.FnKey>&) {
 fn (x mut Exec&) Entries() Vec<I64>, I64 {
     tests Vec<I64>
     main I64 = -1
-    p := x.P
+    p :~ x.P
     for i in range x.Bodies.Len() {
         match x.Bodies[i].Of {
             case typed.BodyOf.Test(_) {
-                if x.Bodies[i].Root != null: tests.Push(i)
+                if x.Bodies[i].Root is not null: tests.Push(i)
             }
             case typed.BodyOf.Fn(inst) {
                 f := p.InstanceFn(inst)
@@ -1146,9 +1146,9 @@ fn (x mut Exec&) Entries() Vec<I64>, I64 {
 # description (as the test binary's harness reads them)
 fn (x mut Exec&) selected(id I64, words Array<String&>&) Bool {
     if words.Len() == 0: return true
-    m := x.P.L.Mods[x.P.L.Root]
-    d := ast.FindTest(m.Decls, x.Bodies[id].Sp)
-    if d == null: return false
+    m :~ x.P.L.Mods[x.P.L.Root]
+    d :~ ast.FindTest(m.Decls, x.Bodies[id].Sp)
+    if d is null: return false
     tg := ast.TestTarget(d, x.P.L.Names)
     ds := ast.TestDesc(d, m.Src!.Text)
     for w in words {
@@ -1159,9 +1159,9 @@ fn (x mut Exec&) selected(id I64, words Array<String&>&) Bool {
 
 # a test's name as a run reports it: its target, then its description (B7a)
 fn (x mut Exec&) TestName(id I64) String {
-    m := x.P.L.Mods[x.P.L.Root]
-    d := ast.FindTest(m.Decls, x.Bodies[id].Sp)
-    if d == null: return "test"
+    m :~ x.P.L.Mods[x.P.L.Root]
+    d :~ ast.FindTest(m.Decls, x.Bodies[id].Sp)
+    if d is null: return "test"
     return ast.TestLabel(d, m.Src!.Text, x.P.L.Names)
 }
 
@@ -1171,7 +1171,7 @@ fn StopText(s eval.Stop, d mut diag.Diagnostics&) String {
         case eval.Stop.None { return "" }
         case eval.Stop.Raised(code) { return "an error escapes, code " + $code }
         case eval.Stop.Exited(kind, file, sp, msg) {
-            what := mir.ExitText(kind)
+            what :~ mir.ExitText(kind)
             # E35: an error a "!" took, where the "!" is - as a debug build says it
             if kind == mir.ExitKind.Error: return $line(d, file, sp) + ": " + $msg
             if kind == mir.ExitKind.Unhandled: return "unhandled error: " + $msg
@@ -1221,10 +1221,10 @@ fn (x mut Exec&) RunTests(d mut diag.Diagnostics&, words Array<String&>& = Array
     }
     if tests.Len() == 0 and words.Len() > 0 {
         # (what the harness's driver names its nearest from, B11)
-        m := x.P.L.Mods[x.P.L.Root]
+        m :~ x.P.L.Mods[x.P.L.Root]
         for t in all {
-            td := ast.FindTest(m.Decls, x.Bodies[t].Sp)
-            if td == null: continue
+            td :~ ast.FindTest(m.Decls, x.Bodies[t].Sp)
+            if td is null: continue
             tg := ast.TestTarget(td, x.P.L.Names)
             if tg != "": x.TestWords.Push(tg)
             x.TestWords.Push(ast.TestDesc(td, m.Src!.Text))
@@ -1236,10 +1236,10 @@ fn (x mut Exec&) RunTests(d mut diag.Diagnostics&, words Array<String&>& = Array
     x.M.TestUnwind = true
     pass, fail I64 = 0, 0
     none := Array<I64>(0)
-    x.M.TestFile = $x.P.L.Mods[x.P.L.Root].Path
+    x.M.TestFile ~ $x.P.L.Mods[x.P.L.Root].Path
     for t in tests {
         name := x.TestName(t)
-        x.M.TestName = name
+        x.M.TestName ~ name
         s := x.M.Eval(mir.FnKey.Body(typed.BodyId(I32(t))), none)
         # B19: a forked child that took its test's recovery point away ends as the built child does, by its failed check
         if s != eval.Stop.None and x.M.Detached: detachedEnd(x.StopText(s, t, d))
@@ -1343,8 +1343,8 @@ fn (x mut Exec&) TraceText(d mut diag.Diagnostics&) String {
     if x.M.TraceDropped > 0: b.Push("(" + $x.M.TraceDropped + " earlier places not kept)\n")
     for i in range x.M.TraceLen() {
         file, at, kind := x.M.TraceAt(i)
-        what := "raised here" if kind == 0 else "try passed it on" if kind == 1 else "a task failed, and its join passed it on"
-        if x.M.TraceWhat(i).Len() > 0: what = $x.M.TraceWhat(i)
+        what :~ "raised here" if kind == 0 else "try passed it on" if kind == 1 else "a task failed, and its join passed it on"
+        if x.M.TraceWhat(i).Len() > 0: what ~ $x.M.TraceWhat(i)
         b.Push($line(d, file, source.Span(I32(at), I32(at))) + ": " + $what + "\n")
     }
     return b.ToString()
@@ -1353,7 +1353,7 @@ fn (x mut Exec&) TraceText(d mut diag.Diagnostics&) String {
 # an error's name as a program writes it outside its module ("io.Error.FULL"): code under the error list of
 # function type ty (R6)
 fn (x mut Exec&) errorName(code I64, ty types.TypeId) String {
-    errs := x.P.T.Items(x.P.T.Errors(ty))
+    errs :~ x.P.T.Items(x.P.T.Errors(ty))
     i := (code >> 16) - 1
     if i < 0 or i >= errs.Len(): return "error " + $code
     et := x.P.T.ErrOf(errs[i])

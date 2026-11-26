@@ -5,7 +5,7 @@ import "std/os"
 import "std/io"
 
 fn main() ? io.Error {
-    args := os.Args()
+    args :~ os.Args()
     for a in args: try io.PutLn(a)
     if args.Len() > 1 and args[1] == "seven": os.Exit(7)
 }

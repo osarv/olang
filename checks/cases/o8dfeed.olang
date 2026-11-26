@@ -48,7 +48,7 @@ fn label(h mut holder&, k I64) {
 fn across(h mut holder&, k I64) I64 {
     v := Vec<I64>()
     for i in range 9: v.Push(i + k)
-    r := v.View()
+    r :~ v.View()
     h.a = v
     h.a = Vec<I64>[k, k]
     churn()
@@ -58,7 +58,7 @@ fn across(h mut holder&, k I64) I64 {
 fn kept(h mut holder&, k I64) {
     v := Vec<I64>()
     for i in range 9: v.Push(i + k)
-    h.view = v.View()
+    h.view ~ v.View()
     h.e = v
 }
 

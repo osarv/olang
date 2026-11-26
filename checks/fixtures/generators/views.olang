@@ -104,10 +104,10 @@ fn main() {
     io.PutLn("count " + $spans(text).Count(fn(w) { return w.Len() > 4 }))!
     io.PutLn("first " + $firstLong(text, 5))!
     g := labels(text, 2)
-    a := try g.Next() catch default ""
-    b := try g.Next() catch default ""
+    a :~ try g.Next() catch default ""
+    b :~ try g.Next() catch default ""
     churn()
-    c := try g.Next() catch default ""
+    c :~ try g.Next() catch default ""
     io.PutLn($a + " " + $b + " " + $c)!
     seen := Vec<Pt&>()
     pg := points(3)

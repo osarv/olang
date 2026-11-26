@@ -69,12 +69,12 @@ fn migrate(src String&, n mut Counts&, path String&) String {
         if negated: at++
         if at < v.Len() and v[at].k == token.Tok.NullLit: continue
         e := pathEnd(v, at)
-        op := "!=" if negated else "=="
+        op :~ "!=" if negated else "=="
         if e < 0 {
             n.listed.Push($path + ": 'is' before no name, by hand: " + $src[t.start:(v[(at).Min(v.Len() - 1)].end).Min(src.Len())])
             continue
         }
-        last := src[v[e - 1].start:v[e - 1].end]
+        last :~ src[v[e - 1].start:v[e - 1].end]
         if e - at > 1 and last[0].IsUpper() {
             n.cases++
         } else {
@@ -100,9 +100,9 @@ fn migrateMarkdown(src String&, n mut Counts&, path String&) String {
     out := StringBuilder()
     block := StringBuilder()
     inBlock := false
-    lines := src.Split("\n")
+    lines :~ src.Split("\n")
     for k in range lines.Len() {
-        line := lines[k]
+        line :~ lines[k]
         last := k == lines.Len() - 1
         if inBlock and line.StartsWith("```") {
             out.Push(migrate(block.ToString(), n, path))
@@ -126,9 +126,9 @@ fn main() ? {
     check := false
     verbose := false
     paths Vec<String&>
-    args := os.Args()
+    args :~ os.Args()
     for i in range 1, args.Len() {
-        a := args[i]
+        a :~ args[i]
         if a == "--check": check = true
         else if a == "-v": verbose = true
         else: paths.Push($a)
@@ -162,7 +162,7 @@ fn main() ? {
         }
     }
     for l in total.listed: srcmask.Say(l)
-    verb := "would change " if check else "changed "
+    verb :~ "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files: " + $total.cases + " case tests, " + $total.identities + " identities")
     if check and changed > 0: os.Exit(1)
 }

@@ -33,20 +33,20 @@ fn (l mut KList&) PushBack(i I64) {
     xs := Vec<I64>()
     for k in range i % 5 + 1: xs.Push(i * 10 + k)
     nd := KNode("key-" + $i, xs, Tag("tag" + $(i * 7), i))
-    t := l.tail
-    if t == null { l.head = nd } else {
-        t.next = nd
-        nd.prev = t
+    t :~ l.tail
+    if t is null { l.head ~ nd } else {
+        t.next ~ nd
+        nd.prev ~ t
     }
-    l.tail = nd
+    l.tail ~ nd
     l.n++
 }
 
 fn (l mut KList&) PopFront() {
-    h := l.head!
-    q := h.next
-    l.head = q
-    if q == null { l.tail = null } else { q.prev = null }
+    h :~ l.head!
+    q :~ h.next
+    l.head ~ q
+    if q is null { l.tail ~ null } else { q.prev ~ null }
     l.n--
 }
 
@@ -65,9 +65,9 @@ fn (nd KNode&) Sum() I64 {
 fn (l KList&) Total() I64 {
     s := 0
     at KNode?& = l.head
-    for at != null {
+    for at is not null {
         s += at.Sum()
-        at = at.next
+        at ~ at.next
     }
     return s
 }
@@ -97,10 +97,10 @@ fn churn(n I64) {
 
 # the first node removed - where no caller holds a view across the call, so its arrays are put back here
 fn (l mut KList&) Drop() {
-    h := l.head!
-    q := h.next
-    l.head = q
-    if q == null { l.tail = null } else { q.prev = null }
+    h :~ l.head!
+    q :~ h.next
+    l.head ~ q
+    if q is null { l.tail ~ null } else { q.prev ~ null }
     l.n--
 }
 
@@ -136,9 +136,9 @@ fn viewAtSite(extra I64) Bool {
     for i in range 1, 4 + extra: l.PushBack(i)
     k String& = l.head!.key
     for _ in range 30 {
-        h := l.head!
-        l.head = h.next
-        l.tail!.next = null
+        h :~ l.head!
+        l.head ~ h.next
+        l.tail!.next ~ null
         l.PushBack(7)
     }
     return k == "key-1" and l.head!.key == "key-7"
@@ -172,7 +172,7 @@ fn viewInCallee(extra I64) Bool {
 fn grown(extra I64) Bool {
     l := KList()
     for i in range 1, 5 + extra: l.PushBack(i)
-    last := l.tail!
+    last :~ l.tail!
     for k in range 20: last.xs.Push(k)
     s := last.Sum()
     for _ in range 3: l.PopFront()
@@ -192,7 +192,7 @@ fn weakNull(extra I64) Bool {
     l.PopFront()
     churn(20)
     l.PushBack(9)
-    return s.w == null and l.tail!.key == "key-9" and l.tail!.xs.Len() == 5
+    return s.w is null and l.tail!.key == "key-9" and l.tail!.xs.Len() == 5
 }
 
 assert reused(0)

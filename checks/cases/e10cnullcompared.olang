@@ -3,5 +3,5 @@
 type P struct(v I32) { v }
 fn main() {
     p P?& = null
-    assert p == null and null == p
+    assert p is null and null is p
 }

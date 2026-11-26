@@ -32,10 +32,10 @@ export fn cookieClose(cookie CVoid?&) I32 {
 
 fn main() {
     io := Cookie()
-    io.write = cookieWrite
-    io.close = cookieClose
-    f := fopencookie(null, "w".ToC(), io)
-    if f == null: unreachable "fopencookie failed"
+    io.write ~ cookieWrite
+    io.close ~ cookieClose
+    f :~ fopencookie(null, "w".ToC(), io)
+    if f is null: unreachable "fopencookie failed"
     fputs("hello, ".ToC(), f)
     fputs("cookie".ToC(), f)
     fflush(f)

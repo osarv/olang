@@ -5,7 +5,7 @@
 import "std/io"
 type W struct(s String&) {
     names mut Array<String&>& = Array<String&>(2)
-    names[0] = s
+    names[0] ~ s
 }
 fn main() ? {
     w := W("a")

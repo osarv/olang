@@ -29,16 +29,16 @@ fn main() {
     }
     t := 0
     for i in range N {
-        r := v[i % 4].a.View()
+        r :~ v[i % 4].a.View()
         p := Q()
         p.a = Vec<I64>[i, i]
         v[i % 4] = p
         t += r[0] + r[r.Len() - 1] + v[i % 4].a[1]
-        s := v[(i + 1) % 4].a.View()
+        s :~ v[(i + 1) % 4].a.View()
         grow(v, i + 1)
         t += total(s) + s.Len()
         {
-            u := v[i % 4].a.View()
+            u :~ v[i % 4].a.View()
             defer { t += u[0] }
             grow(v, i)
             t += u[1]

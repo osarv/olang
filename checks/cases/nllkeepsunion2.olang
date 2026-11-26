@@ -9,9 +9,9 @@ type N struct(v I64) {
     next N?& = null
 }
 fn f(p mut N&, q mut N&) {
-    c := q
-    c = p
-    c.next = N(7)
+    c :~ q
+    c ~ p
+    c.next ~ N(7)
 }
 fn main() {
     arr := Array<N>(3, N(0))

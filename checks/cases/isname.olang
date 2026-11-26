@@ -1,5 +1,5 @@
-# check: run
-# L9, E10c: "is" is no keyword since 2026-11-15 - the null test is "== null" - so it names a local like any word
+# check: fail error[L9a]: 'is' is a keyword, not a name
+# L9, E10d: "is" is a keyword again since 2026-11-26 - the identity test and the null test - so it names no local
 fn main() {
     is := 3
     assert is + 1 == 4

@@ -6,7 +6,7 @@ fn main() {
     v := Vec<I64>()
     v.Push(1)
     f fn&(w mut Vec<I64>&) pure = fn(w) { w.Push(2) }
-    d := v.View()
+    d :~ v.View()
     f(v)
     assert d[0] == 1
 }

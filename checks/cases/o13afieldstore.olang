@@ -7,7 +7,7 @@ type H struct(r String&) {
 }
 fn H.mk(n I64, s String&) H {
     e := H(s)
-    e.r = $n + $n
+    e.r ~ $n + $n
     return e
 }
 fn churn() I64 {

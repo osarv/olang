@@ -13,12 +13,12 @@ import "toolkit"
 Workers I64 = 4
 
 fn main() {
-    args := os.Args()
+    args :~ os.Args()
     given := $args[1] if args.Len() > 1 else toolkit.Compiler()
-    root := try os.Cwd() catch os.Error {
+    root :~ try os.Cwd() catch os.Error {
         toolkit.Die("diaggold_capture: no working directory")
     }
-    dir := try os.RealPath(filepath.Dir(given)) catch os.Error {
+    dir :~ try os.RealPath(filepath.Dir(given)) catch os.Error {
         toolkit.Die("diaggold_capture: no " + $given)
     }
     olang := $dir + "/" + $filepath.Base(given)
@@ -35,13 +35,13 @@ fn main() {
         }
     }
     # each case in its own directory, four at a time
-    all := cases.ToArray()
+    all :~ cases.ToArray()
     join {
         for w in range Workers: spawn capture(olang, work, all, w)
     }
     gold := StringBuilder()
     for f in cases {
-        name := filepath.Base(f)
+        name :~ filepath.Base(f)
         cdir := $work + "/cases/" + $name[0:name.Len() - 6]
         gold.Push("=== " + $name + "\n")
         gold.Push(read($cdir + "/out.txt").Replace(root, "$ROOT"))
@@ -60,7 +60,7 @@ fn read(path String&) String {
 # every Workers'th case from number w: copied into a directory of its own and built there with its flags
 fn capture(olang String&, work String&, cases Array<String&>&, w I64) {
     for k in range w, cases.Len(), Workers {
-        name := filepath.Base(cases[k])
+        name :~ filepath.Base(cases[k])
         dir := $work + "/cases/" + $name[0:name.Len() - 6]
         try os.MkDirAll(dir) catch os.Error { continue }
         text := read(cases[k])

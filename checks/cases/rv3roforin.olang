@@ -9,8 +9,8 @@ type B struct() {
 }
 fn B.mk() B {
     b := B()
-    b.arr[0] = Node()
-    b.arr[1] = Node()
+    b.arr[0] ~ Node()
+    b.arr[1] ~ Node()
     return b
 }
 G B = B.mk()

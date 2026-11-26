@@ -19,7 +19,7 @@ fn visit(w View&, g fn&(x mut Node&)) {
     for x in w.at: g(x)
 }
 fn (b Bag&) Str() String {
-    visit(View(b.ns), fn(x mut Node&) { x.next = Node(x.v + 100) })
+    visit(View(b.ns), fn(x mut Node&) { x.next ~ Node(x.v + 100) })
     return "b" + $b.ns[0].v
 }
 fn churn(d I64) I64 {

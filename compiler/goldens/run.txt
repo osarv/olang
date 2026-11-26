@@ -44,6 +44,14 @@
 | ok - a false assert after what leaves a function is not reached
 | ok - a true assert is decided wherever it is
 | ok - the evaluator agrees
+=== test tests/assign.olang
+| status 0
+| ok - '~' and ':~' link, 'is' tests one object, at run time and while compiling
+| ok - a link through a field and an element, and a reference unlinked with null
+| ok - '=' through a reference writes what it names, '==' compares contents, ':=' copies - at run time and while compiling
+| ok - '==' through references that may be null: a null equals only a null
+| ok - a write through a reference ends the old value once, and the new one where its holder lets go
+| ok - a write through a reference into a list, read back after an arena churn
 === test tests/axes.olang
 | status 0
 | ok - Matrix.Slice: rows, columns and the rest
@@ -2668,8 +2676,6 @@
 === run globalvaluecopy.olang
 | status 0
 | 1-title-built-at-run-time
-=== run isname.olang
-| status 0
 === run joinflat.olang
 | status 0
 === run joinwritesafter.olang
@@ -3458,6 +3464,8 @@
 === run s3busy.olang
 | status 0
 | 1 5 1
+=== run s4fwritethrough.olang
+| status 0
 === run s5atbuilds.olang
 | status 0
 === run s5callresultfield.olang

@@ -32,7 +32,7 @@ fn rename(src String&, c mut Count&) String {
     for i in range 1, v.Len() - 1 {
         t := v[i]
         if t.k != token.Tok.Iden: continue
-        word := src[t.start:t.end]
+        word :~ src[t.start:t.end]
         if word != "Any" and word != "All": continue
         before := v[i - 1].k
         after := v[i + 1].k
@@ -58,7 +58,7 @@ fn rename(src String&, c mut Count&) String {
 # "ast.TypeRef.Any(sp, of)"); a value's capitalized field ("s.Items.Any(f)") has a value before it
 fn enumCase(src String&, v Vec<VT>&, i I64) Bool {
     if v[i - 1].k != token.Tok.Dot or i < 2 or v[i - 2].k != token.Tok.Iden: return false
-    r := src[v[i - 2].start:v[i - 2].end]
+    r :~ src[v[i - 2].start:v[i - 2].end]
     if not r[0].IsUpper(): return false
     # a type path ("ast.TypeRef", "TypeRef") rather than a value's field: nothing but a lower-case alias before it
     if i < 4 or v[i - 3].k != token.Tok.Dot: return true
@@ -79,9 +79,9 @@ fn renameMarkdown(src String&, n mut Count&) String {
     out := StringBuilder()
     block := StringBuilder()
     inBlock := false
-    lines := src.Split("\n")
+    lines :~ src.Split("\n")
     for k in range lines.Len() {
-        line := lines[k]
+        line :~ lines[k]
         last := k == lines.Len() - 1
         if inBlock and line.StartsWith("```") {
             out.Push(rename(block.ToString(), n))
@@ -117,7 +117,7 @@ fn declaresOwn(text String&) Bool {
         if not l.StartsWith("fn ("): continue
         for w in Array<String&>[") Any(", ") All("] {
             at := try l.Find(w) catch { continue }
-            ps := l[at + w.Len():]
+            ps :~ l[at + w.Len():]
             close := try ps.Find(")") catch { continue }
             if close > 0 and not ps[:close].Contains("fn"): return true
         }
@@ -129,15 +129,15 @@ fn declaresOwn(text String&) Bool {
 fn reached(path String&, text String&, seen mut Map<String, String>&) {
     if path in seen: return
     seen.Put($path, $text)
-    dir := path[:(try path.FindLast("/") catch default -1) + 1]
+    dir :~ path[:(try path.FindLast("/") catch default -1) + 1]
     for l in text.Lines() {
         if not l.StartsWith("import "): continue
         q := try l.Find("\"") catch { continue }
         e := try l[q + 1:].Find("\"") catch { continue }
-        spec := l[q + 1:q + 1 + e]
+        spec :~ l[q + 1:q + 1 + e]
         if spec.StartsWith("std/"): continue
         p := $dir + $spec + ".olang"
-        t := try os.ReadFile(p) catch os.Error { continue }
+        t :~ try os.ReadFile(p) catch os.Error { continue }
         reached(p, t, seen)
     }
 }
@@ -146,9 +146,9 @@ fn main() ? {
     check := false
     verbose := false
     paths Vec<String&>
-    args := os.Args()
+    args :~ os.Args()
     for i in range 1, args.Len() {
-        a := args[i]
+        a :~ args[i]
         if a == "--check": check = true
         else if a == "-v": verbose = true
         else: paths.Push($a)
@@ -182,7 +182,7 @@ fn main() ? {
             }
         }
     }
-    verb := "would change " if check else "changed "
+    verb :~ "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files: " + $total.n + " names")
     if check and changed > 0: os.Exit(1)
 }

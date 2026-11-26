@@ -46,13 +46,13 @@ fn copied(s String&) String {
     return b.ToString()
 }
 
-fn (h mut Holder&) kept(s String&) { h.last = copied(s) }
+fn (h mut Holder&) kept(s String&) { h.last ~ copied(s) }
 
-fn (h mut Holder&) keptTried(s String&) { h.last = built(s, true)! }
+fn (h mut Holder&) keptTried(s String&) { h.last ~ built(s, true)! }
 
 # the peak address space, in KB (VmPeak)
 fn peak() I64 {
-    st := try os.ReadFile("/proc/self/status") catch default ""
+    st :~ try os.ReadFile("/proc/self/status") catch default ""
     for line in st.Lines() {
         if line.StartsWith("VmPeak:"): return try line[7:line.Len() - 3].Trim().ParseInt(10) catch default 0
     }

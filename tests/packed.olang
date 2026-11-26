@@ -120,7 +120,7 @@ type Pub packed struct(V U3, F Flags, K Kind) { V, F, K }
 
 test Pub "json writes and reads a packed struct by its fields" {
     p := Pub(5, Flags(true, false, true), Kind.Ack)
-    t := json.Encode(p)
+    t :~ json.Encode(p)
     assert t == "{\"V\":5,\"F\":{\"Syn\":true,\"Ack\":false,\"Fin\":true},\"K\":\"Ack\"}"
     assert json.Decode<Pub>(t)! == p
 }

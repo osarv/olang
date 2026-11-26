@@ -140,10 +140,10 @@ fn main() {
 fn openWindow() Bool {
     instance := GetModuleHandleA(0)
     class := WndClass()
-    class.proc = windowProc
+    class.proc ~ windowProc
     class.instance = instance
     class.cursor = LoadCursorA(0, 32512)                # IDC_ARROW
-    class.className = _strdup("OlangWindow".ToC())
+    class.className ~ _strdup("OlangWindow".ToC())
     if RegisterClassExA(class) == 0: return false
     # WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN | WS_CLIPSIBLINGS, placed where Windows places a new window
     Window = CreateWindowExA(0, class.className, "olang on Windows".ToC(), 0x06CF0000, CwUseDefault, 0, Width, Height
@@ -223,7 +223,7 @@ fn copyText(text String&) Bool {
     EmptyClipboard()
     bytes := text.ToC()
     mem := GlobalAlloc(2, U64(bytes.Len()))             # GMEM_MOVEABLE
-    to := GlobalLock(mem)
+    to :~ GlobalLock(mem)
     memcpy(to, bytes, U64(bytes.Len()))
     GlobalUnlock(mem)
     set := SetClipboardData(CfText, mem)
@@ -237,8 +237,8 @@ fn pasteText() String {
     out := ""
     mem := GetClipboardData(CfText)
     if mem != 0 {
-        p := GlobalLock(mem)
-        if p != null: out = String.FromC(p, 65536)
+        p :~ GlobalLock(mem)
+        if p is not null: out = String.FromC(p, 65536)
         GlobalUnlock(mem)
     }
     CloseClipboard()

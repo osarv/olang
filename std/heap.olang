@@ -50,8 +50,8 @@ fn (h Heap<T>&) Peek() T ? Error.Empty {
 fn (h mut Heap<T>&) Pop() T ? Error.Empty {
     v mut Vec<T>& = h.items
     if v.Len() == 0: error Error.Empty
-    top := v[0]
-    last := try v.Pop() catch VecError { unreachable }
+    top :~ v[0]
+    last :~ try v.Pop() catch VecError { unreachable }
     n := v.Len()
     if n == 0: return top
     i I64 = 0

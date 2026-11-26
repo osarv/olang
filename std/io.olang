@@ -71,7 +71,7 @@ fn Write(fd I32, data Array<U8>&) ? Error {
     if total == 0: return
     sent I64 = 0
     do {
-        tail := data[sent:]
+        tail :~ data[sent:]
         n := rawWrite(fd, tail)
         if n < 0: error Error.Failed
         # no bytes moved with bytes still outstanding: retrying would spin rather than make progress
@@ -232,7 +232,7 @@ fn (r mut Reader&) Word() String& ? Error, Exhausted {
 # so Next's set is Error, Exhausted and ParseError whatever T is. A word that fails to parse is taken all the same, so the
 # next call reads the one after it. Any other T is an error at the call, naming the builder it lacks (G18a).
 fn (r mut Reader&) Next<T>() T ? Error, Exhausted, ParseError {
-    w := try r.Word()
+    w :~ try r.Word()
     return try T.Parse(w)
 }
 
@@ -287,7 +287,7 @@ type Writer struct(to any Descriptor&, size I64 = 65536) {
 
 # t, after what is written already
 fn (w mut Writer&) Write(t Array<U8>&) {
-    if w.refused != null: return
+    if w.refused is not null: return
     n := t.Len()
     if n > w.buf.Len() - w.used {
         w.drain()
@@ -313,7 +313,7 @@ fn (w mut Writer&) PutLn<T>(x T = "") {
 # one character, after what is written already
 fn (w mut Writer&) WriteChar(c Char) {
     if w.used == w.buf.Len(): w.drain()
-    if w.refused != null: return
+    if w.refused is not null: return
     w.buf[w.used] = c
     w.used++
 }
@@ -322,12 +322,12 @@ fn (w mut Writer&) WriteChar(c Char) {
 fn (w mut Writer&) Flush() ? Error {
     w.drain()
     refused := w.refused
-    if refused != null: error refused
+    if refused is not null: error refused
 }
 
 # what waits in the buffer, to the descriptor - or dropped, once a write has failed
 fn (w mut Writer&) drain() {
-    if w.used > 0 and w.refused == null: w.send(w.buf[:w.used])
+    if w.used > 0 and w.refused is null: w.send(w.buf[:w.used])
     w.used = 0
 }
 
@@ -396,7 +396,7 @@ test Show "gives its value back after writing it, with the place of the call, to
 # there is a signature to propagate through, and a "try f() catch { }" statement discards the value it
 # caught - so a test block cannot bind the result of a fallible call at all.
 fn checkReadIsEmpty(fd I32, buf mut Array<U8>&) ? Error {
-    got := try Read(fd, buf)
+    got :~ try Read(fd, buf)
     assert got.Len() == 0
 }
 
@@ -455,7 +455,7 @@ fn bracketed(text String&, size I64) String& {
     fd := reading(text)
     out String& = ""
     for line in try Lines.sized(fd, size) {
-        out = $out + "[" + $line + "]"
+        out ~ $out + "[" + $line + "]"
     } catch Error { unreachable }
     unistd.close(fd)
     return out
@@ -510,7 +510,7 @@ test "Lines reports a read that fails, and ends the loop with it" {
 # Exhausted again for every call once the lines have run out
 fn afterTheEnd(fd I32) ? Error {
     l := Lines.sized(fd, 2)
-    first := l.Next()!
+    first :~ l.Next()!
     assert first == "only"
     for _ in range 3 {
         try l.Next() catch Exhausted { continue }
@@ -551,7 +551,7 @@ test "a line kept is built where it is kept" {
 fn drained(fd I32) String& {
     out String& = ""
     for line in try Lines(fd) {
-        out = $out + $line + "\n"
+        out ~ $out + $line + "\n"
     } catch Error { unreachable }
     return out
 }
@@ -573,7 +573,7 @@ test "a Writer gathers what is written and writes it when flushed" {
     try w.Flush()
     try w.Flush() # nothing waiting: nothing written
     unistd.close(fds[1])
-    got := drained(fds[0])
+    got :~ drained(fds[0])
     unistd.close(fds[0])
     assert got == "alpha beta\nthis line is longer than the buffer itself\n0 1 2 3 4 5 6 7 8 9\n10 11 12 13 14 15 16 17 18 19\n20 21 22 23 24 25 26 27 28 29\n"
 }
@@ -590,7 +590,7 @@ test "a Writer keeps every byte in order across its buffer's edges" {
     }
     try w.Flush()
     unistd.close(fds[1])
-    got := drained(fds[0])
+    got :~ drained(fds[0])
     unistd.close(fds[0])
     assert got == want.ToString()
 }
@@ -634,7 +634,7 @@ test "a deferred Flush writes what was written however the function is left" {
     try reportTo(fds[1], 9) catch Error.Partial e { left = e.written == 3 } catch Error { }
     assert left
     unistd.close(fds[1])
-    got := drained(fds[0])
+    got :~ drained(fds[0])
     unistd.close(fds[0])
     assert got == "line 0\nline 1\nline 0\nline 1\nline 2\n"
 }
@@ -659,8 +659,8 @@ fn words(text String&, size I64) String& {
     r := Reader.sized(fd, size)
     out String& = ""
     for {
-        w := try r.Word() catch Exhausted { break } catch Error { unreachable }
-        out = $out + "[" + $w + "]"
+        w :~ try r.Word() catch Exhausted { break } catch Error { unreachable }
+        out ~ $out + "[" + $w + "]"
     }
     unistd.close(fd)
     return out

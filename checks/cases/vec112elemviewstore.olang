@@ -13,8 +13,8 @@ fn main() ? {
     v.Push(Tok("a", 1))
     for i in range 3 {
         t := "w" + $i
-        m := v.ViewMut()
-        m[0].text = t
+        m :~ v.ViewMut()
+        m[0].text ~ t
     }
     try io.PutLn($v[0].text)
 }

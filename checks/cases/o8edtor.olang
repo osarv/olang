@@ -20,10 +20,10 @@ type Holder struct() {
 
 fn main() {
     h := Holder()
-    h.first = Res(1)
-    r := h.first!
-    r.next = Res(2)
-    r.next!.back = r
-    h.first = null
-    assert r.next!.back == null
+    h.first ~ Res(1)
+    r :~ h.first!
+    r.next ~ Res(2)
+    r.next!.back ~ r
+    h.first ~ null
+    assert r.next!.back is null
 }

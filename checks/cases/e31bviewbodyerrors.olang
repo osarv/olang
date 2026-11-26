@@ -17,7 +17,7 @@ type Es struct(head mut Node&) {
     head
 }
 fn (s Es&) At(i I64) E { return E(s.head, i) }
-fn hang(e mut E&, k I64) { e.head.next = Node(k) }
+fn hang(e mut E&, k I64) { e.head.next ~ Node(k) }
 fn churn() ? io.Error {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)

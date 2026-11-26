@@ -10,7 +10,7 @@ fn main() ? {
     l := Lexer(1)
     l.toks.Push(1)
     r Lexer& = l
-    d := r.toks.View()
+    d :~ r.toks.View()
     l.toks.Push(2)
     try io.PutLn($d[0])
 }

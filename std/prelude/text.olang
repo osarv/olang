@@ -90,7 +90,7 @@ fn (a String&) EndsWith(suffix String&) Bool {
 # position: "try t.FindByte(c) catch default -1" gives a fallback, "c in t" only asks. Skipped 32 bytes at a time while
 # none of them is c - a lane total (E39), one vector compare and minimum for each 32 - then found byte by byte
 fn (a String&) FindByte(c U8) I64 ? TextError.NotFound {
-    b := a.Bytes()
+    b :~ a.Bytes()
     i I64 = 0
     for i + 32 <= b.Len() and (try (b[i:i + 32] ^ c).Min() catch default 0) != 0: i += 32
     for j in range i, b.Len() {
@@ -132,7 +132,7 @@ fn (a String&) findFrom(sub String&, from I64) I64 ? TextError.NotFound {
 fn (t String&) Split(sep String&) mut Array<String&>& {
     if sep.Len() == 0 {
         bytes mut Array<String&>& = Array<String&>(t.Len(), t)     # every byte written before it is read
-        for i in range t.Len(): bytes[i] = t[i:i + 1]
+        for i in range t.Len(): bytes[i] ~ t[i:i + 1]
         return bytes
     }
     if sep.Len() == 1 {
@@ -146,12 +146,12 @@ fn (t String&) Split(sep String&) mut Array<String&>& {
         start I64 = 0
         for i in range t.Len() {
             if t[i] == c {
-                pieces[k] = t[start:i]
+                pieces[k] ~ t[start:i]
                 k++
                 start = i + 1
             }
         }
-        pieces[k] = t[start:]
+        pieces[k] ~ t[start:]
         return pieces
     }
     n I64 = 1
@@ -165,10 +165,10 @@ fn (t String&) Split(sep String&) mut Array<String&>& {
     from = 0
     for i in range n - 1 {
         at := try t.findFrom(sep, from) catch { unreachable }
-        pieces[i] = t[from:at]
+        pieces[i] ~ t[from:at]
         from = at + sep.Len()
     }
-    pieces[n - 1] = t[from:]
+    pieces[n - 1] ~ t[from:]
     return pieces
 }
 
@@ -461,7 +461,7 @@ fn String.formatDigits(v U64, neg Bool, base Radix) String {
 fn (t String&) ParseInt(base Radix = 10) I64 ? ParseError {
     if t.Len() == 0: error ParseError.Empty
     neg := t[0] == '-'
-    digits := t[1:] if neg or t[0] == '+' else t[:]
+    digits :~ t[1:] if neg or t[0] == '+' else t[:]
     if base == 0 and isPrefixed(digits) {
         bits I64 = I64(try readDigits(digits, 0, ~U64(0)))
         return -bits if neg else bits
@@ -477,7 +477,7 @@ fn (t String&) ParseInt(base Radix = 10) I64 ? ParseError {
 # largest, and a literal needing more than 64 bits fails with Overflow, as it is an error in a program
 fn (t String&) ParseUint(base Radix = 10) U64 ? ParseError {
     if t.Len() == 0: error ParseError.Empty
-    digits := t[1:] if t[0] == '+' else t[:]
+    digits :~ t[1:] if t[0] == '+' else t[:]
     return try readDigits(digits, base, ~U64(0))
 }
 
@@ -491,7 +491,7 @@ fn (t String&) ParseUint(base Radix = 10) U64 ? ParseError {
 fn T.Parse<T Integer>(t String&, base Radix = 10) T ? ParseError {
     if t.Len() == 0: error ParseError.Empty
     neg := t[0] == '-'
-    digits := t[1:] if neg or t[0] == '+' else t[:]
+    digits :~ t[1:] if neg or t[0] == '+' else t[:]
     if T.Size > 8 and base == 0 and isPrefixed(digits) {
         # wider than 64 bits, an olang literal's pattern (L10a): of more than 64 bits its value read unsigned, fitting
         # T where that value does ('-' negating it exactly); of at most 64, the reading ParseInt or ParseUint gives
@@ -637,7 +637,7 @@ fn (t String&) ParseFloat() F64 ? ParseError {
         neg = t[0] == '-'
         start = 1
     }
-    body := t[start:]
+    body :~ t[start:]
     sign U64 = U64(1) << 63 if neg else 0
     if body.Len() > 0 and body[0] != '.' and not body[0].IsDigit() {
         if sameLetters(body, "inf") or sameLetters(body, "infinity"): return F64.FromBits(sign | (U64(0x7FF) << 52))
@@ -1422,7 +1422,7 @@ if TestBuild {
             b.Clear()
             b.Push("line ")
             b.Push($i)
-            last = b.ToString()
+            last ~ b.ToString()
         }
         b.Clear()
         assert b.Len() == 0 and b.ToString() == ""

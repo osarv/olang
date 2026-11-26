@@ -7,9 +7,9 @@ import "keep"
 fn main() ? io.Error {
     k := keep.Keep()
     n := node.Node(4)
-    k.N = n
+    k.N ~ n
     b := back.Back()
     b.Point(n)
-    at := b.At
-    try io.PutLn($(at.V if at != null else -1) + " " + $(k.N == b.At))
+    at :~ b.At
+    try io.PutLn($(at.V if at is not null else -1) + " " + $(k.N is b.At))
 }

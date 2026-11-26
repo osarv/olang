@@ -4,6 +4,6 @@ G Array<Char> = "abc"
 type E error { X }
 fn front(a Array<Char>&) Array<Char>& { return a[0:2] }
 fn main() ? E {
-    x := front(G)
+    x :~ front(G)
     x[0] = 'z'
 }

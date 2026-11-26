@@ -17,7 +17,7 @@ type Layer struct(w M, n I64) {
     w
     n
 }
-fn g(m mut M&, v I64) { m.r.next = Node(v, null) }
+fn g(m mut M&, v I64) { m.r.next ~ Node(v, null) }
 fn churn() ? io.Error {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)

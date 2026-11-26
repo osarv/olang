@@ -23,7 +23,7 @@ fn churn() I64 {
 }
 fn main() ? {
     d := Parser()
-    d.lx = Lexer()
+    d.lx ~ Lexer()
     q := Lexer.fresh(3)
     d.lx!.toks = q.toks
     churn()

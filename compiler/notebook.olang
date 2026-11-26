@@ -14,9 +14,9 @@ import "jupyter"
 # the notebook at path run, written back to out ("" for path itself): 0, or 1 where a cell failed (the cells after it
 # not run, unless all says to go on), 2 where the notebook cannot be read or written
 fn Run(cfg mut build.Config&, path String&, out String&, all Bool) I32 {
-    text := try os.ReadFile(path) catch os.Error e { return fail($"cannot read " + $path + ": " + $e) }
-    doc := try json.Json.Parse(text) catch json.Error e { return fail($path + " is no JSON: " + $e) }
-    cells := try doc["cells"].AsArr() catch json.Error { return fail($path + " is no notebook: it has no cells") }
+    text :~ try os.ReadFile(path) catch os.Error e { return fail($"cannot read " + $path + ": " + $e) }
+    doc :~ try json.Json.Parse(text) catch json.Error e { return fail($path + " is no JSON: " + $e) }
+    cells :~ try doc["cells"].AsArr() catch json.Error { return fail($path + " is no notebook: it has no cells") }
     s := prompt.Session(cfg)
     s.Relay = true
     n I64 = 0
@@ -36,9 +36,9 @@ fn Run(cfg mut build.Config&, path String&, out String&, all Bool) I32 {
     }
     s.End()
     top := set(try doc.AsObj() catch json.Error { return fail($path + " is no notebook") }, "cells", json.Json.Arr(done.ToArray()))
-    meta := try doc["metadata"].AsObj() catch json.Error default empty()
+    meta :~ try doc["metadata"].AsObj() catch json.Error default empty()
     top = set(top, "metadata", json.Json.Obj(kernelspec(meta)))
-    to := out if out != "" else path
+    to :~ out if out != "" else path
     try os.WriteFile(to, $json.Encode(json.Json.Obj(top), " ") + "\n") catch os.Error e { return fail($"cannot write " + $to + ": " + $e) }
     return 1 if failed else 0
 }
@@ -52,7 +52,7 @@ fn str(j json.Json&, key String&) String& { return try j[key].AsStr() catch json
 
 # a cell's source: one text, or the lines of it
 fn source(c json.Json&) String {
-    s := try c["source"] catch json.Error default json.Json.Null
+    s :~ try c["source"] catch json.Error default json.Json.Null
     if s == json.Json.Null: return ""
     return $(try s.AsStr() catch json.Error default $(try joined(s) catch json.Error default ""))
 }
@@ -83,7 +83,7 @@ fn set(o json.Object&, key String&, v json.Json&) json.Object {
 
 # the cell c with its outputs and execution_count replaced
 fn with(c json.Json&, key String&, outs json.Json&, count json.Json&) json.Json {
-    o := try c.AsObj() catch json.Error { return c }
+    o :~ try c.AsObj() catch json.Error { return c }
     return json.Json.Obj(set(set(o, key, outs), "execution_count", count))
 }
 
@@ -91,14 +91,14 @@ fn empty() json.Object { return try json.Object(Array<String&>[], Array<json.Jso
 
 # whether a cell's outputs end in an error
 fn failedWith(outs json.Json&) Bool {
-    a := try outs.AsArr() catch json.Error { return false }
+    a :~ try outs.AsArr() catch json.Error { return false }
     return a.Len() > 0 and $str(a[a.Len() - 1], "output_type") == "error"
 }
 
 # the metadata with a kernelspec naming olang where it has none
 fn kernelspec(o json.Object&) json.Object {
     if o.Has("kernelspec"): return o
-    spec := try json.Json.Parse("{\"display_name\":\"olang\",\"language\":\"olang\",\"name\":\"olang\"}") catch json.Error { unreachable }
+    spec :~ try json.Json.Parse("{\"display_name\":\"olang\",\"language\":\"olang\",\"name\":\"olang\"}") catch json.Error { unreachable }
     return set(o, "kernelspec", spec)
 }
 
@@ -111,18 +111,18 @@ fn execute(s mut prompt.Session&, code String&, n I64) json.Json {
     complained := errs.End()
     outs Vec<String&>
     if said != "": outs.Push(stream("stdout", said))
-    warnings := r.Diags if r.Checked else ""
+    warnings :~ r.Diags if r.Checked else ""
     err := $complained + $warnings + $r.Notes
     if err != "": outs.Push(stream("stderr", err))
     if r.Shown: outs.Push($"{\"output_type\":\"execute_result\",\"data\":" + $jupyter.Data(r) + ",\"execution_count\":" + $n + ",\"metadata\":{}}")
-    failure := r.Failure if r.Checked else r.Diags
+    failure :~ r.Failure if r.Checked else r.Diags
     if failure != "" {
         rows Vec<String&>
         for line in failure.TrimEnd().Lines(): rows.Push(jupyter.Q(line))
-        ename := "RuntimeError" if r.Checked else "CompileError"
+        ename :~ "RuntimeError" if r.Checked else "CompileError"
         outs.Push($"{\"output_type\":\"error\",\"ename\":\"" + $ename + "\",\"evalue\":" + $jupyter.Q(jupyter.FirstLine(failure)) + ",\"traceback\":[" + $rows.Join(",") + "]}")
     }
-    parsed := try json.Json.Parse($"[" + $outs.Join(",") + "]") catch json.Error { unreachable }
+    parsed :~ try json.Json.Parse($"[" + $outs.Join(",") + "]") catch json.Error { unreachable }
     return parsed
 }
 

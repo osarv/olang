@@ -28,7 +28,7 @@ fn main() ? {
     keep Node& = outer
     for i in range 2 {
         inner mut Node& = Node(42)
-        keep = try Node.mk(i) catch default inner
+        keep ~ try Node.mk(i) catch default inner
     }
     churn()
     assert keep.v == 42

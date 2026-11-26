@@ -15,7 +15,7 @@ type Hd struct() {
     st mut St& = St()
 }
 fn (h Hd&) view() Array<mut Node?&>& {
-    s := h.st
+    s :~ h.st
     return s.first[0:1]
 }
 type Box struct() {
@@ -30,7 +30,7 @@ fn (b Box&) sum() I64 {
     t I64 = 0
     for x in b.items: t += x.v
     for i in range b.items.Len(): t += b.items[i].v * 10
-    r := try b.items.RunFrom(0) catch Exhausted { return t }
+    r :~ try b.items.RunFrom(0) catch Exhausted { return t }
     return t + r.Len() * 100 + b.hd.view().Len() * 1000
 }
 fn bump(src mut W&) I64 {

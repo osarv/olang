@@ -22,7 +22,7 @@ fn sum(a Array<I64>&) I64 {
 }
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     n := try args[2].ParseInt()
     a := Array<I64>[(i * 7) % 1000 for i in range n]
     s I64 = 0

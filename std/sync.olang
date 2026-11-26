@@ -36,7 +36,7 @@ type mutexState<T> struct(value T) {
 # calls f with the guarded value, the lock held for the whole call: f may read and change the value, and every other
 # With waits until f returns
 fn (m mut Mutex<T>&) With(f fn&(v mut T&)) {
-    s := m.s
+    s :~ m.s
     pthread.pthread_mutex_lock(s.lock)
     f(s.v)
     pthread.pthread_mutex_unlock(s.lock)
@@ -45,7 +45,7 @@ fn (m mut Mutex<T>&) With(f fn&(v mut T&)) {
 # the guarded value replaced by f of it, the lock held for the whole call - for a value With cannot hand out by
 # reference, a number say (there are no references to numbers, T24): "m.Update(fn(n) { return n + 1 })"
 fn (m mut Mutex<T>&) Update(f fn&(v T) T) {
-    s := m.s
+    s :~ m.s
     pthread.pthread_mutex_lock(s.lock)
     s.v = f(s.v)
     pthread.pthread_mutex_unlock(s.lock)
@@ -53,7 +53,7 @@ fn (m mut Mutex<T>&) Update(f fn&(v T) T) {
 
 # a copy of the guarded value, read under the lock
 fn (m mut Mutex<T>&) Get() T {
-    s := m.s
+    s :~ m.s
     pthread.pthread_mutex_lock(s.lock)
     v := s.v
     pthread.pthread_mutex_unlock(s.lock)
@@ -62,7 +62,7 @@ fn (m mut Mutex<T>&) Get() T {
 
 # the guarded value replaced by x, under the lock
 fn (m mut Mutex<T>&) Set(x T) {
-    s := m.s
+    s :~ m.s
     pthread.pthread_mutex_lock(s.lock)
     s.v = x
     pthread.pthread_mutex_unlock(s.lock)
@@ -84,7 +84,7 @@ type rwlockState<T> struct(value T) {
 
 # calls f with the guarded value, read-only, the lock held for reading: other readers may run beside it, a writer waits
 fn (l mut RWLock<T>&) Read(f fn&(v T&)) {
-    s := l.s
+    s :~ l.s
     pthread.pthread_rwlock_rdlock(s.lock)
     f(s.v)
     pthread.pthread_rwlock_unlock(s.lock)
@@ -92,7 +92,7 @@ fn (l mut RWLock<T>&) Read(f fn&(v T&)) {
 
 # calls f with the guarded value, writable, the lock held for writing: nothing else holds it meanwhile
 fn (l mut RWLock<T>&) Write(f fn&(v mut T&)) {
-    s := l.s
+    s :~ l.s
     pthread.pthread_rwlock_wrlock(s.lock)
     f(s.v)
     pthread.pthread_rwlock_unlock(s.lock)
@@ -100,7 +100,7 @@ fn (l mut RWLock<T>&) Write(f fn&(v mut T&)) {
 
 # the guarded value replaced by f of it, the lock held for writing
 fn (l mut RWLock<T>&) Update(f fn&(v T) T) {
-    s := l.s
+    s :~ l.s
     pthread.pthread_rwlock_wrlock(s.lock)
     s.v = f(s.v)
     pthread.pthread_rwlock_unlock(s.lock)
@@ -108,7 +108,7 @@ fn (l mut RWLock<T>&) Update(f fn&(v T) T) {
 
 # a copy of the guarded value, read under the lock held for reading
 fn (l mut RWLock<T>&) Get() T {
-    s := l.s
+    s :~ l.s
     pthread.pthread_rwlock_rdlock(s.lock)
     v := s.v
     pthread.pthread_rwlock_unlock(s.lock)
@@ -130,7 +130,7 @@ type onceState struct() {
 }
 
 fn (o mut Once&) Do(f fn&()) {
-    s := o.s
+    s :~ o.s
     if s.done.AtomicLoad() == 1: return
     pthread.pthread_mutex_lock(s.lock)
     if s.done.AtomicLoad() == 0 {

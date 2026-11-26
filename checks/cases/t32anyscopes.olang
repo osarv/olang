@@ -21,7 +21,7 @@ fn churn(n I64) I64 {
 fn main() {
     b := aBox(aItem(1))
     x any aHas& = b
-    r := x.Get()
+    r :~ x.Get()
     churn(100)
     assert r.v == 1
 }

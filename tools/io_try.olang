@@ -17,7 +17,7 @@ Names Array<String&>& = Array<String&>["Println", "PrintErrln", "PrintErr", "Pri
 # whether the text before position i ends in "try" and some whitespace, "try" starting a word - looking only at the
 # twelve characters before i, as the Python script did
 fn followsTry(text String&, i I64) Bool {
-    window := text[(i - 12 if i > 12 else 0):i]
+    window :~ text[(i - 12 if i > 12 else 0):i]
     e := window.Len()
     for e > 0 and srcmask.IsPySpace(window[e - 1]): e--
     if e == window.Len() or e < 3 or window[e - 3:e] != "try": return false
@@ -61,17 +61,17 @@ fn inBuildOrGit(path String&) Bool {
 }
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     files Vec<String&>
     for i in range 1, args.Len() {
-        root := args[i]
+        root :~ args[i]
         info := try os.FileInfo.Stat(root) catch { continue }
         if info.Kind == os.FileKind.FILE: files.Push($root)
         else if info.Kind == os.FileKind.DIR and not inBuildOrGit(root): srcmask.Walk(root, files)
     }
     total I64 = 0
     for p in files {
-        raw := try os.ReadFile(p) catch {
+        raw :~ try os.ReadFile(p) catch {
             srcmask.SayErr("io_try: cannot read " + $p)
             os.Exit(1)
             unreachable

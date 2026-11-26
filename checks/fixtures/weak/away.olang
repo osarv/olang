@@ -8,7 +8,7 @@ fn main() {
     k := keep.Keep()
     b := back.Back()
     n := node.Node(2)
-    k.N = n
+    k.N ~ n
     b.Point(n)
     assert byval.Value(node.Node(1)) == 1
 }

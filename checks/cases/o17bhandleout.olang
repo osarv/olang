@@ -15,8 +15,8 @@ type W struct(b Box) {
 fn (b Box&) headOf() mut Node& { return b.head }
 fn bump(src mut W&, v I64) {
     b := src.b
-    h := b.headOf()
-    h.next = Node()
+    h :~ b.headOf()
+    h.next ~ Node()
     h.next!.v = v
     src.b = b
 }

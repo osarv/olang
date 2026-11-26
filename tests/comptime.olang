@@ -19,7 +19,7 @@ fn size<T>() I64 { return comptime T.Size * 2 }
 fn hot(k I64) I64 {
     total I64 = 0
     for i in range k {
-        t := comptime squares(16)
+        t :~ comptime squares(16)
         total += t[i % 16] + comptime fib(20)
     }
     return total

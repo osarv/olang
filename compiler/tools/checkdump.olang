@@ -22,7 +22,7 @@ import typecheck "../check"
 import "../views"
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     if args.Len() < 2 {
         try io.PutErrLn("usage: checkdump [-D NAME=VALUE]... [-t] FILE...") catch io.Error { }
         os.Exit(2)
@@ -32,7 +32,7 @@ fn main() ? {
 
 fn run(args Array<String&>&) {
     out := io.Writer(io.Stdout)
-    std := try os.Env("OLANG_STD") catch default "std"
+    std :~ try os.Env("OLANG_STD") catch default "std"
     defines Vec<String&>
     testBuild := false
     k I64 = 1
@@ -46,7 +46,7 @@ fn run(args Array<String&>&) {
         k++
     }
     for i in range k, args.Len() {
-        path := args[i]
+        path :~ args[i]
         out.Write("== " + $path + "\n")
         d := diag.Diagnostics(false)
         consts := cond.Consts()

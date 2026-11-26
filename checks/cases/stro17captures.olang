@@ -20,11 +20,11 @@ fn (b Box&) sum() I64 {
 }
 fn apply(f fn&()) { f() }
 fn (b Box&) grow2() {
-    apply(fn() { b.head.next = Node(7, null) })
+    apply(fn() { b.head.next ~ Node(7, null) })
 }
 fn (b Box&) grow3() {
     f := fn() {
-        g := fn() { b.head.next = Node(8, null) }
+        g := fn() { b.head.next ~ Node(8, null) }
         g()
     }
     f()

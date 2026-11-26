@@ -1,0 +1,40 @@
+# assign_migrate's corpus: the old spellings of the null test, "== null" and "!= null", among today's links and identity tests
+import "std/io"
+
+type Node struct(v I64, next Node?&) {
+    v
+    next
+}
+
+fn total(head Node?&) I64 {
+    n I64 = 0
+    at :~ head
+    for at is not null {
+        n += at.v
+        at ~ at.next
+    }
+    return n
+}
+
+fn same(a Node&, b Node&) Bool { return a is b }
+
+fn differ(a Node&, b Node&) Bool { return a is not b }
+
+fn last(head Node&) Node& {
+    at :~ head
+    for at.next is not null: at ~ at.next!
+    return at
+}
+
+fn main() {
+    list := Node(1, Node(2, null))
+    n := Node(5, null)
+    h Node?& = list
+    if null is h: return
+    v I64 = 3
+    v = 4
+    assert total(list) == 3 and same(list, list) and differ(list, n) and last(list).v == 2 and v == 4
+    h ~ n
+    assert h.v == 5
+    io.PutLn($total(list) + " " + $h.v)!
+}

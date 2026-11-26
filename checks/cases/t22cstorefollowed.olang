@@ -9,7 +9,7 @@ type N struct(v I64) {
 type Holder struct() {
     cb fn?&(a mut N&, b N&) = null
 }
-fn link(a mut N&, b N&) { a.next = b }
+fn link(a mut N&, b N&) { a.next ~ b }
 fn stash(h mut Holder&, f fn&(a mut N&, b N&)) { h.cb = f }
 fn main() {
     h := Holder()

@@ -1,0 +1,8 @@
+# check: fail error[E10c]: the null test is written 'is null'
+# E10c: "==" and "!=" compare contents, and null has none - the null test is "x is null" / "x is not null"
+type Node struct(v I64) { v }
+
+fn main() {
+    n Node?& = null
+    assert n == null
+}

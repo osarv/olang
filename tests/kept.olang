@@ -133,7 +133,7 @@ fn texts(n I64) Array<String&> {
     for i in range n {
         chars := Array<Char>(i + 1, 'a')
         chars[0] = 'z'
-        out[i] = String(chars)
+        out[i] ~ String(chars)
     }
     return out
 }
@@ -296,7 +296,7 @@ fn copyReads(n I64) I64 {
         v[i % 2 + 1] = Tagged.Of(i + 100)
         s += v[1].tags[0].Len() + v[2].name[1:3].Len()
         h := Holder(Vec<I64>[i, i + 1, i + 2])
-        r := viewOf(h)
+        r :~ viewOf(h)
         h.v = Vec<I64>[7]
         s += r[2] * 1000 + h.v[0]
     }

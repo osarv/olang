@@ -187,7 +187,7 @@ fn (t mut TakeIter<I, T ? E>&) foldArray<U ? F>(a mut ArrayIter<T>&, init U, f f
 # at most n of what an array's iterator has left folded into one, as that many Nexts and folds would: the fold and
 # how many it folded, the iterator past them - or, where f fails, past the one it failed on
 fn foldUpTo<T, U ? F>(a mut ArrayIter<T>&, n I64, init U, f fn&(acc U, x T) U ? F) U, I64 ? F {
-    rest := a.Rest()
+    rest :~ a.Rest()
     k := n if n < rest.Len() else rest.Len()
     if k < 0: k = 0
     acc U = init

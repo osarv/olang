@@ -14,7 +14,7 @@ fn sum(v Vec<I64>&) I64 {
 fn setAll(v mut Vec<I64>&, x I64) { for i in range v.Len() { v[i] = x } }
 fn other(v Vec<I64>&, w mut Vec<I64>&) { w.Push(v.Len()) }
 fn regive(w mut Vec<I64>&, o mut Vec<I64>&) {
-    w = o                                       # a parameter given another Vec names that one
+    w ~ o                                       # a parameter given another Vec names that one
     w.Push(1)
 }
 fn main() {
@@ -22,7 +22,7 @@ fn main() {
     w := Vec<I64>()
     v.Push(1)
     v.Push(2)
-    d := v.View()
+    d :~ v.View()
     for i in range 100 { w.Push(i) }           # another Vec of the same type
     assert d[0] == 1
     assert sum(v) == 3                          # read-only
@@ -32,16 +32,16 @@ fn main() {
     regive(v, w)                                # grows w, not v
     assert d[0] == 5
     for i in range 100: v.Push(i)
-    e := v.View()                               # taken after the growth
+    e :~ v.View()                               # taken after the growth
     assert e.Len() == 102
     t := 0
     for i in range 10 {                         # taken again each turn
-        f := v.View()
+        f :~ v.View()
         t += f[0]
         v.Push(i)
     }
     assert t == 50
-    g := v.View()
+    g :~ v.View()
     n := g.Len()                                # used before the growth only
     v.Push(1)
     assert n > 0
@@ -54,14 +54,14 @@ fn main() {
     assert (try it.Next() catch default 0) == 5
     u := Vec<I64>()
     u.Push(1)
-    h := u.View()
+    h :~ u.View()
     u = Vec<I64>()                              # given another Vec: the view is of the old one
     u.Push(2)
     assert h[0] == 1
     vv := Vec<Vec<I64>>()
     vv.Push(Vec<I64>())
-    outer := vv.View()
-    inner := vv.RefMut(0)
+    outer :~ vv.View()
+    inner :~ vv.RefMut(0)
     inner.Push(9)                               # the inner Vec grows; the outer buffer is not replaced
     assert outer.Len() == 1
 }

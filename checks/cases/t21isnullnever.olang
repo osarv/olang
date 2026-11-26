@@ -2,5 +2,5 @@
 # T21, E10c: "== null" of a function value never null decides nothing
 fn main() {
     f fn&(x I64) I64 = fn(x): return x
-    assert not (f == null)
+    assert not (f is null)
 }

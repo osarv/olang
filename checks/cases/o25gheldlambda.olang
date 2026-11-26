@@ -11,7 +11,7 @@ fn main() {
     keep := Vec<mut N&>()
     keepRef mut Vec<mut N&>& = keep
     h.on = fn(bs mut Vec<mut N&>&) {
-        b := bs[0]
+        b :~ bs[0]
         keepRef.Push(b)
     }
     bs := Vec<mut N&>()

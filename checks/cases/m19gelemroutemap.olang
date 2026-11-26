@@ -12,7 +12,7 @@ fn main() {
     s.m.Put(1, blk(1, 2))
     ss := Vec<st>()
     ss.Push(s)
-    r := ss.RefMut(0).m.RefMut(1)!
+    r :~ ss.RefMut(0).m.RefMut(1)!
     fill(ss.RefMut(0).m)
     r.n = 77
     io.PutLn("r.n " + $r.n + " r.m " + $r.m)!

@@ -26,7 +26,7 @@ fn filled(i I64) I64 { return sum(Array<I64>(2, i)) }
 fn chosen(i I64) I64 { return len0(Array<String&>[$i] if i % 2 == 0 else Array<String&>["a", "b"]) }
 
 fn main() {
-    args := os.Args()
+    args :~ os.Args()
     n := 2000000
     if args.Len() > 1: n = args[1].ParseInt(10)!
     t I64 = 0

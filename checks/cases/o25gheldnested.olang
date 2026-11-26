@@ -4,7 +4,7 @@ type N struct() {
     v I64 = 0
 }
 fn moveIn(vs mut Vec<mut Vec<mut N&>&>&, n mut N&) {
-    inner := vs[0]
+    inner :~ vs[0]
     inner.Push(n)
 }
 fn main() {

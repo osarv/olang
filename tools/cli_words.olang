@@ -19,10 +19,10 @@ import "std/os"
 import "std/io"
 
 fn main() ? io.Error {
-    args := os.Args()
+    args :~ os.Args()
     for k in range 1, args.Len() {
-        path := args[k]
-        text := try os.ReadFile(path) catch os.Error {
+        path :~ args[k]
+        text :~ try os.ReadFile(path) catch os.Error {
             try io.PutErrLn("cli_words: " + $path + ": cannot be read")
             continue
         }
@@ -66,7 +66,7 @@ fn invoker(line String&, i I64) I64 {
 
 fn migrateLine(line String&) String {
     if line.StartsWith("# flags:") {
-        rest := line[8:]
+        rest :~ line[8:]
         at I64 = 0
         for at < rest.Len() and rest[at] == ' ': at++
         conv := convert(" " + $rest[at:])
@@ -125,9 +125,9 @@ fn word(f String&) String& {
 
 # rest: the text after an invoker. The text rewritten, or "" when it begins with no old flag
 fn convert(rest String&) String {
-    mode := word("")
+    mode :~ word("")
     opts := StringBuilder()
-    trail := rest[0:0]
+    trail :~ rest[0:0]
     i I64 = 0              # where the flags read so far end in rest
     found := false
     for {
@@ -137,14 +137,14 @@ fn convert(rest String&) String {
         if j == i or j == rest.Len(): break
         e := j
         for e < rest.Len() and rest[e] != ' ' and rest[e] != '\t': e++
-        w := rest[j:e]
+        w :~ rest[j:e]
         n := flagLen(w)
         if n == 0: break
-        f := w[:n]
-        tail := w[n:]
+        f :~ w[:n]
+        tail :~ w[n:]
         isMode := f == "-b" or f == "-c" or f == "-t" or f == "-i" or f == "-e"
         if isMode and mode == "" {
-            mode = word(f)
+            mode ~ word(f)
         } else if f == "-d" or f == "-r" or f == "-s" or f == "-u" {
             opts.Push(" " + $word(f))
         } else if (f == "-a" or f == "-D") and tail == "" {
@@ -154,11 +154,11 @@ fn convert(rest String&) String {
             if k == e or k == rest.Len(): break
             ve := k
             for ve < rest.Len() and rest[ve] != ' ' and rest[ve] != '\t': ve++
-            v := rest[k:ve]
+            v :~ rest[k:ve]
             vn := valueLen(v)
             if vn == 0: break
             opts.Push(" " + $word(f) + " " + $v[:vn])
-            tail = v[vn:]
+            tail ~ v[vn:]
             e = ve
         } else if f.StartsWith("-D") and f.Len() > 2 and f.Contains("=") {
             opts.Push(" -define " + $f[2:])
@@ -168,11 +168,11 @@ fn convert(rest String&) String {
         found = true
         i = e
         if tail != "" {
-            trail = tail
+            trail ~ tail
             break
         }
     }
     if not found: return ""
-    head := (" " + $mode) if mode != "" else ""
+    head :~ (" " + $mode) if mode != "" else ""
     return $head + $opts.ToString() + $trail + $rest[i:]
 }

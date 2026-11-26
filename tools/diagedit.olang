@@ -77,9 +77,9 @@ type Row struct(Path String&, Line I64, Col I64, IsError Bool, Rule String&, Msg
 # what a checks/cases program must fail with, from its first twelve lines "# check: fail TEXT" and "# also: TEXT" - an edit
 # reported by a diagnostic carrying one of the texts is not applied
 fn ExpectedTexts(src String&, out mut Vec<String&>&) {
-    lines := src.Split("\n")
+    lines :~ src.Split("\n")
     for k in range (12 if lines.Len() > 12 else lines.Len()) {
-        line := lines[k]
+        line :~ lines[k]
         if not line.StartsWith("#"): continue
         i := 1
         for i < line.Len() and srcmask.IsPySpace(line[i]): i++
@@ -93,7 +93,7 @@ fn ExpectedTexts(src String&, out mut Vec<String&>&) {
         } else {
             continue
         }
-        text := srcmask.Strip(line[i:])
+        text :~ srcmask.Strip(line[i:])
         if text.Len() > 0: out.Push($text)
     }
 }
@@ -116,7 +116,7 @@ fn Sub(text String&, a I64, b I64) String& {
 
 # keeps a trailing comment where it was: the spaces before it after column at take up what the edit changed
 fn Realign(lines mut Array<String&>&, k I64, delta I64, at I64) {
-    text := lines[k]
+    text :~ lines[k]
     mask := srcmask.Mask(text, true)
     hashAt I64 = -1
     for i in range at, text.Len() {
@@ -131,7 +131,7 @@ fn Realign(lines mut Array<String&>&, k I64, delta I64, at I64) {
     if want < 1: want = 1
     pad := StringBuilder()
     for _ in range want: pad.PushChar(' ')
-    lines[k] = $text[:gap] + $pad.ToString() + $text[hashAt:]
+    lines[k] ~ $text[:gap] + $pad.ToString() + $text[hashAt:]
 }
 
 # a checks/cases header (one of the first twelve lines starting "# check: fail" or "# also:") naming LINE:COL on a line an
@@ -139,7 +139,7 @@ fn Realign(lines mut Array<String&>&, k I64, delta I64, at I64) {
 # edits were made
 fn ShiftExpected(lines mut Array<String&>&, shLine Vec<I64>&, shAt Vec<I64>&, shDelta Vec<I64>&) {
     for k in range (12 if lines.Len() > 12 else lines.Len()) {
-        line := lines[k]
+        line :~ lines[k]
         if not line.StartsWith("#"): continue
         i := 1
         for i < line.Len() and srcmask.IsPySpace(line[i]): i++
@@ -169,7 +169,7 @@ fn ShiftExpected(lines mut Array<String&>&, shLine Vec<I64>&, shAt Vec<I64>&, sh
             out.PushChar(line[p])
             p++
         }
-        lines[k] = out.ToString()
+        lines[k] ~ out.ToString()
     }
 }
 
@@ -245,7 +245,7 @@ fn isErrorRow(row String&) Bool {
 # the text of a "PATH:LINE:COL: help: TEXT" row, "" for any other row
 fn helpText(row String&) String {
     k := try row.Find(": help: ") catch { return "" }
-    p := row[:k]
+    p :~ row[:k]
     if p.Len() == 0 or not p[p.Len() - 1].IsDigit(): return ""
     return $row[k + 8:]
 }
@@ -272,14 +272,14 @@ fn worker(olang String&, files Array<String&>&, dir String&, testLines Bool, out
     for {
         k := Taken.AtomicAdd(1)
         if k >= files.Len(): break
-        outputs[k] = compileOne(olang, files[k], dir, testLines)
+        outputs[k] ~ compileOne(olang, files[k], dir, testLines)
     }
 }
 
 # what compiling each of the files prints, in the order of the files, "jobs" at a time, each worker in a directory of its own
 fn CompileAll(olang String&, files Array<String&>&, workDirs Array<String&>&, testLines Bool) Array<String&>& {
     outputs mut Array<String&>& = Array<String&>(files.Len())
-    for i in range files.Len(): outputs[i] = ""
+    for i in range files.Len(): outputs[i] ~ ""
     Taken = 0
     join {
         for w in range workDirs.Len(): spawn worker(olang, files, workDirs[w], testLines, outputs)

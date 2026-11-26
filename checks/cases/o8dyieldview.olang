@@ -9,7 +9,7 @@ type Holder struct() {
     t String& = ""
 }
 
-fn (h mut Holder&) set(i I64) { h.t = $"text number " + $i + " padded out to many bytes ........................................" }
+fn (h mut Holder&) set(i I64) { h.t ~ $"text number " + $i + " padded out to many bytes ........................................" }
 
 fn churn() I64 {
     t I64 = 0
@@ -25,7 +25,7 @@ fn churn() I64 {
 # a view of h.t held across a yield: the consumer lets go of h.t between Next calls
 fn walk(h Holder&) Iterator<I64> {
     for _ in range 4 {
-        v := h.t
+        v :~ h.t
         yield 1
         yield v.Len() * 1000 + I64(v[12])
     }

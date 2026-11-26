@@ -31,13 +31,13 @@ fn main() {
     for i in range 8 {
         h.m.Put(i, Node(i))
         if i >= 1 {
-            a := try h.m.Get(i - 1) catch { unreachable }
-            b := try h.m.Get(i) catch { unreachable }
-            b.next = a                   # one value of the map's place stored inside another
+            a :~ try h.m.Get(i - 1) catch { unreachable }
+            b :~ try h.m.Get(i) catch { unreachable }
+            b.next ~ a                   # one value of the map's place stored inside another
         }
         if i >= 1 { h.m.Remove(i - 1) }  # which a removal then lets go of
         churn()
-        c := try h.m.Get(i) catch { unreachable }
-        if c.next != null: io.PutLn(c.next!.t)!
+        c :~ try h.m.Get(i) catch { unreachable }
+        if c.next is not null: io.PutLn(c.next!.t)!
     }
 }

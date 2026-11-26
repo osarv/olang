@@ -18,10 +18,10 @@ fn main() {
     n := os.Args().Len()
     {
         b mut Node& = Node(2, null)
-        d := a
-        if n > 0: d = b
-        m := try Node.make(n - 5) catch default d
-        m.next = Node(3, null)
+        d :~ a
+        if n > 0: d ~ b
+        m :~ try Node.make(n - 5) catch default d
+        m.next ~ Node(3, null)
         assert b.next!.v == 3
     }
 }

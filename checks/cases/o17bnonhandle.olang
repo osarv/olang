@@ -13,7 +13,7 @@ type Box struct() {
 }
 fn (a mut Box&) BitAnd(b mut Box&) mut Box& { return b }
 fn (h mut Box&) stash() {
-    h.c.kept = h.c.kept! & h
+    h.c.kept ~ h.c.kept! & h
 }
 fn run(m mut Map<I64, Box>&) ? {
     for i in range 3 {

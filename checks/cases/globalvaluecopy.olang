@@ -16,7 +16,7 @@ type Doc struct() {
 Docs mut Doc& = Doc()
 T String = Docs.title
 fn main() ? {
-    Docs.title = $2 + "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
+    Docs.title ~ $2 + "-zzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzzz"
     churn()
     try io.PutLn(T)
 }
