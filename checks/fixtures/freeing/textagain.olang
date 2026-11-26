@@ -1,0 +1,51 @@
+import "std/io"
+
+# O8f (docs/freeing.md 2.4): a text local given existing text each turn - an element, a reference, a local at its last
+# use, a walk's name, a slice - holds lowering's copy, made for it in a region of its own and let go of at its next
+# value; a function's new instance of two Vecs stored into an element, its leaves given what its own stores made; and
+# references a call builds pushed onto a Vec that only grows while it lives - kept on purpose, no turn row
+N I64 = 200000
+
+type Two struct(a Vec<String>, b Vec<I64>) {
+    a
+    b
+}
+
+fn Two.mk(i I64) Two {
+    a := Vec<String>[$"m" + $i + " padded out to some length", "n"]
+    b := Vec<I64>[i, i + 1]
+    return Two(a, b)
+}
+
+fn mk(i I64) Vec<String> {
+    w Vec<String>
+    for j in range 3: w.Push(($"s" + $(i + j)).PadEnd(40, '.'))
+    return w
+}
+
+fn named(i I64) String& { return $"p" + $i + " padded out" }
+
+fn main() {
+    last := ""
+    other String
+    walked := ""
+    cut String
+    twos := Array<Two>(4, Two.mk(0))
+    t := 0
+    for i in range N {
+        rows := mk(i)
+        last = rows[1]
+        r String& = rows[2]
+        other = r
+        t += last.Len() + other.Len()
+        s := ($"t" + $i).PadEnd(30, '-')
+        last = s
+        for row in rows: walked = row
+        cut = rows[0][0:5]
+        twos[i % 4] = Two.mk(i)
+        parts Vec<String&>
+        for k in range 3: parts.Push(named(i + k))
+        t += last.Len() + walked.Len() + cut.Len() + parts[2].Len() + twos[(i + 1) % 4].a[0].Len()
+    }
+    io.PutLn($t + " " + last + " " + other + " " + walked + " " + cut + " " + twos[(N - 1) % 4].a[0])!
+}

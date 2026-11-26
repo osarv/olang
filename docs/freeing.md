@@ -582,23 +582,32 @@ to grow into them, (c) a hand-off at the join. (c) is built:
   place, as a constructor's instance is (O28), and a reference field owning its referent is a new idea for section 8;
   (b) refuse nothing, build it where the turn is and copy it into the place - a copy at every store, a visible cost the
   program did not write. Recommendation: (a), only if a program needs it; the row says what to write meanwhile
-  (`$` a copy into a text field). The row over-reports where the reference is still held on purpose (the self-build's
-  fix.olang:181, file texts pushed into a `Vec<String&>`): `-check` fails such a program though nothing is wasted.
-- **A text local given existing text each turn (found by wt-revfix1, open).** `last := ""` then `last = rows[1]` or
-  `last = r` (a reference) each turn, or `s := ...; last = s`: ~64 bytes a turn past ~100,000 turns, `-memory -check`
-  passes ("no place lets go of storage in code that runs again", or the own local's place not reported). The same on
-  master before wt-walkref: review 1125b's w1walkesc and w2bindesc grow by this, not by their walk's copy (w6generic's
-  growth is its own `out` and a `head(row)` promotion, the row above). The own local's place keeps (RMade: "existing
-  storage") but `reported` shows a place only where a store owns storage, and these stores do not. Showing every own
-  local's place given existing storage is no fix: walkcopy, walkref, bindcopy and fieldagain would then report keeps
-  while they are flat (their copies are freed by lowering's slot copies). What closes it: tell a store whose value
-  is built where the local lives (item 17's lift for a move at a last use, D9i - `s := ...; last = s`) from one lowering
-  copies into the local's slot, and judge the first as made for the place (SMove-like), so the place frees; measure
-  which of the shapes is which first.
-- **A constructor's value in an element reported for a false reason (review 1125b finding 6, open).** old/twoowners and
-  ctorwrite now say "'rows[i % 10]' keeps ... its new value is existing storage: 'S2.mk(i)'" while flat at 200,000
-  turns - an over-report (`-check` passes), from the store into the element's leaves judging `S2.mk(i)` (a function
-  returning `S2(a, b)`) as existing storage. Not looked into further.
+  (`$` a copy into a text field). Where the reference is still held on purpose it names nothing: a call's value pushed
+  straight onto a `Vec` local of the body that only grows while it lives (given no other value, written no other way,
+  kept by no call, lent writably only to the prelude's `Push` - `lower.pushedInto`) holds every reference it hands back
+  until that scope closes, so the self-build's fix.olang:181 (file texts pushed into a `Vec<String&>`) is no row
+  (wt-revfix3; checks' freeing textagain).
+- **A text local given existing text each turn (found by wt-revfix1, closed by wt-revfix3).** `last := ""` then
+  `last = rows[1]` or `last = r` (a reference) each turn, or `s := ...; last = s`: ~64 bytes a turn past ~100,000
+  turns while `-memory -check` passed - the copy lowering makes (T7b's replaced immut array, D9h's view call copy) was
+  built where the local's storage is, and `reported` showed a place only where a store owns storage. Measured, every
+  shape is that copy (none a move of a lifted local); walkcopy, walkref, bindcopy and fieldagain's `keep` grew the same
+  (a few bytes a turn, their texts short: walkcopy 12.6 to 17.5 MB from 200,000 to 2,000,000 turns), not flat. Now an
+  assignment of existing text - a place read, a slice, a view call's value - to an owner local of immut text is a store
+  made for the place (`free.SCopy`, copyStore): lowering builds the copy in a region of its own made in the local's
+  storage where the place is decided sole, settles it by the value and releases the old one (`lower.copyRegion`,
+  `copied`, `copyStore`; a view call's D9h copy made there directly). And an owner local given a value not made for
+  it (SFail - a call handing back storage it was given, `last = (...).PadEnd(40, '.')`) is reported where it keeps: it
+  owns the storage built where it lives all the same. A declaration's value stays as it was (the Let's copy, kept by the
+  rule where it is existing storage). checks' freeing textagain (`limited`), kept's textsAgain; the review's w1walkesc
+  and w2bindesc flat (64.8 MB at 1,000,000 before).
+- **A constructor's value in an element reported for a false reason (review 1125b finding 6, closed by wt-revfix3).**
+  old/twoowners and ctorwrite said "'rows[i % 10]' keeps ... its new value is existing storage: 'S2.mk(i)'" while flat
+  at 200,000 turns: the store into a struct held in place judged its leaves' new value by the call - a constructor's
+  instance passes (its own stores give the leaves their values), any other call was existing storage. A function
+  handing back only new values of the type (`resFresh` - `S2.mk(i)` returning `S2(a, b)`, `s := S(m); return s`) gives
+  the leaves what its own stores made, judged in it (retCtorOf, letCtorOf, a copy's untracked): no store at the call,
+  as for a constructor's (`walker.copyInto`). Both free every place at once, the outputs unchanged.
 
 **Review 1125b's -check holes (wt-revfix2, 2026-11-25).** Three shapes grew while `-memory -check` passed naming no keep.
 
@@ -1483,3 +1492,14 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   freeing it in 2.4); a fill's text beneath its owner fields built in slots (wt-walkref's fill-and-walk, 52 MB to 13 MB
   with the array outside the loop) and a part place given a constructor's copy reported where it keeps. checks' freeing
   taskcaps, closurekept, fillwalk; kept's taskCaptures.
+- 2026-11-26 (wt-revfix3): 2.4's text local given existing text each turn closed (`free.SCopy`: lowering's copy built
+  in a region of its own in the local's storage, settled, its old value released - `lower.copyRegion`/`copyStore`), and
+  an owner local given a value not made for it reported where it keeps (PadEnd's `last`); finding 6's false reason gone
+  (a function handing back only new values judged as a constructor's call at a store into a struct held in place); and
+  builtResult's turn row left out for a call's value pushed onto a Vec local that only grows (`lower.pushedInto`).
+  checks' freeing textagain (`limited`), kept's textsAgain. Every probe of batch1125b and batch1125 agrees across
+  built, `-free late`, `-sanitize` and the evaluator; -check results unchanged but k2twotargets (its 'b', a task's result
+  each turn, now named beside 'a'), and more places counted where a text local is given text. The self-build frees 569
+  of its 1056 places at once (master's compiler on the same source: 560 of 1022 - 34 more owner text locals counted, 25
+  of them keeping, now named); warm peak 2608 MB both (child maximum resident set, second run); fix.olang:181's turn
+  row gone (explain.olang:821, fix.olang:334 and lower.olang:393 remain, waste).
