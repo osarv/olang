@@ -7,8 +7,8 @@ type Bag struct(name String&) {
     name
 }
 fn (b Bag&) Str() String {
-    name := b.name if b.name.Len() > 0 else "anon"
-    kind := match b.name.Len() {
+    name :~ b.name if b.name.Len() > 0 else "anon"
+    kind :~ match b.name.Len() {
         case 0: "empty"
         case _: b.name
     }

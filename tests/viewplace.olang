@@ -58,7 +58,7 @@ fn Big.mk(n I64) Big { return Big(n) }
 
 # a slice of a call's value - a temporary - kept in a parameter's field: the temporary built where the field lives
 fn setRow(h mut Holder&, n I64) {
-    h.r = Big.mk(n).a[0:2]
+    h.r ~ Big.mk(n).a[0:2]
 }
 
 fn rowAfter(n I64) I64 {
@@ -104,7 +104,7 @@ fn partAfter(n I64) I64 {
     for i in range n {
         inner mut Node& = Node(i * 3)
         v := View(inner)
-        keep = v.n
+        keep ~ v.n
     }
     churn()
     return keep.v
@@ -120,7 +120,7 @@ test firsts "keeps the first character of each turn's text" {
 }
 
 test head "hands back a view of what it builds" {
-    h := head(91)
+    h :~ head(91)
     churn()
     assert h == "91" and Heads == "7a"
 }

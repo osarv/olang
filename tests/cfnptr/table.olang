@@ -3,7 +3,7 @@
 # pointer is an extern call to section 8 (X1a), and the export fn's C entry, written in the root's object, is declared
 # in this one's
 
-export fn cfpSum5(env CVoid?&, a I64, b I64, c I64, d I64) I64 { return a + b + c + d + (0 if env == null else 1) }
+export fn cfpSum5(env CVoid?&, a I64, b I64, c I64, d I64) I64 { return a + b + c + d + (0 if env is null else 1) }
 
 # a table as JNI's is, of one C function pointer of five parameters
 type Table struct() {
@@ -12,7 +12,7 @@ type Table struct() {
 
 fn Table.Filled() Table {
     t := Table()
-    t.F = cfpSum5
+    t.F ~ cfpSum5
     return t
 }
 

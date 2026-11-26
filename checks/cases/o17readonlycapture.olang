@@ -15,7 +15,7 @@ type W struct(b Box) {
     b
 }
 fn (b Box&) grow() {
-    f := fn() { b.head.next = Node(7, null) }
+    f := fn() { b.head.next ~ Node(7, null) }
     f()
 }
 fn bump(src mut W&) {

@@ -21,7 +21,7 @@ type Grip unique struct(id I64) {
     id
     held Lamp?& = null
 } destruct {
-    if held != null {
+    if held is not null {
         assert held!.alive, "a Grip read its Lamp ended"
         held!.log.n += held!.data[3] * 10
     }
@@ -41,7 +41,7 @@ fn twoVecs(t mut Tally&, k I64) {
     gs.Push(Grip(5))
     ls := Vec<Lamp>()
     ls.Push(Lamp(k, t))
-    gs[0].held = ls[0]
+    gs[0].held ~ ls[0]
     churn()
 }
 

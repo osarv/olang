@@ -1,4 +1,4 @@
-# check: fail error[S4f]: '3' is a new value, and a reference links only to storage that exists
+# check: fail error[S4f]: ':~' declares a reference to storage that exists, and '3' is a new value
 # S4f: ":~" declares a reference to storage that exists; a literal has none
 fn main() {
     r :~ 3

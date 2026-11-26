@@ -192,7 +192,7 @@ fn apply(requests Vec<diagedit.Request>&) I64, I64 {
         }
         expect Vec<String&>
         diagedit.ExpectedTexts(src, expect)
-        lines := src.Split("\n")
+        lines :~ src.Split("\n")
         mine Vec<diagedit.Request>
         for r in requests {
             if r.Path == path: mine.Push(r)
@@ -222,12 +222,12 @@ fn apply(requests Vec<diagedit.Request>&) I64, I64 {
                     # nothing after it: take the space before instead
                     start := at
                     for start > 0 and (text[start - 1] == ' ' or text[start - 1] == '\t'): start--
-                    lines[idx] = $text[:start] + $text[at + 3:]
+                    lines[idx] ~ $text[:start] + $text[at + 3:]
                 } else {
-                    lines[idx] = $text[:at] + $text[end:]
+                    lines[idx] ~ $text[:at] + $text[end:]
                 }
             } else {
-                name := r.Arg
+                name :~ r.Arg
                 if diagedit.Sub(text, at, at + name.Len()) != name: continue
                 after := at + name.Len()
                 # one of several names sharing a type (D12b): "mut" goes once, before the type, after the last name
@@ -242,7 +242,7 @@ fn apply(requests Vec<diagedit.Request>&) I64, I64 {
                     after = p
                 }
                 if diagedit.Sub(text, after, after + 4) == " mut": continue
-                lines[idx] = $text[:after] + " mut" + $text[after:]
+                lines[idx] ~ $text[:after] + " mut" + $text[after:]
             }
             diagedit.Realign(lines, idx, lines[idx].Len() - text.Len(), at)
             shLine.Push(r.Line)
@@ -263,7 +263,7 @@ fn main() ? {
     olang := srcmask.Compiler()
     jobs I64 = 3
     paths Vec<String&>
-    args := os.Args()
+    args :~ os.Args()
     i I64 = 1
     for i < args.Len() {
         if args[i] == "--olang" or args[i] == "-j" {
@@ -319,7 +319,7 @@ fn main() ? {
     }
     srcmask.Say("puns: " + $puns + " 'mut' removed")
 
-    tmp := try os.MkTemp("", "perm_mut") catch {
+    tmp :~ try os.MkTemp("", "perm_mut") catch {
         srcmask.SayErr("perm_mut: cannot make a temporary directory")
         os.Exit(1)
         unreachable
@@ -327,7 +327,7 @@ fn main() ? {
     defer: try os.RemoveAll(tmp) catch { }
     work mut Array<String&>& = Array<String&>(jobs)
     for k in range jobs {
-        work[k] = $tmp + "/w" + $k
+        work[k] ~ $tmp + "/w" + $k
         try os.MkDirAll(work[k]) catch {
             srcmask.SayErr("perm_mut: cannot make " + $work[k])
             os.Exit(1)
@@ -335,9 +335,9 @@ fn main() ? {
     }
     totalDrop I64 = 0
     totalAdd I64 = 0
-    fileArray := files.ToArray()
+    fileArray :~ files.ToArray()
     for round in range 1, 9 {
-        outputs := diagedit.CompileAll(olang, fileArray, work, false)
+        outputs :~ diagedit.CompileAll(olang, fileArray, work, false)
         requests Vec<diagedit.Request>
         for o in outputs: editsFrom(o, allowed, requests)
         drops, adds := apply(requests)

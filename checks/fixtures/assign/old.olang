@@ -1,4 +1,4 @@
-# assign_migrate's corpus: the old spellings of a link, a reference local, an identity test and a null test
+# assign_migrate's corpus: the old spellings of the null test, "== null" and "!= null", among today's links and identity tests
 import "std/io"
 
 type Node struct(v I64, next Node?&) {
@@ -8,21 +8,21 @@ type Node struct(v I64, next Node?&) {
 
 fn total(head Node?&) I64 {
     n I64 = 0
-    at := head
+    at :~ head
     for at != null {
         n += at.v
-        at = at.next
+        at ~ at.next
     }
     return n
 }
 
-fn same(a Node&, b Node&) Bool { return a == b }
+fn same(a Node&, b Node&) Bool { return a is b }
 
-fn differ(a Node&, b Node&) Bool { return a != b }
+fn differ(a Node&, b Node&) Bool { return a is not b }
 
 fn last(head Node&) Node& {
-    at := head
-    for at.next != null: at = at.next!
+    at :~ head
+    for at.next != null: at ~ at.next!
     return at
 }
 
@@ -34,7 +34,7 @@ fn main() {
     v I64 = 3
     v = 4
     assert total(list) == 3 and same(list, list) and differ(list, n) and last(list).v == 2 and v == 4
-    h = n
+    h ~ n
     assert h.v == 5
     io.PutLn($total(list) + " " + $h.v)!
 }

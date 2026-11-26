@@ -14,7 +14,7 @@ type Box struct() {
     tag I64 = 0
 }
 fn idBox(seed mut Box&) Box { return seed }
-fn addRef(b mut Box&, v I64) { b.head.next = Node(v, b.head.next) }
+fn addRef(b mut Box&, v I64) { b.head.next ~ Node(v, b.head.next) }
 fn churn() ? io.Error {
     for k in range 200 {
         a := Array<I64>(64, k * 1000 + 7)
@@ -29,6 +29,6 @@ fn main() ? {
     }
     try churn()
     n := 0
-    for x Node?& = seed.head, x != null, x = x.next: n = n * 10 + x.v
+    for x Node?& = seed.head, x is not null, x ~ x.next: n = n * 10 + x.v
     try io.PutLn("chain " + $n)
 }

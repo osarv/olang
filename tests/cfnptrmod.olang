@@ -8,6 +8,6 @@ test "a call through another module's C function pointer, from several call site
     assert table.Sum(1) == 7
     assert table.Sum(2) + table.Sum(3) == 17
     t := table.Table.Filled()
-    assert table.Call(t, 10) == 16 and t.F != null
+    assert table.Call(t, 10) == 16 and t.F is not null
     assert t.F!(null, 4, 0, 0, 0) == 4
 }

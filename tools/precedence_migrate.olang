@@ -82,9 +82,9 @@ fn run() I32 {
     verify := false
     verbose := false
     paths Vec<String&>
-    args := os.Args()
+    args :~ os.Args()
     for i in range 1, args.Len() {
-        a := args[i]
+        a :~ args[i]
         if a == "--check": check = true
         else if a == "--verify": verify = true
         else if a == "-v": verbose = true
@@ -94,7 +94,7 @@ fn run() I32 {
         srcmask.SayErr("usage: tools_precedence_migrate [--check] [-v] FILE|DIR...")
         return 2
     }
-    std := try os.Env("OLANG_STD") catch default "std"
+    std :~ try os.Env("OLANG_STD") catch default "std"
     prelude := layout.PreludeTypes(std)
     files Vec<String&>
     for p in paths {

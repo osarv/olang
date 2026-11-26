@@ -122,30 +122,36 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   Said only of a program with no other error. **Running a file, both are warnings (`warning[D3b]: ...` on the
   standard error) and the program runs (B3e, 2026-11-13, the user's ease items)**; the evaluator's `test` keeps them errors.
 - **Assignment (S4, S4a, S4c, S4d).** Left to right: the target's place, then the value; a compound place is evaluated
-  once. Assignment to a reference repoints (S4a). Parallel assignment `a, b = b, a` evaluates every value first;
+  once. Assignment to a reference writes what it names (S4a); `~` links it (S4f). Parallel assignment `a, b = b, a`
+  (and `a, b ~ x, y`, links) evaluates every value first;
   `a, b := 1, 2` and `x, y I32` declare several names (S4c/D12b, the user's call); `x[i] = v` on a type declaring
-  `SetAt` stores through it. An assigned value borrowing storage within the place takes its old value as a copy (S4d). A store to a parameter or receiver - repointing a reference one, or into a value one's copy - that
-  nothing in the body reads after it is an error (S4e, `LostParamWrite`, S9g's walk over the body): `out = Box.Make(3)` on
-  a `mut Box&` never wrote the caller's value; write its fields, or return the new value. Once a reference parameter is
-  repointed at storage the callee gives a value (`p = P()`) on every path, a write through it (`p.A = 5`, `p.A.B = 1`)
-  is a store too, lost unless `p` is read after it; `p = q`, a conditional repoint, or a loop repointing elsewhere keep it.
-  A reference parameter or receiver repointed at storage the callee gives a value (E12c: a constructor call, a literal,
-  a call returning a value) is an error whatever reads follow (S4e, `FreshParamRepoint`): `if not ok: p = S(..)` then
-  a read left the caller with the old value. A repoint at existing storage (`p = q`, `p = p.next!`, a call returning a
+  `SetAt` stores through it. An assigned value borrowing storage within the place takes its old value as a copy (S4d). A store to a parameter or receiver - linking a reference one, or into a value one's copy - that
+  nothing in the body reads after it is an error (S4e, `LostParamWrite`, S9g's walk over the body): `out ~ Box.Make(3)` on
+  a `mut Box&` never wrote the caller's value; write through it (`out = ...`, its fields), or return the new value. Once a reference parameter is
+  linked to storage the callee gives a value (`p ~ P()`) on every path, a write through it (`p.A = 5`, `p.A.B = 1`)
+  is a store too, lost unless `p` is read after it; `p ~ q`, a conditional link, or a loop linking elsewhere keep it.
+  A reference parameter or receiver linked to storage the callee gives a value (E12c: a constructor call, a literal,
+  a call returning a value) is an error whatever reads follow (S4e, `FreshParamRepoint`): `if not ok: p ~ S(..)` then
+  a read left the caller with the old value. A link to existing storage (`p ~ q`, `p ~ p.next!`, a call returning a
   reference) is a cursor and stays; loop names (S9g) keep the read-after rule.
-- **Links and contents: `~`, `:~`, `is` (S4f, E10d, the user's decision 2026-11-26: "Let's do the tilde"; supersedes the
-  ledger's `p.Replace`).** Values: `a = b` assigns contents - through a reference too, writing the whole referent and
-  ending the old value as a store does - and `a := b` defines. References: `r ~ x` links `r` to `x` (a variable, a field,
-  what a reference names; never to a reference itself), `r :~ x` declares a reference local (writable where `x` may be
-  written, mine), `r ~ null` unlinks a `?&`; a new value after `~`/`:~` (a literal, a constructor's call, a call giving
-  a value) and `~` on a value are errors (`LinkFresh`, `LinkToValue`). `==`/`!=` compare contents, through references
-  too; `a is b` / `a is not b` test one object, never calling `Eq` (a value's place beside a reference is the object it
-  is, `r is v`; two values are an error, `IdentityOfValue`; two function values as `==`); `is` binds as `==` (mine).
-  Dereferencing is implicit; no references to references, no unary `&` or `*`. **Staged (2026-11-26, wt-assign):** stage
-  1 accepts the new spellings beside the old meanings (`=` on a reference still repoints, `==` on references without `Eq`
-  still identity, `== null` still the null test); `tools/assign_migrate` (in `olang fix`'s table, driven by the
-  checker's `OLANG_ASSIGNS=1` report) rewrites old code; stage 2 migrates the repository, flips `=` and `==`, and refuses
-  the old spellings with a hint (HANDOFF-assign.md).
+- **Links and contents: `~`, `:~`, `is` (S4a, S4f, E10, E10c, E10d, the user's decision 2026-11-26: "Let's do the
+  tilde"; supersedes the ledger's `p.Replace`).** Values: `a = b` assigns contents - through a reference too, writing the
+  whole referent and ending the old value as a store does (a `?&` only where a test says it is not null, else
+  `WriteThroughNull`) - and `a := b` defines a value (of a reference to existing storage, a copy of what it names; a
+  unique or generational one stays a reference, T13b/T13d). References: `r ~ x` links `r` to `x` (a variable, a field,
+  what a reference names; never to a reference itself; a new value is built where `r` is held, mine - 351 such links in
+  the compiler alone), `r :~ x` declares a reference local (writable where `x` may be written; a new value refused,
+  `:=` declares it), `r ~ null` unlinks a `?&`. `==`/`!=` compare contents, through references too (a null equal only
+  to a null; a reference held inside a value, to a type with no `Eq`, by identity - so back links and cycles end the
+  walk, mine); `==` on two `any` is refused naming `is`; function values compare by identity. `a is b` / `a is not b`
+  test one object, never calling `Eq`; `x is null` / `x is not null` the null test, `x is null` refused naming it. `is`
+  binds as `==`. In a generic body, what a type argument stands for is a value of the body: `=` and `~` both store it,
+  `:=` and `:~` both declare it, `==` compares a reference argument by identity (mine: one body, one meaning for every
+  `T`). Parallel and destructuring `=` write through reference targets as `=` does; `a, b := ...` takes each part as it
+  is. **Migrating old code:** `olang fix` rewrites `x is null` (an error now) as `x is null`; the links, the reference
+  locals and the identity tests need the checker's types under the old meanings - run `tools/assign_migrate` built from
+  olang 2f797cb98..a6d97410b (wt-assign's stage 1) over the repository, as stage 2 did here (HISTORY "links and
+  contents").
 - **Every path of a function with a result must return (D10a)** - structural, loops never count, `for { }` with no
   `break` of its own leaves, a leaving `join` and a `noreturn` call count. `unreachable` is checked, never assumed
   (S16d), and behaves as a failed assert. `os.Exit(code)` for any status (B5b).
@@ -210,13 +216,13 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   `Has`/`Contains`; comparison chains for `< <= > >=` only; `x as E.Case` gives the payload (fails with
   `CaseError.WrongCase`, so `try e as C` or `(e as C)!`).
 - **The null test is `is null` (E10c, the user's decision 2026-11-26, 12:40 CET: an existence check is about whether
-  there is something to reference, so it belongs with `is`; reversing the `== null` of 2026-11-15, which had reversed
+  there is something to reference, so it belongs with `is`; reversing the `is null` of 2026-11-15, which had reversed
   the `is null` of 2026-10-24).** `x is null` / `x is not null` (the literal on either side) is whether a `?&`
   reference, a function value or an error value holds none; it never calls `Eq` (mine). On an operand that cannot be
   null, and `null is null`, it is an error; narrowing keys on it as on any test (the parser makes it the same tree as a
-  comparison with the null literal, mine). `is` is a keyword again. Until stage 2 `x == null` is the same test; then it
+  comparison with the null literal, mine). `is` is a keyword again. Until stage 2 `x is null` is the same test; then it
   is refused with a hint. `tools/nulltest_migrate` is out of `olang fix`'s table (it would undo today's form);
-  `tools/assign_migrate` rewrites `== null`.
+  `tools/assign_migrate` rewrites `is null`.
 - **Case tests and narrowing (E32, S8d, the user's decision 2026-10-24: "I want == always. It generalizes better into
   the payload case").** `e == Shape.Circle` tests the case, `e == Shape.Circle(3.0)` compares its payload, `_` matches
   any part. After a case test a local or parameter is narrowed so `e.r` reads the payload field; a field read where
@@ -286,7 +292,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Removed spellings, for anyone tempted to bring them back:** struct literals `T{...}` and field-list structs (T13);
   `T[]`/`T[N]`/`T[expr]` arrays and 2-D arrays (`Array<T>`); `len(a)` (`a.Len()`); scope names `&s` and scope
   declarations; UFCS method calls (M19); `same(a, b)` and the `atomicLoad`-style builtins; `compif` (B9); `while`
-  (S9); `is` (`a is b` identity, `x is E.Case`, and `x is null` - the null test is `x == null` again); the helpers `Any`/`All` (`Some`/`Every`); a `size()` builtin;
+  (S9); `is` as `x is E.Case` (`a is b` identity and `x is null` came back 2026-11-26, "links and contents"); the helpers `Any`/`All` (`Some`/`Every`); a `size()` builtin;
   an `Iterable` interface (T35b: `xs.Iter()`); labeled break; interface switch dispatch (dropped by the user, "it gains
   very little and causes a lot of problems"); Str purity (E11c); `done`, `fail`, `abort` (QU); `own` and `take`
   (`docs/memory.md` round 3); `Array<T, N>`, constant type parameters `<N I64>` and `x as Array<T, N>&` views (QP1-
@@ -411,9 +417,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   is `Sum<A Number = T.Accumulator>()` (G4a, G4b, the user's call 2026-11-16): the type the call is wanted as, else
   `T.Accumulator` - an `Array<U8>` sums to a `U64`, an `Array<I32>` to an `I64`; wrapping in the elements' type is
   `Sum<U8>()`.
-- **Equality (E10, E10a, E10b, the user's decision 2026-10-24).** `==` compares what is stored, never following a
-  reference: values structurally, a reference by identity - unless its type declares `Eq`, which `==` calls at every
-  depth. The prelude declares `Eq`/`Hash` by contents on arrays, `String`, `List`, `Map`, `Vec`. A type declaring `Eq`
+- **Equality (E10, E10a, E10b, the user's decisions 2026-10-24 and 2026-11-26).** `==` compares contents: values
+  structurally, two references written as operands by what they name; a reference held inside a value by identity -
+  unless its type declares `Eq`, which `==` calls at every depth. The prelude declares `Eq`/`Hash` by contents on arrays, `String`, `List`, `Map`, `Vec`. A type declaring `Eq`
   must declare `Hash`.
 - **Structs are built only by their constructor (T13, C2d, the user's call).** No struct literals. A constructor body's
   top-level locals are the fields (C2a); a bare name is a pun of a parameter; `return` is rejected. Defaults are
@@ -595,7 +601,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **`any Trait&` (T32-T34, 2026-10-24, the user's design; layout confirmed 2026-11-01 "keep it that way").** Two
   words, the instance and a static table per (type, trait). A struct or enum variable is borrowed, a temporary built
   where the any lands, a number/Bool/Char/array copied. Calls dispatch through the table; `mut` only through `mut
-  any`; `==` is identity. A closed trait's any is matched by type cases `case Button b`; an open trait's never (the
+  any`; `is` is identity, `==` refused (E10d). A closed trait's any is matched by type cases `case Button b`; an open trait's never (the
   user). **Promises on a trait's methods (T30c, the user's yes to fnvalues question 2, 2026-11-08; built 2026-11-10):**
   a trait's method may end with the promise words (its receiver unnamed, the method's home: `keeps x` keeps `x` in the
   instance); a call through an `any` relies on the method's bound (T22b's, the receiver first: its result may borrow

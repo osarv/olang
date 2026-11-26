@@ -11,7 +11,7 @@ type Node struct(v I64, next mut Node?&) {
 }
 type Res unique struct(a mut Node&) {
     a
-} destruct { a.next = Node(9, null) }
+} destruct { a.next ~ Node(9, null) }
 type Wrap struct(a mut Node&) {
     a
     r Res& = Res(a)

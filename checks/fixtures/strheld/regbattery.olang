@@ -51,11 +51,11 @@ fn Res.mk(k I64) Res& { return Res(k) }
 fn main() ? {
     c := true
     {
-        a := try Res.mkR(1) catch default Res(2)
+        a :~ try Res.mkR(1) catch default Res(2)
     }
     try io.PutLn("0: " + $(Made - Gone))
     {
-        a2 := try Res.mkR(-1) catch default Res(3)
+        a2 :~ try Res.mkR(-1) catch default Res(3)
     }
     try io.PutLn("1: " + $(Made - Gone))
     {
@@ -67,19 +67,19 @@ fn main() ? {
     }
     try io.PutLn("3: " + $(Made - Gone))
     {
-        b3 := id(try FRes(5) catch { unreachable })
+        b3 :~ id(try FRes(5) catch { unreachable })
     }
     try io.PutLn("4: " + $(Made - Gone))
     {
-        d := id(id(Res(5)))
+        d :~ id(id(Res(5)))
     }
     try io.PutLn("5: " + $(Made - Gone))
     {
-        e := pick(Res(6), Res(7), c)
+        e :~ pick(Res(6), Res(7), c)
     }
     try io.PutLn("6: " + $(Made - Gone))
     {
-        f := first(Res(8), Res(9))
+        f :~ first(Res(8), Res(9))
     }
     try io.PutLn("7: " + $(Made - Gone))
     {
@@ -93,7 +93,7 @@ fn main() ? {
     }
     try io.PutLn("9: " + $(Made - Gone))
     {
-        i := Res(12) if c else (Res(13) if c else Res(14))
+        i :~ Res(12) if c else (Res(13) if c else Res(14))
     }
     try io.PutLn("10: " + $(Made - Gone))
     {
@@ -143,15 +143,15 @@ fn main() ? {
     }
     try io.PutLn("19: " + $(Made - Gone))
     {
-        t := id(try Res.mkR(-1) catch default Res(2))
+        t :~ id(try Res.mkR(-1) catch default Res(2))
     }
     try io.PutLn("20: " + $(Made - Gone))
     {
-        u := (try Res.mkR(-5) catch default Res(9)) if c else Res(10)
+        u :~ (try Res.mkR(-5) catch default Res(9)) if c else Res(10)
     }
     try io.PutLn("21: " + $(Made - Gone))
     {
-        u2 := try Res.mkV(-5) catch default Res(9)
+        u2 :~ try Res.mkV(-5) catch default Res(9)
     }
     try io.PutLn("22: " + $(Made - Gone))
     {

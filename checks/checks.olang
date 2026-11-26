@@ -30,7 +30,7 @@ Workers I64 = workers()
 
 # CHECKS_WORKERS, else 4
 fn workers() I64 {
-    t := try os.Env("CHECKS_WORKERS") catch default "4"
+    t :~ try os.Env("CHECKS_WORKERS") catch default "4"
     n := try t.ParseInt(10) catch default 4
     return n if n > 0 else 4
 }
@@ -100,7 +100,7 @@ fn only(names Array<String&>&) Array<String&>& {
     k := 0
     for x in names {
         if wanted(x) {
-            out[k] = x
+            out[k] ~ x
             k++
         }
     }
@@ -129,7 +129,7 @@ StoredRuns String& = try os.ReadFile("compiler/goldens/run.txt") catch default "
 Clang String& = findClang()
 
 fn findClang() String& {
-    env := try os.Env("OLANG_CLANG") catch default ""
+    env :~ try os.Env("OLANG_CLANG") catch default ""
     if env != "": return $env
     for name in Array<String&>["clang-20", "clang-19", "clang-18", "clang"] {
         if os.Run("command -v " + $name + " > /dev/null 2>&1") == 0: return $name
@@ -150,11 +150,11 @@ fn runAll() Array<String&>& {
     took mut Array<I64>& = Array<I64>(n)
     queue mut chan.Chan<I64>& = chan.Chan<I64>(n)
     for k in range Checks.Len(): chan.Send(queue, k)!
-    kept := try os.ReadDir(Store) catch default Array<String&>(0)
+    kept :~ try os.ReadDir(Store) catch default Array<String&>(0)
     if kept.Len() > StoreMost: os.Run("rm -rf " + $os.Quote(Store))
     join {
         for _ in range Workers: spawn worker(queue, outcomes, took)
-        seed := fresh(Seed)
+        seed :~ fresh(Seed)
         try os.WriteFile($seed + "/seed.olang", "fn main() ? { }\n") catch { }
         sh(seed, $store() + " \"$OLANG\" build seed.olang > out.txt 2>&1")
         for k in range Checks.Len(), n: chan.Send(queue, k)!
@@ -167,21 +167,21 @@ fn runAll() Array<String&>& {
 fn worker(queue mut chan.Chan<I64>&, outcomes mut Array<String&>&, took mut Array<I64>&) {
     for k in queue {
         t := time.Now()
-        outcomes[k] = runCheck(k)
+        outcomes[k] ~ runCheck(k)
         took[k] = time.Since(t)
     }
 }
 
 # CHECKS_TIMES set to a path: how long each check took, a line each - milliseconds, then its name - longest first
 fn writeTimes(took Array<I64>&) {
-    path := try os.Env("CHECKS_TIMES") catch default ""
+    path :~ try os.Env("CHECKS_TIMES") catch default ""
     if path == "": return
     order := Array<I64>(took.Len())
     for i in range took.Len(): order[i] = i
     order.Sort(fn(a I64, b I64) Bool { return took[a] > took[b] })
     b := StringBuilder()
     for k in order {
-        name := Checks[k] if k < Checks.Len() else $"cases/" + $Cases[k - Checks.Len()]
+        name :~ Checks[k] if k < Checks.Len() else $"cases/" + $Cases[k - Checks.Len()]
         b.Push($(took[k] / 1000000) + " " + $name + "\n")
     }
     try os.WriteFile(path, b.ToString()) catch os.Error { }
@@ -229,7 +229,7 @@ type Failed error {
 
 # ends the scenario as failed, with what went wrong and what the compiler said in dir
 fn (r mut report&) failed(what String&, dir String&) ? Failed {
-    r.text = failure(what, dir)
+    r.text ~ failure(what, dir)
     error Failed.Check
 }
 
@@ -241,7 +241,7 @@ fn (r mut report&) expect(ok Bool, what String&, dir String&) ? Failed {
 # the text after "<prefix>" on the line that starts with it, or "" when no line does
 fn lineAfter(src String&, prefix String&) String& {
     at := try src.Find(prefix) catch { return src[0:0] }
-    rest := src[at + prefix.Len():]
+    rest :~ src[at + prefix.Len():]
     end := try rest.FindByte('\n') catch { return rest }
     return rest[:end]
 }
@@ -267,7 +267,7 @@ fn fresh(tag String&) String& {
 # build/olang (make bootstrap) - compiler/DESIGN.md
 # section 4; the makefile's OLANG
 fn olang() String& {
-    o := try os.Env("OLANG") catch default "build/olang"
+    o :~ try os.Env("OLANG") catch default "build/olang"
     if o.StartsWith("/"): return $o
     return $root() + "/" + $o
 }
@@ -290,23 +290,23 @@ fn failure(what String&, dir String&) String& {
 # a case's "# also:" texts each in what the compiler said, its "# never:" texts none of them: "" where so, else the
 # failure
 fn alsoNever(src String&, name String&, dir String&) String& {
-    rest := src[:]
+    rest :~ src[:]
     for {
         at := try rest.Find("# also: ") catch { break }
-        line := rest[at + 8:]
+        line :~ rest[at + 8:]
         end := try line.FindByte('\n') catch default line.Len()
-        also := line[:end]
+        also :~ line[:end]
         if not outOf(dir).Contains(also): return failure($name + ": expected '" + $also + "'", dir)
-        rest = line[end:]
+        rest ~ line[end:]
     }
-    rest = src[:]
+    rest ~ src[:]
     for {
         at := try rest.Find("# never: ") catch { break }
-        line := rest[at + 9:]
+        line :~ rest[at + 9:]
         end := try line.FindByte('\n') catch default line.Len()
-        never := line[:end]
+        never :~ line[:end]
         if outOf(dir).Contains(never): return failure($name + ": did not expect '" + $never + "'", dir)
-        rest = line[end:]
+        rest ~ line[end:]
     }
     return ""
 }
@@ -314,17 +314,17 @@ fn alsoNever(src String&, name String&, dir String&) String& {
 # builds one case file, in a directory of its own, and judges it against its own header
 fn runCase(name String&) String& {
     if not name.EndsWith(".olang"): return ""
-    src := try os.ReadFile("checks/cases/" + $name) catch default ""
-    check := lineAfter(src, "# check: ")
-    written := lineAfter(src, "# flags: ")
+    src :~ try os.ReadFile("checks/cases/" + $name) catch default ""
+    check :~ lineAfter(src, "# check: ")
+    written :~ lineAfter(src, "# flags: ")
     # for another architecture, every case but those naming their own target, and the documentation's (which no
     # target changes) - and those needing what a cross C library holds alone (CrossSkip)
     cross := Target != "" and not written.Contains("-target") and not check.StartsWith("doc")
     if Target != "" and CrossSkip.Has(name): return ""
     if Target.Contains("windows") and WindowsSkip.Has(name): return ""
-    flags := $written + " -target " + $Target if cross else written
-    base := name[:name.Len() - 6]
-    dir := fresh("cases/" + $base)
+    flags :~ $written + " -target " + $Target if cross else written
+    base :~ name[:name.Len() - 6]
+    dir :~ fresh("cases/" + $base)
     os.Run("cp checks/cases/" + $name + " " + $os.Quote(dir))
     if check.StartsWith("doc") {
         # the header's lines are comments too: the documentation is of the program without them
@@ -344,19 +344,19 @@ fn runCase(name String&) String& {
     status := sh(dir, $store() + " \"$OLANG\" build " + $flags + " " + $name + " > out.txt 2>&1")
     if check.StartsWith("fail ") {
         if status == 0: return failure($name + " compiled but should not have", dir)
-        want := check[5:]
+        want :~ check[5:]
         if not outOf(dir).Contains(want): return failure($name + ": expected '" + $want + "'", dir)
         return alsoNever(src, name, dir)
     }
     if status != 0: return failure($name + " did not build", dir)
-    bin := base
+    bin :~ base
     san := false
     for f in flags.Split(" ") {                 # -debug, -race and -sanitize name their binary for what it was built as
-        if f == "-debug": bin = $base + ".debug"
-        if f == "-race": bin = $base + ".race"
+        if f == "-debug": bin ~ $base + ".debug"
+        if f == "-race": bin ~ $base + ".race"
         if f == "-sanitize": san = true
     }
-    if san: bin = $bin + ".san"
+    if san: bin ~ $bin + ".san"
     if check.Eq("run") {
         # another architecture's program is run by olang run, through its emulator (B12a; scripting mode runs on this
         # machine alone)
@@ -385,7 +385,7 @@ type stored struct() {
 fn stored.storedOutput(name String&) stored {
     r := stored()
     at := try StoredRuns.Find($"=== run " + $name + "\n") catch { return r }
-    rest := StoredRuns[at:]
+    rest :~ StoredRuns[at:]
     first := true
     out := StringBuilder()
     for row in rest.Split("\n") {
@@ -408,7 +408,7 @@ fn stored.storedOutput(name String&) stored {
             out.PushChar('\n')
         }
     }
-    r.Out = out.ToString()
+    r.Out ~ out.ToString()
     return r
 }
 
@@ -533,7 +533,7 @@ fn scenario(r mut report&, name String&) ? Failed {
         case "linkinline": try linkinline(r)
         case "racetests": try racetests(r)
         case _ {
-            r.text = "check FAIL: no scenario is named " + $name + "\n"
+            r.text ~ "check FAIL: no scenario is named " + $name + "\n"
             error Failed.Check
         }
     }
@@ -548,7 +548,7 @@ fn scenario(r mut report&, name String&) ? Failed {
 test "what a long-lived place lets go of is freed at once" { assert passed("earlyfree") }
 
 fn earlyfree(r mut report&) ? Failed {
-    dir := fresh("earlyfree")
+    dir :~ fresh("earlyfree")
     os.Run("cp checks/fixtures/earlyfree/* " + $os.Quote(dir))
     # C9b: conns and sockets hold values with destructors, held by value in a Map and freed by a removal - sockets'
     # descriptors too, under a limit of 64 open at once
@@ -577,7 +577,7 @@ fn earlyfree(r mut report&) ? Failed {
                     "3071\n", "270000\n", "1936 64\n", "16\n", "64 512\n", "5970000 5970000\n", "2000 1999000\n"
                     "149100\n", "1968 1000000 32\n", "1936 1999000 64\n", "1968 32\n", "1504350000 10000 2\n", "50 5000\n", "303405 name 128\n", "66616 128000\n"]
     for i in range progs.Len() {
-        p := progs[i]
+        p :~ progs[i]
         try r.expect(sh(dir, $"\"$OLANG\" build " + $p + ".olang > out.txt 2>&1") == 0, $p + " build", dir)
         try r.expect(sh(dir, $"(ulimit -v 8192 && ulimit -n 64 && ./build/" + $p + ") > out.txt 2>&1") == 0, $p + " under 8 MB", dir)
         try r.expect(outOf(dir) == full[i], $p + " output", dir)
@@ -596,7 +596,7 @@ fn earlyfree(r mut report&) ? Failed {
 test "every let-go the freeing guarantee names frees, and -memory -check proves it" { assert passed("freeing") }
 
 fn freeing(r mut report&) ? Failed {
-    dir := fresh("freeing")
+    dir :~ fresh("freeing")
     os.Run("cp checks/fixtures/freeing/* checks/fixtures/earlyfree/*.olang " + $os.Quote(dir))
     # (fields: gaps 6-7, elements: 8-9, mapvalues: 10 and 15, unset: 16, vecelems, vectexts, vecvecs and mapelems: 17,
     # mapcopy: 18, returned: 19, views: 20, copytext: a copy's text in slots, 2.3, ownerelems, soleelems, structelems,
@@ -720,7 +720,7 @@ fn freeing(r mut report&) ? Failed {
                     "223180 r0.................................................................................................. n199 199 n0------------------------------------------------------------------------------\n"
                     "39778 t199-------------------------- s201.................................... s201.................................... s199. m199 padded out to some length\n"]
     for i in range limited.Len() {
-        p := limited[i]
+        p :~ limited[i]
         try r.expect(sh(dir, "\"$OLANG\" build -memory -check " + $p + ".olang > out.txt 2>&1") == 0, $p + " -memory -check", dir)
         try r.expect(sh(dir, "(ulimit -v 8192 && ./build/" + $p + ") > out.txt 2>&1") == 0, $p + " under 8 MB", dir)
         try r.expect(outOf(dir) == full[i], $p + " output", dir)
@@ -776,7 +776,7 @@ fn freeing(r mut report&) ? Failed {
     wfull := Array<String&>["599103 s2102\n", "338899 s2002\n", "611103 s2102\n", "338899 s2002\n"]
     wpart := Array<String&>["59800 s302\n", "33696 s202\n", "61000 s302\n", "33696 s202\n"]
     for i in range walked.Len() {
-        p := walked[i]
+        p :~ walked[i]
         try r.expect(sh(dir, "\"$OLANG\" build -memory -check " + $p + ".olang > out.txt 2>&1") == 0 and outOf(dir).Contains(", 0 keep it"), $p + " frees at once", dir)
         try late(r, dir, p, "2000", wfull[i])
         try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 " + $p + ".olang > out.txt 2>&1") == 0 and outOf(dir) == wpart[i], $p + " interpreted", dir)
@@ -903,7 +903,7 @@ fn freeing(r mut report&) ? Failed {
         try r.expect(sh(dir, "\"$OLANG\" build -memory -check " + $p + ".olang > out.txt 2>&1") == 0, $p + " -memory -check", dir)
     }
     try r.expect(sh(dir, "\"$OLANG\" build -memory -check gaps.olang > out.txt 2>&1") == 1, "gaps passed -memory -check", dir)
-    o := outOf(dir)
+    o :~ outOf(dir)
     try r.expect(o.Contains("gaps.olang:9:9: memory: 'rows[i % 10]' keeps what it lets go of until main's scope closes: a let-go early freeing does not follow (O8f)"), "no row for the element", dir)
     try r.expect(o.Contains("error[B18]: 2 let-goes early freeing does not follow (O8f)"), "no B18 error", dir)
 }
@@ -925,8 +925,8 @@ fn late(r mut report&, dir String&, p String&, n String&, want String&) ? Failed
 # calling it (split.olang), frees what it lets go of as the one-module form (whole) does - each reading its own peak,
 # the split's within 1 MB of the whole's
 fn split(r mut report&, dir String&, p String&, want String&) ? Failed {
-    text := try os.ReadFile($dir + "/" + $p + ".olang") catch default ""
-    peak := try os.ReadFile($dir + "/peak.txt") catch default ""
+    text :~ try os.ReadFile($dir + "/" + $p + ".olang") catch default ""
+    peak :~ try os.ReadFile($dir + "/peak.txt") catch default ""
     imports StringBuilder
     rest StringBuilder
     fallible := false
@@ -941,7 +941,7 @@ fn split(r mut report&, dir String&, p String&, want String&) ? Failed {
         }
     }
     lib := $imports.ToString() + "import \"std/os\"\n" + $rest.ToString() + $("\nfn Run() { run()! }\n" if fallible else "") + $peak
-    main := try os.ReadFile($dir + "/wholemain.txt") catch default ""
+    main :~ try os.ReadFile($dir + "/wholemain.txt") catch default ""
     wrote := true
     try os.WriteFile($dir + "/splitlib.olang", lib) catch os.Error { wrote = false }
     try os.WriteFile($dir + "/whole.olang", $lib + $main) catch os.Error { wrote = false }
@@ -951,8 +951,8 @@ fn split(r mut report&, dir String&, p String&, want String&) ? Failed {
         try r.expect(sh(dir, $"\"$OLANG\" build " + $form + ".olang > out.txt 2>&1") == 0, $p + " " + $form + " build", dir)
         try r.expect(sh(dir, $"(ulimit -n 64 && ./build/" + $form + ") > out.txt 2> peak.out") == 0, $p + " " + $form, dir)
         try r.expect(outOf(dir) == want, $p + " " + $form + " output", dir)
-        got := try os.ReadFile($dir + "/peak.out") catch default ""
-        t := got.Trim()
+        got :~ try os.ReadFile($dir + "/peak.out") catch default ""
+        t :~ got.Trim()
         n := try t[5:].ParseInt() catch default -1
         peaks.Push(n if t.StartsWith("peak ") else -1)
     }
@@ -963,7 +963,7 @@ fn split(r mut report&, dir String&, p String&, want String&) ? Failed {
 test "where a value lands, as whole builds" { assert passed("landing") }
 
 fn landing(r mut report&) ? Failed {
-    dir := fresh("landing")
+    dir :~ fresh("landing")
     os.Run("cp checks/fixtures/landing/* " + $os.Quote(dir))
     progscope String& = "\"$OLANG\" build -debug progscope.olang > out.txt 2>&1 && ./build/progscope.debug > out.txt 2>&1"
     try r.expect(sh(dir, progscope) == 0, "progscope", dir)
@@ -1040,7 +1040,7 @@ fn landing(r mut report&) ? Failed {
 test "std/io beside a local io.olang" { assert passed("twolists") }
 
 fn twolists(r mut report&) ? Failed {
-    dir := fresh("twolists")
+    dir :~ fresh("twolists")
     os.Run("cp checks/fixtures/twolists/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build twolists.olang > out.txt 2>&1 && ./build/twolists") == 0, "twolists", dir)
     try r.expect(sh(dir, "\"$OLANG\" build samealias.olang > out.txt 2>&1") != 0, "samealias compiled", dir)
@@ -1053,7 +1053,7 @@ fn twolists(r mut report&) ? Failed {
 test "builds side by side in one directory compile each object once" { assert passed("sidebyside") }
 
 fn sidebyside(r mut report&) ? Failed {
-    dir := fresh("sidebyside")
+    dir :~ fresh("sidebyside")
     os.Run("cp checks/fixtures/sidebyside/* " + $os.Quote(dir))
     wrap String& = ("mkdir bin && printf '#!/bin/sh\nfor a; do [ \"$p\" = -o ] && echo \"$a\" >> %s/compiles.txt; p=$a; done\nexec %s \"$@\"\n' " +
                     $os.Quote(dir) + " \"$(command -v \"$CLANG\")\" > bin/clang && chmod +x bin/clang")
@@ -1074,7 +1074,7 @@ fn sidebyside(r mut report&) ? Failed {
 test "a file in a remote repository, fetched once into the cache" { assert passed("remote") }
 
 fn remote(r mut report&) ? Failed {
-    dir := fresh("remote")
+    dir :~ fresh("remote")
     repo String& = $dir + "/remote/example.com/me/tools"
     env String& = "OLANG_GIT_BASE=file://" + $dir + "/remote/ OLANG_CACHE=" + $dir + "/cache "
     src String& = "checks/fixtures/remote/"
@@ -1135,7 +1135,7 @@ fn remote(r mut report&) ? Failed {
 test "nothing in a remote import or the lock file is run" { assert passed("remotebad") }
 
 fn remotebad(r mut report&) ? Failed {
-    dir := fresh("remotebad")
+    dir :~ fresh("remotebad")
     os.Run("cp -r checks/fixtures/remotebad/. " + $os.Quote(dir))
     env String& = "OLANG_GIT_BASE=file://" + $dir + "/remote/ OLANG_CACHE=" + $dir + "/cache "
     try r.expect(sh($dir + "/inj", $env + "\"$OLANG\" build inj.olang > out.txt 2>&1") != 0, "inj.olang built", $dir + "/inj")
@@ -1163,7 +1163,7 @@ fn remotebad(r mut report&) ? Failed {
 test "objects and symbols are named by what they are built from" { assert passed("objnames") }
 
 fn objnames(r mut report&) ? Failed {
-    dir := fresh("objnames")
+    dir :~ fresh("objnames")
     os.Run("cp -r checks/fixtures/objnames/. " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build app1.olang > out.txt 2>&1 && ./build/app1 > out.txt") == 0, "app1", dir)
     try r.expect(outOf(dir) == "app1 1\n", "app1 output", dir)
@@ -1188,7 +1188,7 @@ fn objnames(r mut report&) ? Failed {
 test "a program locked back to an older commit is built from it" { assert passed("remotestale") }
 
 fn remotestale(r mut report&) ? Failed {
-    dir := fresh("remotestale")
+    dir :~ fresh("remotestale")
     repo String& = $dir + "/remote/example.com/me/tools"
     env String& = "OLANG_GIT_BASE=file://" + $dir + "/remote/ OLANG_CACHE=" + $dir + "/cache "
     src String& = "checks/fixtures/remote/"
@@ -1212,7 +1212,7 @@ fn remotestale(r mut report&) ? Failed {
 test "-t runs every file it can, whatever another one is" { assert passed("ttolerant") }
 
 fn ttolerant(r mut report&) ? Failed {
-    dir := fresh("ttolerant")
+    dir :~ fresh("ttolerant")
     os.Run("cp checks/fixtures/ttolerant/* " + $os.Quote(dir) + " && mkdir " + $os.Quote($dir + "/adir"))
     try r.expect(sh(dir, "\"$OLANG\" test nosuch.olang t1.olang adir t2.olang > out.txt 2>&1") != 0, "-t passed", dir)
     try r.expect(outOf(dir).Contains("ok - one") and outOf(dir).Contains("ok - two"), "-t stopped early", dir)
@@ -1225,7 +1225,7 @@ fn ttolerant(r mut report&) ? Failed {
 test "-t goes on past a file the compiler crashed on" { assert passed("tcrash") }
 
 fn tcrash(r mut report&) ? Failed {
-    dir := fresh("tcrash")
+    dir :~ fresh("tcrash")
     os.Run("cp checks/fixtures/ttolerant/* " + $os.Quote(dir))
     deep String& = nested("fn main() ? {\n    x := ", "(", "1", ")", "\n}\n", 5000)
     try os.WriteFile($dir + "/deep.olang", deep) catch { }
@@ -1233,7 +1233,7 @@ fn tcrash(r mut report&) ? Failed {
     run String& = "( (ulimit -v 800000 && ulimit -s 1024 && \"$OLANG\" test t1.olang deep.olang t2.olang) > out.txt 2>&1; echo $? > rc.txt ) 2> /dev/null"
     try r.expect(sh(dir, $run + " && test $(cat rc.txt) -eq 1") == 0
                  "-t did not fail for the crash, or crashed itself", dir)
-    out := outOf(dir)
+    out :~ outOf(dir)
     try r.expect(out.Contains("internal compiler error") and out.Contains("deep.olang: the compiler ended")
                  "crash", dir)
     try r.expect(out.Contains("ok - one") and out.Contains("ok - two"), "-t stopped at the crash", dir)
@@ -1244,7 +1244,7 @@ fn tcrash(r mut report&) ? Failed {
 test "a program of many long-named modules links" { assert passed("manymods") }
 
 fn manymods(r mut report&) ? Failed {
-    dir := fresh("manymods")
+    dir :~ fresh("manymods")
     long String& = "_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
     app := StringBuilder()
     app.Push("import \"std/io\"\n")
@@ -1267,7 +1267,7 @@ fn manymods(r mut report&) ? Failed {
 test "diagnostics are on one stream, and a crash says so" { assert passed("diag") }
 
 fn diag(r mut report&) ? Failed {
-    dir := fresh("diag")
+    dir :~ fresh("diag")
     try r.expect(sh(dir, "\"$OLANG\" build -r x.olang > out.txt 2> err.txt") != 0, "-r was taken", dir)
     try r.expect(outOf(dir).Contains("olang: error[B1]: unknown option '-r'") and sh(dir, "test ! -s err.txt") == 0, "unknown option", dir)
     deep String& = nested("fn main() ? {\n    x := ", "(", "1", ")", "\n}\n", 5000)
@@ -1283,7 +1283,7 @@ fn diag(r mut report&) ? Failed {
 test "a module outside the working directory imports its neighbours" { assert passed("updir") }
 
 fn updir(r mut report&) ? Failed {
-    dir := fresh("updir")
+    dir :~ fresh("updir")
     os.Run("cp -r checks/fixtures/updir/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build sub/main.olang > out.txt 2>&1 && ./build/sub_main > out.txt") == 0, "from above", dir)
     try r.expect(outOf(dir) == "7\n", "from above: expected 7", dir)
@@ -1296,7 +1296,7 @@ fn updir(r mut report&) ? Failed {
 test "a C tag defined differently in two C files is two types" { assert passed("cdiffer") }
 
 fn cdiffer(r mut report&) ? Failed {
-    dir := fresh("cdiffer")
+    dir :~ fresh("cdiffer")
     os.Run("cp checks/fixtures/cdiffer/*.c checks/fixtures/cdiffer/*.olang " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build main.olang > out.txt 2>&1") != 0, "two definitions of a tag were taken as one type", dir)
     try r.expect(sh(dir, "grep -q 'expected cd_thing?& of b.c, found cd_thing of a.c' out.txt") == 0, "the refusal names both C modules", dir)
@@ -1307,7 +1307,7 @@ fn cdiffer(r mut report&) ? Failed {
 test "a directory groups files and is never a module" { assert passed("pkg") }
 
 fn pkg(r mut report&) ? Failed {
-    dir := fresh("pkg")
+    dir :~ fresh("pkg")
     os.Run("cp -r checks/fixtures/pkg " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" compile pkg/one.olang > out.txt 2>&1") == 0, "-c on a file in a directory", dir)
     try r.expect(sh(dir, "\"$OLANG\" test pkg/one.olang > out.txt 2>&1") == 0, "-t on a file in a directory", dir)
@@ -1322,7 +1322,7 @@ fn pkg(r mut report&) ? Failed {
 test "a -D value rebuilds only the modules that mention it" { assert passed("stale") }
 
 fn stale(r mut report&) ? Failed {
-    dir := fresh("stale")
+    dir :~ fresh("stale")
     os.Run("cp checks/fixtures/stale/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build -define Level=1 -define Want=2 uses.olang > out.txt 2>&1 && ./build/uses") == 0
                  "first build", dir)
@@ -1341,7 +1341,7 @@ fn stale(r mut report&) ? Failed {
 test "an unchanged module's object is reused, and the program is the one written afresh" { assert passed("reuse") }
 
 fn reuse(r mut report&) ? Failed {
-    dir := fresh("reuse")
+    dir :~ fresh("reuse")
     os.Run("cp checks/fixtures/reuse/* " + $os.Quote(dir))
     same := "modules reused, every object the same"
     try r.expect(sh(dir, "\"$OLANG\" build app.olang > out.txt 2>&1 && ./build/app > run.txt") == 0, "first build", dir)
@@ -1380,7 +1380,7 @@ fn reuse(r mut report&) ? Failed {
 test "weak references are judged over the whole program" { assert passed("weakmods") }
 
 fn weakmods(r mut report&) ? Failed {
-    dir := fresh("weakmods")
+    dir :~ fresh("weakmods")
     os.Run("cp checks/fixtures/weak/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build good.olang > out.txt 2>&1 && ./build/good > out.txt") == 0, "good", dir)
     try r.expect(outOf(dir) == "4 true\n", "good's output", dir)
@@ -1398,14 +1398,14 @@ fn weakmods(r mut report&) ? Failed {
 test "a store widening a precompiled module's field is refused at the store, accepted from source" { assert passed("fieldset") }
 
 fn fieldset(r mut report&) ? Failed {
-    dir := fresh("fieldset")
+    dir :~ fresh("fieldset")
     os.Run("cp checks/fixtures/fieldset/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build main.olang > out.txt 2>&1 && ./build/main > out.txt") == 0, "from source", dir)
     try r.expect(outOf(dir) == "43\n", "from source: expected '43'", dir)
     apart := "OLANG_OBJECTS=\"$PWD/store\" "
     try r.expect(sh(dir, $apart + "\"$OLANG\" compile lib.olang > out.txt 2>&1") == 0, "lib compiled apart", dir)
     try r.expect(sh(dir, $apart + "\"$OLANG\" build main.olang > out.txt 2>&1") != 0, "built with lib precompiled", dir)
-    try r.expect(outOf(dir).Contains("main.olang:20:19: error[B3i, O23]: this stores into 'At' through a path with no known binding") and
+    try r.expect(outOf(dir).Contains("main.olang:20:9: error[B3i, O23]: this stores into 'At' through a path with no known binding") and
                  outOf(dir).Contains("a precompiled module declares the field")
                  "the error at the store, naming the field", dir)
     try r.expect(sh(dir, $"echo '# changed' >> lib.olang && " + $apart + "\"$OLANG\" build main.olang > out.txt 2>&1 && ./build/main > out.txt") == 0
@@ -1418,7 +1418,7 @@ fn fieldset(r mut report&) ? Failed {
 test "a module's record is reused only by a program whose facts read alike" { assert passed("reusefact") }
 
 fn reusefact(r mut report&) ? Failed {
-    dir := fresh("reusefact")
+    dir :~ fresh("reusefact")
     os.Run("cp checks/fixtures/reusefact/* " + $os.Quote(dir))
     same := "modules reused, every object the same"
     try r.expect(sh(dir, "\"$OLANG\" build back.olang > out.txt 2>&1 && ./build/back > run.txt") == 0, "back's build", dir)
@@ -1503,7 +1503,7 @@ Edits := Array<Edit>[Edit("a body alone", "sed -i 's/return b.n$/return b.n * 1/
 Varying := "'^olang: \\(reused\\|lowered\\|facts\\|front\\|scope judged\\|incremental check:.*every one the same\\)'"
 
 fn incremental(r mut report&) ? Failed {
-    dir := fresh("incremental")
+    dir :~ fresh("incremental")
     os.Run("mkdir " + $os.Quote($dir + "/inc") + " " + $os.Quote($dir + "/orig") + " && cp checks/fixtures/incremental/* " + $os.Quote($dir + "/inc") + $
            " && cp checks/fixtures/incremental/* " + $os.Quote($dir + "/orig"))
     try r.expect(incBuild(dir, "inc", "", "base", "main.olang", "main") == 0, "the first build", dir)
@@ -1532,18 +1532,18 @@ fn incEdit(r mut report&, dir String&, e Edit&) ? Failed {
     try r.expect(sh(dir, $"grep -v " + $Varying + " here | sort > a && grep -v " + $Varying + " there | sort > b && cmp -s a b") == 0
                  $"the build " + $what + " is not the clean one's (here, there)", dir)
     sh(dir, "grep '^olang: lowered ' here | grep -v 'lowered std/' | grep -v 'lowered <' | cut -d' ' -f3 | sort | tr '\\n' ' ' > low")
-    low := (try os.ReadFile($dir + "/low") catch default "").Trim()
+    low :~ (try os.ReadFile($dir + "/low") catch default "").Trim()
     try r.expect(low == e.lowered, $"the modules lowered " + $what + ": expected '" + $e.lowered + "', not '" + $low + "'", dir)
     # W3a: the program's own modules whose bodies' M19g summaries were found afresh, not taken from their front records -
     # keyed as the IR's records are, by the texts a module reaches, so the modules lowered again
     sh(dir, "grep '^olang: front checked ' here | grep -v 'checked std/' | grep -v 'checked <' | cut -d' ' -f4 | sort | " + $
        "tr '\\n' ' ' > checked")
-    checked := (try os.ReadFile($dir + "/checked") catch default "").Trim()
+    checked :~ (try os.ReadFile($dir + "/checked") catch default "").Trim()
     try r.expect(checked == e.lowered, $"the modules checked afresh " + $what + ": expected '" + $e.lowered + "', not '" + $checked + "'", dir)
     # W3b: and those whose functions the scope pass judged afresh, not taken from its records - the same modules
     sh(dir, "grep '^olang: scope judged ' here | grep -v 'judged std/' | grep -v 'judged <' | cut -d' ' -f4 | sort | " + $
        "tr '\\n' ' ' > judged")
-    judged := (try os.ReadFile($dir + "/judged") catch default "").Trim()
+    judged :~ (try os.ReadFile($dir + "/judged") catch default "").Trim()
     try r.expect(judged == e.lowered, $"the modules the scope pass judged afresh " + $what + ": expected '" + $e.lowered + "', not '" + $judged + "'", dir)
     try r.expect(sh($dir + "/inc", "rm -f *.olang *.c *.txt && cp ../orig/* .") == 0, $"undoing " + $what, dir)
     try r.expect(incBuild(dir, "inc", "", "undone", "main.olang", "main") == 0, $"the build undoing " + $what, dir)
@@ -1566,18 +1566,18 @@ ReuseWays := 4
 fn reuseAll(r mut report&, k I64) ? Failed {
     names Vec<String&>
     for name in Cases {
-        src := try os.ReadFile("checks/cases/" + $name) catch default ""
+        src :~ try os.ReadFile("checks/cases/" + $name) catch default ""
         if lineAfter(src, "# check: ").StartsWith("run"): names.Push($name)
     }
     names.Sort(fn(a String&, b String&) Bool { return a < b })
     back := k >= ReuseWays
     dir String& = $root() + "/build/checks/reuseall-" + $("back" if back else "forth")
     os.Run("mkdir -p " + $os.Quote(dir))
-    rep := fresh($"reuseall/" + $k)                # where a failed build's output is copied, for the report
+    rep :~ fresh($"reuseall/" + $k)                # where a failed build's output is copied, for the report
     for i in range names.Len() {
         if i % ReuseWays != k % ReuseWays: continue
-        name := names[names.Len() - 1 - i] if back else names[i]
-        flags := lineAfter(try os.ReadFile("checks/cases/" + $name) catch default "", "# flags: ")
+        name :~ names[names.Len() - 1 - i] if back else names[i]
+        flags :~ lineAfter(try os.ReadFile("checks/cases/" + $name) catch default "", "# flags: ")
         out := $"out-" + $name + ".txt"
         status := sh(dir, $"OLANG_CHECKREUSE=1 OLANG_CHECKINCR=1 \"$OLANG\" build " + $flags + " " + $os.Quote($root() + "/checks/cases/" + $name) + " > " + $out + " 2>&1")
         if status == 0: continue
@@ -1593,7 +1593,7 @@ fn reuseAll(r mut report&, k I64) ? Failed {
 test "a damaged or foreign record is written again, never read; builds side by side keep whole records" { assert passed("records") }
 
 fn records(r mut report&) ? Failed {
-    dir := fresh("records")
+    dir :~ fresh("records")
     os.Run("cp checks/fixtures/incremental/* " + $os.Quote(dir))
     run := "48 12 1 true 14 data one 8 note 2"
     build := "OLANG_FACTSTATS=1 OLANG_CHECKREUSE=1 OLANG_CHECKINCR=1 \"$OLANG\" build main.olang > out.txt 2>&1 && ./build/main > run.txt"
@@ -1622,7 +1622,7 @@ fn records(r mut report&) ? Failed {
 test "an embedded file changed rebuilds what embeds it; an embed in std stays in std" { assert passed("embed") }
 
 fn embedded(r mut report&) ? Failed {
-    dir := fresh("embed")
+    dir :~ fresh("embed")
     os.Run("cp checks/fixtures/embed/* " + $os.Quote(dir))
     same := "modules reused, every object the same"
     try r.expect(sh(dir, "\"$OLANG\" build app.olang > out.txt 2>&1 && ./build/app > run.txt") == 0, "first build", dir)
@@ -1678,7 +1678,7 @@ test "plain olang runs its input as cells of one session" { assert passed("promp
 # changed let go, :type, :load, a matrix product interpreting would take seconds over, and the destructors of what the
 # session kept run as it ends - and interpreted where OLANG_CELLS says so
 fn prompt(r mut report&) ? Failed {
-    dir := fresh("prompt")
+    dir :~ fresh("prompt")
     os.Run("cp checks/fixtures/prompt/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" < session.in > out.txt 2>&1") == 0, "the prompt's session did not end with 0", dir)
     try r.expect(sh(dir, "cmp -s session.want out.txt") == 0, "the prompt's session printed other than session.want", dir)
@@ -1698,7 +1698,7 @@ test "on a terminal the prompt edits its entries and keeps their history" { asse
 # seconds on a busy machine): an entry recalled with Up, edited and run again, Ctrl-D ending the session; the history
 # then in its file, in the order typed; and an entry printing text with no newline, which the next prompt must not draw over
 fn promptkeys(r mut report&) ? Failed {
-    dir := fresh("promptkeys")
+    dir :~ fresh("promptkeys")
     wait := """w() { n=0; until [ "$(grep -o '?2004h' out.txt 2>/dev/null | wc -l)" -ge $1 ] || [ $n -ge 600 ]; do sleep 0.1; n=$((n+1)); done; }"""
     keys := "(" + $wait + "; " + """w 1; printf 'x := 1\r'; w 2; printf '\033[A\1772\r'; w 3; printf 'x\r'; w 4; printf 'Print("hello")\r'; w 5; printf 'Println("hi")\r'; w 6; printf '\004')"""
     run := """XDG_STATE_HOME="$PWD/state" NO_COLOR=1 OLANG_SPINNER=0 timeout 60 script -qfec "$OLANG" /dev/null > out.txt 2>&1"""
@@ -1718,7 +1718,7 @@ test "a wait on a terminal shows the spinner, erased before the output, and nowh
 # the six dots are drawn, and the line is erased (CR, ESC [ K) right before the build's own line; OLANG_SPINNER=0 on a
 # terminal, and a standard error that is no terminal, draw none. Each build runs in a directory of its own, so each is cold
 fn spinner(r mut report&) ? Failed {
-    dir := fresh("spinner")
+    dir :~ fresh("spinner")
     os.Run("for d in on off pipe; do mkdir " + $os.Quote(dir) + "/$d && printf 'fn main() { Println(\"hi\") }\n' > " + $os.Quote(dir) + "/$d/hello.olang; done")
     run := """TERM=xterm NO_COLOR=1 script -qfec "$OLANG build hello.olang" /dev/null > ../out.txt 2>&1"""
     try r.expect(sh($dir + "/on", run) == 0, "the build on a terminal did not end with 0", dir)
@@ -1736,7 +1736,7 @@ test "olang serve jupyter speaks Jupyter's protocol to a front end" { assert pas
 # drives it over ZeroMQ's wire protocol: heartbeat, kernel_info, cells run as the prompt runs them (a value shown, its
 # rich rendering by Display, output streamed, an error, an interrupted endless loop), is_complete, complete, shutdown
 fn jupyter(r mut report&) ? Failed {
-    dir := fresh("jupyter")
+    dir :~ fresh("jupyter")
     os.Run("cp checks/fixtures/jupyter/* tests/display.olang " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build client.olang > out.txt 2>&1") == 0, "the front end did not build", dir)
     try r.expect(sh(dir, "timeout 120 build/client \"$OLANG\" > out.txt 2>&1") == 0, "the front end did not end with 0", dir)
@@ -1749,7 +1749,7 @@ test "olang run FILE.ipynb runs a notebook's cells and stores their outputs" { a
 # outputs Jupyter stores (a stream, a shown value with its MIME types, a plot's SVG, an error) and execution counts: it
 # stops at the first failing cell with status 1 - the cells after it cleared - or, with -continue, runs the rest
 fn notebook(r mut report&) ? Failed {
-    dir := fresh("notebook")
+    dir :~ fresh("notebook")
     os.Run("cp checks/fixtures/notebook/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" run in.ipynb -output out.ipynb > out.txt 2>&1") == 1, "a failing cell did not give status 1", dir)
     try r.expect(sh(dir, "cmp -s want.ipynb out.ipynb") == 0, "the notebook run was other than want.ipynb", dir)
@@ -1761,7 +1761,7 @@ fn notebook(r mut report&) ? Failed {
 }
 
 fn interp(r mut report&) ? Failed {
-    dir := fresh("interp")
+    dir :~ fresh("interp")
     os.Run("cp checks/fixtures/interp/* " + $os.Quote(dir))
     # built -debug, so the error escaping main prints its trace as -i does (S18d)
     try r.expect(sh(dir, "\"$OLANG\" build -debug prog.olang > out.txt 2>&1") == 0, "interp build", dir)
@@ -1774,14 +1774,14 @@ fn interp(r mut report&) ? Failed {
     # B3e: an unused import and an unread local are warnings under interpret, on the standard error, and it runs
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" untidy.olang > out.txt 2> err.txt") == 0 and outOf(dir) == "ran\n"
                  "-i untidy.olang did not run", dir)
-    warned := try os.ReadFile($dir + "/err.txt") catch default ""
+    warned :~ try os.ReadFile($dir + "/err.txt") catch default ""
     try r.expect(warned.Contains("untidy.olang:2:8: warning[M5a]: ") and warned.Contains("untidy.olang:5:5: warning[D3b]: ")
                  "-i untidy.olang's warnings", dir)
     try r.expect(sh(dir, "\"$OLANG\" build untidy.olang > out.txt 2>&1") == 1 and outOf(dir).Contains("error[M5a]")
                  "untidy.olang built", dir)
     # B3g: S8a too is a warning in scripting mode, and the program runs; a build refuses it
     try r.expect(sh(dir, "\"$OLANG\" dead.olang > out.txt 2> err.txt") == 0 and outOf(dir) == "ran\n", "dead.olang did not run", dir)
-    dead := try os.ReadFile($dir + "/err.txt") catch default ""
+    dead :~ try os.ReadFile($dir + "/err.txt") catch default ""
     try r.expect(dead.Contains("dead.olang:3:8: warning[S8a]: "), "dead.olang's warning", dir)
     try r.expect(sh(dir, "\"$OLANG\" build dead.olang > out.txt 2>&1") == 1 and outOf(dir).Contains("error[S8a]")
                  "dead.olang built", dir)
@@ -1845,7 +1845,7 @@ fn interp(r mut report&) ? Failed {
 }
 
 fn interpbuilt(r mut report&) ? Failed {
-    dir := fresh("interpbuilt")
+    dir :~ fresh("interpbuilt")
     os.Run("cp checks/fixtures/interp/* " + $os.Quote(dir))
     run := "XDG_CACHE_HOME=\"$PWD/cache\" \"$OLANG\" -checked "
     try r.expect(sh(dir, "\"$OLANG\" build -debug prog.olang > out.txt 2>&1 && rm -rf build/rec") == 0, "prog -debug build", dir)
@@ -1857,7 +1857,7 @@ fn interpbuilt(r mut report&) ? Failed {
     try r.expect(sh(dir, "stat -c '%n %i' cache/olang/run/prog_olang-*.checked > a.txt && " + $run + "prog.olang > out.txt 2>&1; " + $
                     "stat -c '%n %i' cache/olang/run/prog_olang-*.checked | cmp -s a.txt -") == 0, "an unchanged program built again", dir)
     try r.expect(sh(dir, $run + "untidy.olang > out.txt 2> err.txt") == 0 and outOf(dir) == "ran\n", "interpret untidy.olang", dir)
-    warned := try os.ReadFile($dir + "/err.txt") catch default ""
+    warned :~ try os.ReadFile($dir + "/err.txt") catch default ""
     try r.expect(warned.Contains("untidy.olang:2:8: warning[M5a]: ") and warned.Contains("untidy.olang:5:5: warning[D3b]: ")
                  "interpret untidy.olang's warnings", dir)
     try r.expect(sh(dir, $run + "refused.olang > out.txt 2>&1") == 1 and outOf(dir).Contains("error[R11, O25]"), "interpret refused.olang", dir)
@@ -1896,7 +1896,7 @@ fn interpbuilt(r mut report&) ? Failed {
 test "a program reads its arguments and environment, and uses the file system" { assert passed("osargs") }
 
 fn osargs(r mut report&) ? Failed {
-    dir := fresh("osargs")
+    dir :~ fresh("osargs")
     os.Run("cp checks/fixtures/osargs/* " + $os.Quote(dir))
     args String& = " one 'two words' -x > out.txt 2>&1"
     try r.expect(sh(dir, "\"$OLANG\" build osargs.olang > out.txt 2>&1") == 0, "osargs build", dir)
@@ -1918,7 +1918,7 @@ fn osargs(r mut report&) ? Failed {
 test "Scanln and Scan share standard input with io.Reader and io.Lines" { assert passed("scanln") }
 
 fn scanln(r mut report&) ? Failed {
-    dir := fresh("scanln")
+    dir :~ fresh("scanln")
     prog := """
         import "std/io"
 
@@ -1969,7 +1969,7 @@ fn scanln(r mut report&) ? Failed {
 test "options go before the file, -define is one word" { assert passed("cmdline") }
 
 fn cmdline(r mut report&) ? Failed {
-    dir := fresh("cmdline")
+    dir :~ fresh("cmdline")
     os.Run("cp checks/fixtures/cmdline/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" -define IO=true -define Port=443 flags.olang data.csv -v > out.txt 2>&1") == 0, "options first", dir)
     try r.expect(outOf(dir) == "IO true port 443\narg data.csv\narg -v\n", "options first: IO, Port and the arguments", dir)
@@ -1990,7 +1990,7 @@ fn cmdline(r mut report&) ? Failed {
 test "os.Exit ends the process with its status" { assert passed("osexit") }
 
 fn osexit(r mut report&) ? Failed {
-    dir := fresh("osexit")
+    dir :~ fresh("osexit")
     os.Run("cp checks/fixtures/osexit/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build osexit.olang > out.txt 2>&1 && ./build/osexit > out.txt 2>&1") == 42
                  "osexit", dir)
@@ -2004,7 +2004,7 @@ fn osexit(r mut report&) ? Failed {
 test "io.Put and io.PutLn write, and fail with io.Error when the write fails" { assert passed("print") }
 
 fn printing(r mut report&) ? Failed {
-    dir := fresh("print")
+    dir :~ fresh("print")
     os.Run("cp checks/fixtures/print/* " + $os.Quote(dir))
     out := "n is 42\njoined 42 and 43\n\nthrough a value\n"
     try r.expect(sh(dir, "\"$OLANG\" build print.olang > out.txt 2>&1 && ./build/print > out.txt 2> err.txt") == 0
@@ -2034,7 +2034,7 @@ fn printing(r mut report&) ? Failed {
 test "olang test -fuzz finds a planted bug, and the test replays it" { assert passed("testfuzz") }
 
 fn testfuzz(r mut report&) ? Failed {
-    dir := fresh("testfuzz")
+    dir :~ fresh("testfuzz")
     os.Run("cp checks/fixtures/testfuzz/* " + $os.Quote(dir))
     saved := "testdata/fuzz/parse_never_fails_a_check"
     try r.expect(sh(dir, "\"$OLANG\" test parse.olang > out.txt 2>&1") == 0, "the fuzz test passed on the empty input", dir)
@@ -2077,19 +2077,19 @@ test "olang api lists a module's interface changes, and explain -caps what each 
 test "olang explain -asm and -ir show a function's code with its source lines and LLVM's remarks" { assert passed("listing") }
 
 fn listed(r mut report&) ? Failed {
-    dir := fresh("listing")
+    dir :~ fresh("listing")
     os.Run("cp checks/fixtures/listing/* " + $os.Quote(dir))
     # B15a: explain keeps what it builds in olang's cache, here the scenario's own
     xp String& = "XDG_CACHE_HOME=\"$PWD/cache\" \"$OLANG\" "
     try r.expect(sh(dir, $xp + "explain -asm prog.olang scale > out.txt 2>&1") == 0, "-asm builds", dir)
-    asm := outOf(dir)
+    asm :~ outOf(dir)
     try r.expect(asm.StartsWith("# fn scale(a mut Array<F32>&, b Array<F32>&)\n# prog.olang:10 - "), "the function first, as explain prints it", dir)
     try r.expect(asm.Contains("\n# prog.olang:11  for i in range a.Len() { a[i] = twice(b[i]) }\n"), "a line of source among the code", dir)
     try r.expect(asm.Contains("\n# prog.olang:7  fn twice(x F32) F32 { return x * 2.0 + 1.0 }\n"), "an inlined function's own line", dir)
     try r.expect(asm.Contains("passed   loop-vectorize: vectorized loop (vectorization width: "), "a vectorized remark", dir)
     try r.expect(asm.Contains("passed   inline: 'twice' inlined into 'scale' with (cost="), "an inlined remark", dir)
     try r.expect(sh(dir, $xp + "explain -ir prog.olang scale > out.txt 2>&1") == 0, "-ir builds", dir)
-    ir := outOf(dir)
+    ir :~ outOf(dir)
     try r.expect(ir.Contains("\n; prog.olang:11  for i in range") and ir.Contains("\ndefine ") and ir.Contains(" x float>") and
                  not ir.Contains("!dbg"), "-ir: the optimized IR, vectorized, its lines as comments", dir)
     try r.expect(sh(dir, $xp + "explain -asm prog.olang unused > out.txt 2>&1") == 0 and
@@ -2125,10 +2125,10 @@ fn listed(r mut report&) ? Failed {
 }
 
 fn apicaps(r mut report&) ? Failed {
-    dir := fresh("apicaps")
+    dir :~ fresh("apicaps")
     os.Run("cp -r checks/fixtures/apicaps/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" api old new lib.olang > out.txt 2>&1") == 1, "api: a breaking change gives status 1", dir)
-    out := outOf(dir)
+    out :~ outOf(dir)
     for want in Array<String&>["  breaking  added case: Blue\n", "  ok        added fn: fn (p Point) Max() I64\n"
             "  breaking  changed fn: fn Grow(a I64) I64\n              now: fn Grow(a I64, b I64) I64\n"
             "  ok        value of global: Limit I64 = 3\n", "  breaking  removed fn: fn Old() I64\n"
@@ -2147,21 +2147,21 @@ fn apicaps(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" api old nowhere lib.olang > out.txt 2>&1") == 2 and outOf(dir).Contains("error[B21]")
                  "api: a side that is neither", dir)
     try r.expect(sh(dir, "\"$OLANG\" explain -caps caps.olang > out.txt 2>&1") == 0, "caps", dir)
-    caps := outOf(dir)
+    caps :~ outOf(dir)
     try r.expect(caps.StartsWith("caps   ") and caps.Contains("files (std/os)") and caps.Contains("\nstd/os ")
                  "caps: the root first, a class with the module it is reached in", dir)
 }
 
 fn profiled(r mut report&) ? Failed {
-    dir := fresh("profile")
+    dir :~ fresh("profile")
     os.Run("cp checks/fixtures/profile/* " + $os.Quote(dir))
     ran := sh(dir, "\"$OLANG\" profile hot.olang 7 > out.txt 2>&1")
-    out := outOf(dir)
+    out :~ outOf(dir)
     try r.expect(ran == 7, "the program's own status", dir)
     try r.expect(out.Contains("\nolang profile: hot - ") and out.Contains(" s of CPU time on 2 threads\n"), "what was sampled", dir)
     rows := try out.Find("   self   total  function\n") catch default -1
-    first := out[rows + 26:] if rows >= 0 else ""
-    firstLine := first[:(try first.Find("\n") catch default 0)]
+    first :~ out[rows + 26:] if rows >= 0 else ""
+    firstLine :~ first[:(try first.Find("\n") catch default 0)]
     try r.expect(firstLine.EndsWith("  burn"), "the hottest function first", dir)
     try r.expect(out.Contains("%  Counter.Tick\n"), "a method by its type", dir)
     try r.expect(lineAfter(out, "%  hot.olang:9 ").Trim() == "burn", "the hottest line", dir)
@@ -2185,7 +2185,7 @@ fn profiled(r mut report&) ? Failed {
 test "a failed check says where it is" { assert passed("assertloc") }
 
 fn assertloc(r mut report&) ? Failed {
-    dir := fresh("assertloc")
+    dir :~ fresh("assertloc")
     os.Run("cp checks/fixtures/assertloc/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build located.olang > out.txt 2>&1") == 0, "located did not build", dir)
     # a failed check ends the program with status 2 (S18, B6), an error a '!' took with 1 (E35)
@@ -2220,14 +2220,14 @@ fn assertloc(r mut report&) ? Failed {
                  outOf(dir).StartsWith("nullerror.olang:4: raised a null error\n"), "-i: a null error raised", dir)
     # B7a: a test naming a target is reported by it; words after the file pick the tests to run
     ran := sh(dir, "\"$OLANG\" test targets.olang > out.txt 2>&1")
-    all := outOf(dir)
+    all :~ outOf(dir)
     try r.expect(ran == 1 and all.Contains("ok - twice: doubles\n") and all.Contains("FAIL - twice: fails on purpose\n") and
                  all.Contains("ok - Box.Get: gives its value\n") and all.Contains("4 passed, 1 failed"), "a test's target", dir)
     ran = sh(dir, "\"$OLANG\" test targets.olang Box > out.txt 2>&1")
     picked String& = "ok - Box: holds a value\nok - Box.Get: gives its value\n2 passed, 0 failed"
     try r.expect(ran == 0 and outOf(dir).Contains(picked), "a type's tests picked, its methods' with them", dir)
     ran = sh(dir, "\"$OLANG\" test targets.olang plain Box.Get > out.txt 2>&1")
-    picked = "ok - Box.Get: gives its value\nok - a plain one\n2 passed, 0 failed"
+    picked ~ "ok - Box.Get: gives its value\nok - a plain one\n2 passed, 0 failed"
     try r.expect(ran == 0 and outOf(dir).Contains(picked), "a method's tests and a description's text picked", dir)
     # B7a: words naming no test fail the run, the nearest target or description suggested
     ran = sh(dir, "\"$OLANG\" test targets.olang Bax > out.txt 2>&1")
@@ -2237,7 +2237,7 @@ fn assertloc(r mut report&) ? Failed {
     try r.expect(ran == 3 and outOf(dir).Contains("targets.olang: no test is named by 'nosuch'\n"), "a word naming nothing near", dir)
     # B3a: over several files the words fail the run only where no listed file has a test they name
     ran = sh(dir, "\"$OLANG\" test targets.olang others.olang Box > out.txt 2>&1")
-    some := outOf(dir)
+    some :~ outOf(dir)
     try r.expect(ran == 0 and some.Contains("ok - Box: holds a value\n") and
                  some.Contains("others.olang: no test is named by 'Box'\n"), "a word one listed file's tests answer", dir)
     ran = sh(dir, "\"$OLANG\" test targets.olang others.olang Bax > out.txt 2>&1")
@@ -2259,7 +2259,7 @@ fn gsym(module String&, name String&) String { return "@(G_2e)?" + $module + "(_
 test "a proven assert leaves no run-time check" { assert passed("s18c") }
 
 fn s18c(r mut report&) ? Failed {
-    dir := fresh("s18c")
+    dir :~ fresh("s18c")
     os.Run("cp checks/fixtures/s18c/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build s18c.olang > out.txt 2>&1 && ./build/s18c") == 0, "s18c", dir)
     try r.expect(sh(dir, "grep -q assert.fail build/s18c.main.ll") != 0, "a proven assert left a run-time check", dir)
@@ -2270,7 +2270,7 @@ fn s18c(r mut report&) ? Failed {
 test "a twin with a plan of its own has code of its own" { assert passed("twins") }
 
 fn twins(r mut report&) ? Failed {
-    dir := fresh("twins")
+    dir :~ fresh("twins")
     os.Run("cp checks/cases/t22sharedscope.olang " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build t22sharedscope.olang > out.txt 2>&1 && ./build/t22sharedscope") == 0, "twins", dir)
     try r.expect(irHas(dir, "build/*.ll", "^define .*@t22sharedscope_2eput_twin0\\("), "no put twin", dir)
@@ -2283,7 +2283,7 @@ fn twins(r mut report&) ? Failed {
 test "a sort given a lambda has a clone, its merge loop calling nothing through a value" { assert passed("clones") }
 
 fn clones(r mut report&) ? Failed {
-    dir := fresh("clones")
+    dir :~ fresh("clones")
     os.Run("cp checks/fixtures/clones/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build clones.olang > out.txt 2>&1 && ./build/clones > out.txt") == 0 and
                  outOf(dir) == "-1073716420 1073739769\n", "clones", dir)
@@ -2308,7 +2308,7 @@ fn clones(r mut report&) ? Failed {
 test "a -debug build shows olang values in lldb and gdb" { assert passed("dwarf") }
 
 fn dwarf(r mut report&) ? Failed {
-    dir := fresh("dwarf")
+    dir :~ fresh("dwarf")
     os.Run("cp checks/fixtures/dwarf/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build -debug vals.olang > out.txt 2>&1") == 0, "build -debug", dir)
     py := $root() + "/editors/debug/"
@@ -2338,7 +2338,7 @@ fn dwarf(r mut report&) ? Failed {
 test "a literal reaching a read-only reference is static data" { assert passed("static") }
 
 fn static(r mut report&) ? Failed {
-    dir := fresh("static")
+    dir :~ fresh("static")
     os.Run("cp checks/fixtures/static/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build -debug lit.olang > out.txt 2>&1 && ./build/lit.debug") == 0, "static", dir)
     ll String& = "build/lit.main.debug.ll"
@@ -2356,7 +2356,7 @@ fn static(r mut report&) ? Failed {
 test "computed globals are written out as data" { assert passed("k2") }
 
 fn k2(r mut report&) ? Failed {
-    dir := fresh("k2")
+    dir :~ fresh("k2")
     os.Run("cp checks/fixtures/k2/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build ct.olang > out.txt 2>&1 && ./build/ct") == 0, "k2", dir)
     # what ct asserts at run time checks each baked value; here, that it was baked - written as data, constant where
@@ -2397,7 +2397,7 @@ fn k2(r mut report&) ? Failed {
 test "a NaN made from bits is written out with its bits, and a BF16's sign bit read from memory" { assert passed("bits") }
 
 fn bits(r mut report&) ? Failed {
-    dir := fresh("bits")
+    dir :~ fresh("bits")
     os.Run("cp checks/fixtures/bits/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build bits.olang > out.txt 2>&1 && ./build/bits") == 0, "bits", dir)
     # each written with exactly its bits: as LLVM's typed constant, or as the bytes the evaluator laid out
@@ -2416,7 +2416,7 @@ fn bits(r mut report&) ? Failed {
 test "an aggregate is returned through one slot" { assert passed("retslot") }
 
 fn retslot(r mut report&) ? Failed {
-    dir := fresh("retslot")
+    dir :~ fresh("retslot")
     os.Run("cp checks/fixtures/retslot/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build retslot.olang > out.txt 2>&1 && ./build/retslot") == 0, "retslot", dir)
     # divmod's every return stores into the one slot and branches to its one exit: a single ret
@@ -2429,7 +2429,7 @@ fn retslot(r mut report&) ? Failed {
 test "an assignment reads its own place once" { assert passed("readfirst") }
 
 fn readfirst(r mut report&) ? Failed {
-    dir := fresh("readfirst")
+    dir :~ fresh("readfirst")
     os.Run("cp checks/fixtures/readfirst/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build readfirst.olang > out.txt 2>&1 && ./build/readfirst") == 0, "readfirst", dir)
     once String& = "awk '/^define .*readfirst_2epick/,/^}/' build/readfirst.main.ll | grep -c 'load float, ptr %t' | grep -qx 2"
@@ -2448,10 +2448,10 @@ test "an array of 128-bit elements is 16-aligned" { assert passed("widealign") }
 test "-memory lists the storage built where a view of it is kept" { assert passed("memoryplaced") }
 
 fn memoryplaced(r mut report&) ? Failed {
-    dir := fresh("memoryplaced")
+    dir :~ fresh("memoryplaced")
     os.Run("cp checks/fixtures/memoryplaced/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build -memory memoryplaced.olang > out.txt 2>&1") == 0, "memoryplaced did not build", dir)
-    o := outOf(dir)
+    o :~ outOf(dir)
     try r.expect(o.Contains("memoryplaced.olang:20:38: memory: 't' is built in main's scope, a new one each time it is made, for a view of it kept here"), "no row for t", dir)
     try r.expect(o.Contains("memoryplaced.olang:25:21: memory: 'u' is built in main's scope"), "no row for u", dir)
     try r.expect(o.Contains("memoryplaced.olang:19:9: note: made here - a copy of what is kept"), "no note at t", dir)
@@ -2465,7 +2465,7 @@ fn memoryplaced(r mut report&) ? Failed {
     try r.expect(sh(dir, "./build/dtor > run.txt 2>&1 && grep -q 'end 2-file' run.txt && tail -n 1 run.txt | grep -qx 'end 0-file'") == 0, "dtor printed otherwise", dir)
     # (S21: what a become hands on, and a destructor value in a block it closes, built in the chain's tail scope)
     try r.expect(sh(dir, "\"$OLANG\" build -memory tail.olang > out.txt 2>&1") == 0, "tail did not build", dir)
-    t := outOf(dir)
+    t :~ outOf(dir)
     try r.expect(t.Contains("tail.olang:8:12: memory: 'b' is built in the tail scope of its become chain, a new one each time it is made, for the become here, kept until its chain's first caller lets go of the result"), "no row for b", dir)
     try r.expect(t.Contains("tail.olang:12:12: memory: a temporary is built in the tail scope of its become chain"), "no row for the text", dir)
     try r.expect(t.Contains("tail.olang:15:10: memory: a temporary is built in the tail scope of its become chain, a new one each time it is made, for a become closing its block, kept until the chain's first caller lets go of the result - its destructor runs as that scope closes"), "no row for the instance", dir)
@@ -2474,7 +2474,7 @@ fn memoryplaced(r mut report&) ? Failed {
 }
 
 fn widealign(r mut report&) ? Failed {
-    dir := fresh("widealign")
+    dir :~ fresh("widealign")
     os.Run("cp checks/fixtures/widealign/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build widealign.olang > out.txt 2>&1 && ./build/widealign") == 0, "widealign", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug widealign.olang > out.txt 2>&1 && ./build/widealign.debug") == 0, "widealign -debug", dir)
@@ -2493,7 +2493,7 @@ fn bodyHas(dir String&, ll String&, name String&, re String&) Bool {
 }
 
 fn definit(r mut report&) ? Failed {
-    dir := fresh("definit")
+    dir :~ fresh("definit")
     os.Run("cp checks/fixtures/definit/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build definit.olang > out.txt 2>&1 && ./build/definit > out.txt 2>&1") == 0, "definit", dir)
     try r.expect(outOf(dir) == "1 Array<F32>[0, 1, 4, 9] Array<F32>[0, 0.5, 1, 1.5] Array<F32>[1, 1, 1, 0, 0] 7\n", "definit output", dir)
@@ -2516,7 +2516,7 @@ fn definit(r mut report&) ? Failed {
 test "every numeric primitive has its own alias tags" { assert passed("tbaa") }
 
 fn tbaa(r mut report&) ? Failed {
-    dir := fresh("tbaa")
+    dir :~ fresh("tbaa")
     os.Run("cp checks/fixtures/tbaa/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build narrow.olang > out.txt 2>&1 && ./build/narrow > out.txt 2>&1") == 0, "narrow", dir)
     try r.expect(outOf(dir) == "narrow: ok\n", "narrow output", dir)
@@ -2533,7 +2533,7 @@ fn tbaa(r mut report&) ? Failed {
 test "a private operator works only in its own module" { assert passed("opvis") }
 
 fn opvis(r mut report&) ? Failed {
-    dir := fresh("opvis")
+    dir :~ fresh("opvis")
     os.Run("cp checks/fixtures/opvis/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build use.olang > out.txt 2>&1 && ./build/use") == 0, "opvis", dir)
     try r.expect(sh(dir, "\"$OLANG\" build usepriv.olang > out.txt 2>&1") != 0, "usepriv.olang compiled", dir)
@@ -2545,7 +2545,7 @@ fn opvis(r mut report&) ? Failed {
 test "a private protocol method works in its own module, and is an error elsewhere" { assert passed("protopriv") }
 
 fn protopriv(r mut report&) ? Failed {
-    dir := fresh("protopriv")
+    dir :~ fresh("protopriv")
     os.Run("cp checks/fixtures/protopriv/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build use.olang > out.txt 2>&1 && ./build/use") == 0, "protopriv", dir)
     try r.expect(irHas(dir, "build/kk*.ll", $gsym("kk", "Baked") + " = .*(i1 true|c\"\\\\01\")"), "Inside() was not baked", dir)
@@ -2564,7 +2564,7 @@ fn protopriv(r mut report&) ? Failed {
 test "an enum's payload is held as words" { assert passed("enumwords") }
 
 fn enumwords(r mut report&) ? Failed {
-    dir := fresh("enumwords")
+    dir :~ fresh("enumwords")
     os.Run("cp checks/fixtures/enumwords/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build enumwords.olang > out.txt 2>&1 && ./build/enumwords") == 0, "enumwords", dir)
     try r.expect(sh(dir, "grep -q '{ i64, \\[2 x i64\\] }' build/enumwords.main.ll") == 0, "no payload of words", dir)
@@ -2575,7 +2575,7 @@ fn enumwords(r mut report&) ? Failed {
 test "a List is walked run by run, not by At" { assert passed("listloop") }
 
 fn listloop(r mut report&) ? Failed {
-    dir := fresh("listloop")
+    dir :~ fresh("listloop")
     os.Run("cp checks/fixtures/listloop/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build loop.olang > out.txt 2>&1 && ./build/loop") == 0, "listloop", dir)
     # the root's objects - the instances among them: stage 0's main, the port's main and inst - by either spelling of
@@ -2591,7 +2591,7 @@ fn listloop(r mut report&) ? Failed {
 test "editing the prelude rebuilds what uses it" { assert passed("preludestale") }
 
 fn preludestale(r mut report&) ? Failed {
-    dir := fresh("preludestale")
+    dir :~ fresh("preludestale")
     os.Run("cp checks/fixtures/preludestale/* " + $os.Quote(dir) + " && cp -r std " + $os.Quote($dir + "/std"))
     probe String& = "fn (v Vec<T>&) Probe() I64 { return v.Len() + 1 }"
     try r.expect(sh(dir, "echo " + $os.Quote(probe) + " >> std/prelude/vec.olang") == 0, "adding Probe", dir)
@@ -2623,7 +2623,7 @@ fn nested(head String&, open String&, middle String&, close String&, tail String
 test "nested lambdas and try-catch statements parse in time linear in their depth" { assert passed("nestparse") }
 
 fn nestparse(r mut report&) ? Failed {
-    dir := fresh("nestparse")
+    dir :~ fresh("nestparse")
     lambdas String& = nested("fn k() { }\nfn f(g fn&()) { g() }\nfn main() ? {\n    ", "f(fn() { ", "k()", " })", "\n}\n", 40)
     try os.WriteFile($dir + "/lambdas.olang", lambdas) catch { }
     try r.expect(sh(dir, "timeout 60 env OLANG_EVALUATE=1 \"$OLANG\" lambdas.olang > out.txt 2>&1") == 0, "nested lambdas", dir)
@@ -2640,7 +2640,7 @@ fn nestparse(r mut report&) ? Failed {
 test "catch-continue blocks in one loop beside a unique value check in time" { assert passed("catchcontinue") }
 
 fn catchcontinue(r mut report&) ? Failed {
-    dir := fresh("catchcontinue")
+    dir :~ fresh("catchcontinue")
     os.Run("cp checks/fixtures/catchcontinue.olang " + $os.Quote(dir))
     try r.expect(sh(dir, "timeout 60 env OLANG_EVALUATE=1 \"$OLANG\" catchcontinue.olang > out.txt 2>&1") == 0, "catch-continue", dir)
 }
@@ -2650,7 +2650,7 @@ fn catchcontinue(r mut report&) ? Failed {
 test "nesting is bounded with a diagnostic, never a crash" { assert passed("nestdeep") }
 
 fn nestdeep(r mut report&) ? Failed {
-    dir := fresh("nestdeep")
+    dir :~ fresh("nestdeep")
     ok String& = nested("fn main() ? {\n    x := ", "(", "1", ")", "\n    assert x == 1\n}\n", 5000)
     try os.WriteFile($dir + "/ok.olang", ok) catch { }
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" ok.olang > out.txt 2>&1") == 0, "5000 parentheses", dir)
@@ -2668,7 +2668,7 @@ fn nestdeep(r mut report&) ? Failed {
 test "a function of many local ifs compiles in time linear in their number" { assert passed("manyifs") }
 
 fn manyifs(r mut report&) ? Failed {
-    dir := fresh("manyifs")
+    dir :~ fresh("manyifs")
     many String& = nested("fn g(x I32) I32 { return x }\nfn f(x I32) I64 {\n    s := 0\n"
                           "    if g(x) > 5 { s += 1 }\n", "", "", "    return s\n}\nfn main() ? { assert f(9) == 20000 }\n", 20000)
     try os.WriteFile($dir + "/many.olang", many) catch { }
@@ -2683,7 +2683,7 @@ fn manyifs(r mut report&) ? Failed {
 test "the code generator's review fixes, as whole builds" { assert passed("cgreview") }
 
 fn cgreview(r mut report&) ? Failed {
-    dir := fresh("cgreview")
+    dir :~ fresh("cgreview")
     os.Run("cp checks/fixtures/cgreview/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build matcharena.olang > out.txt 2>&1") == 0, "matcharena build", dir)
     try r.expect(sh(dir, "(ulimit -v 400000 && ./build/matcharena a b c d e) > out.txt 2>&1") == 0, "matcharena", dir)
@@ -2717,12 +2717,12 @@ test "the type checker's review fixes, across modules" { assert passed("typerevi
 # prog.olang must not build, with exactly one error: one saying "want"
 fn oneError(r mut report&, dir String&, prog String&, want String&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" build " + $prog + ".olang > out.txt 2>&1") != 0, $prog + " compiled", dir)
-    out := outOf(dir)
+    out :~ outOf(dir)
     try r.expect(out.Contains(want) and out.Contains("compilation failed with 1 error\n"), $prog + ": expected one '" + $want + "'", dir)
 }
 
 fn typereview(r mut report&) ? Failed {
-    dir := fresh("typereview")
+    dir :~ fresh("typereview")
     os.Run("cp -r checks/fixtures/cases/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build good.olang > out.txt 2>&1 && ./build/good > out.txt") == 0, "good", dir)
     try r.expect(outOf(dir) == "14 1 3 true 4\n", "good output", dir)
@@ -2752,7 +2752,7 @@ fn typereview(r mut report&) ? Failed {
 test "a function value through an import alias is checked as one named bare" { assert passed("vecalias") }
 
 fn vecalias(r mut report&) ? Failed {
-    dir := fresh("vecalias")
+    dir :~ fresh("vecalias")
     os.Run("cp checks/fixtures/vecalias/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build good.olang > out.txt 2>&1 && ./build/good > out.txt") == 0, "good", dir)
     try r.expect(outOf(dir) == "30 60 7\n", "good output", dir)
@@ -2773,7 +2773,7 @@ fn vecalias(r mut report&) ? Failed {
 test "a Vec, built, sanitized and interpreted alike, and a stale view is caught" { assert passed("vechandle") }
 
 fn vechandle(r mut report&) ? Failed {
-    dir := fresh("vechandle")
+    dir :~ fresh("vechandle")
     os.Run("cp checks/fixtures/vechandle/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build handle.olang > out.txt 2>&1 && ./build/handle > b.txt") == 0, "handle", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug handle.olang > out.txt 2>&1 && ./build/handle.debug > d.txt") == 0
@@ -2808,7 +2808,7 @@ fn vechandle(r mut report&) ? Failed {
 test "failing tasks agree built, sanitized and interpreted" { assert passed("spawnerr") }
 
 fn spawnerr(r mut report&) ? Failed {
-    dir := fresh("spawnerr")
+    dir :~ fresh("spawnerr")
     os.Run("cp checks/fixtures/spawnerr/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build tasks.olang > out.txt 2>&1") == 0, "tasks", dir)
     try r.expect(sh(dir, "./build/tasks > b.txt 2>&1") == 1, "tasks did not end in its error", dir)
@@ -2825,7 +2825,7 @@ fn spawnerr(r mut report&) ? Failed {
 test "generators agree built, sanitized and interpreted" { assert passed("generators") }
 
 fn generators(r mut report&) ? Failed {
-    dir := fresh("generators")
+    dir :~ fresh("generators")
     os.Run("cp checks/fixtures/generators/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build walks.olang > out.txt 2>&1 && ./build/walks > b.txt 2>&1") == 0, "walks", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize walks.olang > out.txt 2>&1") == 0, "walks -d -s", dir)
@@ -2877,7 +2877,7 @@ fn generators(r mut report&) ? Failed {
 test "the evaluator, the run time and -i agree" { assert passed("agree") }
 
 fn agree(r mut report&) ? Failed {
-    dir := fresh("agree")
+    dir :~ fresh("agree")
     os.Run("cp checks/fixtures/agree/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build agree.olang > out.txt 2>&1 && ./build/agree > b.txt 2>&1") == 0, "agree", dir)
     try r.expect(sh(dir, "\"$OLANG\" build -debug agree.olang > out.txt 2>&1 && ./build/agree.debug > d.txt 2>&1") == 0, "agree -d", dir)
@@ -2940,9 +2940,9 @@ test "a view from a module found after the caller's holds the caller's array" { 
 test "every benchmark program compiles" { assert passed("bench") }
 
 fn benchmarks(r mut report&) ? Failed {
-    dir := fresh("bench")
+    dir :~ fresh("bench")
     os.Run("cp bench/*.olang " + $os.Quote(dir))
-    files := try os.ReadDir(dir) catch default Array<String&>(0)
+    files :~ try os.ReadDir(dir) catch default Array<String&>(0)
     n I64 = 0
     for f in files {
         if f.EndsWith(".olang") {
@@ -2959,7 +2959,7 @@ fn benchmarks(r mut report&) ? Failed {
 test "-bench reports the time and use of a run (B19b)" { assert passed("benchrun") }
 
 fn benchrun(r mut report&) ? Failed {
-    dir := fresh("benchrun")
+    dir :~ fresh("benchrun")
     os.Run("cp checks/fixtures/benchrun/* " + $os.Quote(dir))
     once := "^bench: built in [0-9.]+ [a-zµ]+, ran in [0-9.]+ [a-zµ]+ \\([0-9.]+ [a-zµ]+ user, [0-9.]+ [a-zµ]+ sys, [0-9]+ MB peak\\)$"
     many := "^bench: built in [0-9.]+ [a-zµ]+, ran in [0-9.]+ [a-zµ]+ ± [0-9.]+ [a-zµ]+ \\(median of 3 runs; [0-9.]+ [a-zµ]+ user, [0-9.]+ [a-zµ]+ sys, [0-9]+ MB peak\\)$"
@@ -2976,7 +2976,7 @@ fn benchrun(r mut report&) ? Failed {
 }
 
 fn latermodule(r mut report&) ? Failed {
-    dir := fresh("latermodule")
+    dir :~ fresh("latermodule")
     os.Run("cp checks/fixtures/latermodule/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize view.olang > out.txt 2>&1") == 0, "view build", dir)
     try r.expect(sh(dir, "./build/view.debug.san > out.txt 2>&1") == 0 and outOf(dir) == "1.5 2\n", "view", dir)
@@ -2992,7 +2992,7 @@ fn latermodule(r mut report&) ? Failed {
 test "the arena's chunk pool gives memory back beyond its bound" { assert passed("chunkpool") }
 
 fn chunkpool(r mut report&) ? Failed {
-    dir := fresh("chunkpool")
+    dir :~ fresh("chunkpool")
     os.Run("cp checks/fixtures/chunkpool/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$CLANG\" -shared -fPIC -o sysconf.so sysconf.c -ldl > out.txt 2>&1") == 0, "sysconf.so", dir)
     try r.expect(sh(dir, "\"$OLANG\" build budget.olang > out.txt 2>&1") == 0, "budget.olang did not build", dir)
@@ -3027,7 +3027,7 @@ CtypesScript := ("import ctypes, sys\n" + $
     "print('mid', m.x, m.y)\n")
 
 fn cinterop(r mut report&) ? Failed {
-    dir := fresh("cinterop")
+    dir :~ fresh("cinterop")
     os.Run("cp checks/fixtures/cinterop/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$CLANG\" -c -O2 abi.c -o abi.o > out.txt 2>&1") == 0, "abi.c did not compile", dir)
     try r.expect(sh(dir, "\"$OLANG\" build abi.olang > out.txt 2>&1 && ./build/abi > abi.txt") == 0, "abi.olang", dir)
@@ -3086,7 +3086,7 @@ fn cinterop(r mut report&) ? Failed {
     if sh(dir, "command -v python3 > /dev/null 2>&1") != 0: return
     try os.WriteFile($dir + "/use_ctypes.py", CtypesScript) catch os.Error { try r.failed("use_ctypes.py", dir) }
     try r.expect(sh(dir, "python3 -I use_ctypes.py build/libmylib.so > py.txt 2>&1") == 0, "ctypes", dir)
-    py := try os.ReadFile($dir + "/py.txt") catch default ""
+    py :~ try os.ReadFile($dir + "/py.txt") catch default ""
     try r.expect(py == "add 5\nsum 10\ngreet hello, python!\ncheck 0 42 131073\nmid 2.0 3.0\n", "ctypes printed " + $py, dir)
 }
 
@@ -3095,7 +3095,7 @@ fn cinterop(r mut report&) ? Failed {
 test "a small function of another module is inlined at the link" { assert passed("linkinline") }
 
 fn linkinline(r mut report&) ? Failed {
-    dir := fresh("linkinline")
+    dir :~ fresh("linkinline")
     os.Run("cp checks/fixtures/linkinline/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build kernel.olang > out.txt 2>&1 && ./build/kernel > run.txt") == 0, "kernel", dir)
     try r.expect((try os.ReadFile($dir + "/run.txt") catch default "") == "total 692080\n", "kernel printed", dir)
@@ -3108,15 +3108,15 @@ fn linkinline(r mut report&) ? Failed {
 test "a build is for this machine unless -a names another target" { assert passed("target") }
 
 fn target(r mut report&) ? Failed {
-    dir := fresh("target")
+    dir :~ fresh("target")
     os.Run("cp checks/fixtures/target/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build loop.olang > out.txt 2>&1 && ./build/loop > native.txt") == 0, "native", dir)
     try r.expect(sh(dir, "stat -c '%n %.9Y' build/*.o | grep -v olang_build | sort > objects.txt") == 0, "objects", dir)
-    native := try os.ReadFile($dir + "/native.txt") catch default ""
+    native :~ try os.ReadFile($dir + "/native.txt") catch default ""
     nl := try native.FindByte('\n') catch default -1
     try r.expect(nl > 0, "native printed " + $native, dir)
-    first := native[:nl]
-    results := native[nl + 1:]
+    first :~ native[:nl]
+    results :~ native[nl + 1:]
     # this machine's vectors, when it has wider ones than SSE's, and its FMA instruction for x.Fma(a, b), not a call
     if not first.EndsWith(" 128 false") {
         try r.expect(sh(dir, "objdump -d build/loop | grep -qE 'ymm|zmm'") == 0, "no wide vectors in " + $first, dir)
@@ -3157,19 +3157,19 @@ fn target(r mut report&) ? Failed {
     refused := sh(dir, "\"$OLANG\" -target aarch64-linux-gnu loop.olang > out.txt 2>&1") != 0
     try r.expect(refused and outOf(dir).Contains("error[B12a]"), "running a file for aarch64 not refused", dir)
     try r.expect(sh(dir, "\"$OLANG\" run -target aarch64-linux-gnu loop.olang > arm.txt 2>&1") == 0, "aarch64 run", dir)
-    arm := try os.ReadFile($dir + "/arm.txt") catch default ""
+    arm :~ try os.ReadFile($dir + "/arm.txt") catch default ""
     try r.expect(arm.StartsWith("generic ") and arm.EndsWith($"\n" + $results), "aarch64 printed " + $arm, dir)
 }
 
 # whether the C library of arch's Linux is installed where clang finds a cross one, or OLANG_SYSROOT names one (B12a)
 fn crossLibc(arch String&) Bool {
-    sysroot := try os.Env("OLANG_SYSROOT") catch default ""
+    sysroot :~ try os.Env("OLANG_SYSROOT") catch default ""
     return sysroot != "" or os.Exists($"/usr/" + $arch + "-linux-gnu/lib/libc.so")
 }
 
 # whether an emulator olang would run arch's programs through is here (B12a)
 fn hasEmulator(arch String&) Bool {
-    e := try os.Env("OLANG_EMULATOR") catch default ""
+    e :~ try os.Env("OLANG_EMULATOR") catch default ""
     return e != "" or os.Run($"command -v qemu-" + $arch + " > /dev/null 2>&1 || command -v qemu-" + $arch + "-static > /dev/null 2>&1") == 0
 }
 
@@ -3184,14 +3184,14 @@ test "a generic type first reached from another module's signature" { assert pas
 test "a ':=' field read before its constructor's body is built" { assert passed("inferfield") }
 
 fn inferfield(r mut report&) ? Failed {
-    dir := fresh("inferfield")
+    dir :~ fresh("inferfield")
     os.Run("cp checks/fixtures/inferfield/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" test b.olang > out.txt 2>&1") == 0, "b.olang's tests", dir)
     try r.expect(sh(dir, "\"$OLANG\" test a.olang > out.txt 2>&1") == 0, "a.olang's tests", dir)
 }
 
 fn lazytype(r mut report&) ? Failed {
-    dir := fresh("lazytype")
+    dir :~ fresh("lazytype")
     os.Run("cp checks/fixtures/lazytype/* " + $os.Quote(dir))
     os.Run("yes '# padding' | head -n 20000 >> " + $os.Quote($dir + "/b.olang"))
     try r.expect(sh(dir, "\"$OLANG\" test b.olang > out.txt 2>&1") == 0, "b.olang's tests", dir)
@@ -3202,19 +3202,19 @@ fn lazytype(r mut report&) ? Failed {
 # and the functions are one to one, each function's Kind its own case. Their arguments need no counting: they are typed
 # parameters.
 test "every message of compiler/msgs.olang names rules the specification states, and is its own Diag" {
-    msgs := try os.ReadFile("compiler/msgs.olang") catch default ""
-    spec := try os.ReadFile("SPEC.md") catch default ""
+    msgs :~ try os.ReadFile("compiler/msgs.olang") catch default ""
+    spec :~ try os.ReadFile("SPEC.md") catch default ""
     assert msgs.Len() > 0 and spec.Len() > 0
     bad := 0
     # the enum's cases, in order
     from := try msgs.Find("\ntype Diag enum {\n") catch default -1
     assert from >= 0
-    body := msgs[from + 18:]
+    body :~ msgs[from + 18:]
     to := try body.Find("\n}\n") catch default -1
     assert to >= 0
     cases := Map<String&, Bool>()
     for line in body[:to].Split("\n") {
-        name := line.Trim()
+        name :~ line.Trim()
         if name.Len() == 0: continue
         if name in cases {
             try io.PutErr("check FAIL: msgs.olang's Diag names " + $name + " twice\n") catch io.Error { }
@@ -3227,16 +3227,16 @@ test "every message of compiler/msgs.olang names rules the specification states,
     rest String& = msgs
     for {
         at := try rest.Find("\nfn ") catch { break }
-        rest = rest[at + 4:]
+        rest ~ rest[at + 4:]
         open := try rest.FindByte('(') catch default 0
-        name := rest[:open]
+        name :~ rest[:open]
         call := try rest.Find(") r.Msg { return r.Msg(Diag.") catch default -1
         eol := try rest.FindByte('\n') catch default rest.Len()
         if call < 0 or call > eol: continue
         functions++
         kindAt I64 = call + 28
         kindEnd I64 = kindAt + (try rest[kindAt:].FindByte(',') catch default 0)
-        kind := rest[kindAt:kindEnd]
+        kind :~ rest[kindAt:kindEnd]
         if kind != name {
             try io.PutErr("check FAIL: msgs.olang's " + $name + " gives Diag." + $kind + "\n") catch io.Error { }
             bad++
@@ -3252,7 +3252,7 @@ test "every message of compiler/msgs.olang names rules the specification states,
             cases.Put(name, true)
         }
         rs, re := literalAfter(rest, kindEnd)
-        rules := rest[rs:re]
+        rules :~ rest[rs:re]
         for r in rules.Split(", ") {
             if r.Len() > 0 and not spec.Contains("**" + $r + ".**") and not spec.Contains("**" + $r + " (") {
                 try io.PutErr("check FAIL: msgs.olang's " + $name + " names rule " + $r + ", which SPEC.md does not state\n") catch io.Error { }
@@ -3275,7 +3275,7 @@ test "every message of compiler/msgs.olang names rules the specification states,
 test "the differential fuzzer finds nothing on its fixed seeds" { assert passed("fuzz") }
 
 fn fuzz(r mut report&) ? Failed {
-    dir := fresh("fuzz")
+    dir :~ fresh("fuzz")
     os.Run("cp fuzz/fuzz.olang fuzz/gen.olang fuzz/scopegen.olang fuzz/editgen.olang " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build -debug fuzz.olang > out.txt 2>&1") == 0, "fuzz did not build", dir)
     # the compiler it tests is this one, handed on: fuzz's own default is under the directory it runs in
@@ -3293,7 +3293,7 @@ fn fuzz(r mut report&) ? Failed {
 test "the scope sanitizer reports a use after a scope closed, and nothing else" { assert passed("scopesan") }
 
 fn scopesan(r mut report&) ? Failed {
-    dir := fresh("scopesan")
+    dir :~ fresh("scopesan")
     os.Run("cp checks/fixtures/scopesan/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build -debug -sanitize stub.olang > out.txt 2>&1") == 0, "stub.olang did not build", dir)
     # main renamed, and Touch named stub_Touch as drive.c declares it, whatever symbol the compiler gave it (B3b)
@@ -3334,7 +3334,7 @@ fn scopesan(r mut report&) ? Failed {
 # which the shell may say how it ended - and report no use after a scope closed unless want does
 fn driven(r mut report&, dir String&, mode String&, status I32, want String&) ? Failed {
     st := sh(dir, "./drive " + $mode + " > out.txt 2>&1")
-    out := outOf(dir)
+    out :~ outOf(dir)
     ok := st == status and out.StartsWith(want) and (want.Contains("use after") or not out.Contains("use after"))
     try r.expect(ok, "drive " + $mode + " ended " + $st, dir)
 }
@@ -3352,7 +3352,7 @@ test "os.OnCrash reports a crash on every thread, and os.RunOnStack makes room" 
 test "a failure leaves no core, and a core leaves out the reserved range" { assert passed("nodump") }
 
 fn nodump(r mut report&) ? Failed {
-    dir := fresh("nodump")
+    dir :~ fresh("nodump")
     os.Run("cp checks/fixtures/nodump/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build dump.olang > out.txt 2>&1") == 0, "dump did not build", dir)
     seen := "reserved: left out of a core\nslots in use: in a core\nitems 1000\n"
@@ -3362,13 +3362,13 @@ fn nodump(r mut report&) ? Failed {
     try r.expect(f.Status == 2 and f.Stderr == "dump.olang:37: assertion failed: asked to fail\n", "dump fail: status " + $f.Status + ", " + $f.Stderr, dir)
     c := crashRun(dir, "env OLANG_CORE=1 ./build/dump fail")
     try r.expect(c.Status == 134, "dump fail under OLANG_CORE=1: status " + $c.Status, dir)
-    compiler := olang()
+    compiler :~ olang()
     i := crashRun(dir, "env OLANG_EVALUATE=1 " + $os.Quote(compiler) + " dump.olang fail")
     try r.expect(i.Status == 2 and i.Stderr.Contains("dump.olang:37: assertion failed: asked to fail\n"), "dump fail -i: status " + $i.Status, dir)
     ic := crashRun(dir, "env OLANG_CORE=1 OLANG_EVALUATE=1 " + $os.Quote(compiler) + " dump.olang fail")
     try r.expect(ic.Status == 134, "dump fail -i under OLANG_CORE=1: status " + $ic.Status, dir)
     # where a core goes to a file of that name in the working directory, one is written - and it is small (64MB at most)
-    pattern := try os.ReadFile("/proc/sys/kernel/core_pattern") catch default ""
+    pattern :~ try os.ReadFile("/proc/sys/kernel/core_pattern") catch default ""
     if pattern.Trim() != "core": return
     dumped := sh(dir, "(ulimit -c unlimited && OLANG_CORE=1 exec ./build/dump fail) > out.txt 2>&1; test -f core && test $(stat -c %s core) -lt 67108864")
     sh(dir, "rm -f core")
@@ -3381,7 +3381,7 @@ fn crashRun(dir String&, args String&) os.Output {
 }
 
 fn crashes(r mut report&) ? Failed {
-    dir := fresh("crash")
+    dir :~ fresh("crash")
     os.Run("cp checks/fixtures/crash/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build crash.olang > out.txt 2>&1") == 0, "crash did not build", dir)
     for how in Array<String&>["overflow", "small", "task", "shallow"] {
@@ -3394,7 +3394,7 @@ fn crashes(r mut report&) ? Failed {
                  "crash assert: status " + $a.Status + ", " + $a.Stderr, dir)
     d := crashRun(dir, "./build/crash deep")
     try r.expect(d.Status == 0 and d.Stdout == "deep 1000000\n", "RunOnStack deep: status " + $d.Status + ", " + $d.Stdout, dir)
-    compiler := olang()
+    compiler :~ olang()
     i := crashRun(dir, "env OLANG_EVALUATE=1 " + $os.Quote(compiler) + " crash.olang deep 20000")
     try r.expect(i.Status == 0 and i.Stdout == "deep 20000\n", "RunOnStack -i: " + $i.Stdout + $i.Stderr, dir)
     f := crashRun(dir, "env OLANG_EVALUATE=1 " + $os.Quote(compiler) + " foreign.olang")
@@ -3422,7 +3422,7 @@ fn crashes(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" compile -race nullpeek.olang > out.txt 2>&1") == 0, "nullpeek -c -r did not build", dir)
     # the crash handler is the runtime's, compiled once for the build (B3)
     try r.expect(sh(dir, "cat build/olang_runtime.*.race.ll > runtime.race.ll 2> out.txt") == 0, "no -r runtime IR", dir)
-    ll := try os.ReadFile($dir + "/runtime.race.ll") catch default ""
+    ll :~ try os.ReadFile($dir + "/runtime.race.ll") catch default ""
     try r.expect(ll.Contains("@__olang_crash_handler(i32 %sig) #1 {") and ll.Contains("attributes #0 = { null_pointer_is_valid sanitize_thread") and
                  ll.Contains("attributes #1 = { null_pointer_is_valid \"target-cpu\""), "crash handler instrumented under -r", dir)
 }
@@ -3437,7 +3437,7 @@ fn crashes(r mut report&) ? Failed {
 test "a closure that may build asks for the scopes it captured" { assert passed("capscope") }
 
 fn capscope(r mut report&) ? Failed {
-    dir := fresh("capscope")
+    dir :~ fresh("capscope")
     os.Run("cp checks/fixtures/capscope/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build capscope.olang > out.txt 2>&1 && ./build/capscope > out.txt 2>&1") == 0, "capscope", dir)
     try r.expect(outOf(dir) == "capscope: ok\n", "capscope output", dir)
@@ -3474,7 +3474,7 @@ StrheldNotInterpreted Array<String&>& = Array<String&>["earlyexits", "manyplaces
                                                 "regbattery", "regreturns", "g9deval", "g9dcontainers"]
 
 fn strheldProgram(r mut report&, n String&) ? Failed {
-    dir := fresh($"strheld/" + $n)
+    dir :~ fresh($"strheld/" + $n)
     os.Run("cp checks/fixtures/strheld/" + $n + ".olang checks/fixtures/strheld/" + $n + ".want " + $os.Quote(dir))
     try r.expect(sh(dir, $store() + " \"$OLANG\" build " + $n + ".olang > out.txt 2>&1 && ./build/" + $n + " > b.txt 2>&1 && cmp -s b.txt " + $n + ".want") ==
                  0, n, dir)
@@ -3487,7 +3487,7 @@ fn strheldProgram(r mut report&, n String&) ? Failed {
 }
 
 fn strheld(r mut report&) ? Failed {
-    dir := fresh("strheld/tail")
+    dir :~ fresh("strheld/tail")
     os.Run("cp checks/fixtures/strheld/* " + $os.Quote(dir))
     #S16, S18b: a test failing inside a Str unwinds what the Str made, and the next test runs
     try r.expect(sh(dir, "\"$OLANG\" test donenested.olang > out.txt 2>&1") != 0, "donenested", dir)
@@ -3509,7 +3509,7 @@ fn strheld(r mut report&) ? Failed {
 test "a local lambda only ever called keeps its environment in the frame, and no other" { assert passed("frameenv") }
 
 fn frameenv(r mut report&) ? Failed {
-    dir := fresh("frameenv")
+    dir :~ fresh("frameenv")
     os.Run("cp checks/fixtures/frameenv/* " + $os.Quote(dir))
     for n in Array<String&>["frameonly", "frameescapes"] {
         try r.expect(sh(dir, "\"$OLANG\" build " + $n + ".olang > out.txt 2>&1 && ./build/" + $n + " > out.txt 2>&1") == 0, n, dir)
@@ -3531,13 +3531,13 @@ fn frameenv(r mut report&) ? Failed {
 test "the runtime's regions make, release and hand back what they hold" { assert passed("regions") }
 
 fn regions(r mut report&) ? Failed {
-    dir := fresh("regions")
+    dir :~ fresh("regions")
     os.Run("cp checks/fixtures/regions/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build -debug stub.olang > out.txt 2>&1") == 0, "stub.olang did not build", dir)
     try r.expect(sh(dir, "\"$CLANG\" -O0 drive.c build/olang_runtime.*.debug.o -o drive -lpthread -ldl -lm > out.txt 2>&1") == 0
                  "drive.c did not link", dir)
     for want in Array<String&>["small 2 0", "large 2 0", "null 0 0", "kept 4 0", "chain 200000 0", "part 6 0"] {
-        mode := want[:try want.FindByte(' ') catch default 0]
+        mode :~ want[:try want.FindByte(' ') catch default 0]
         try r.expect(sh(dir, "./drive " + $mode + " > out.txt 2>&1") == 0 and outOf(dir) == $want + "\n", "drive " + $mode, dir)
     }
 }
@@ -3548,7 +3548,7 @@ fn regions(r mut report&) ? Failed {
 test "the runtime finds a scope from an address" { assert passed("scopefind") }
 
 fn scopefind(r mut report&) ? Failed {
-    dir := fresh("scopefind")
+    dir :~ fresh("scopefind")
     os.Run("cp checks/fixtures/scopefind/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build -debug stub.olang > out.txt 2>&1") == 0, "stub.olang did not build", dir)
     try r.expect(sh(dir, "\"$CLANG\" -O0 drive.c build/olang_runtime.*.debug.o -o drive -lpthread -ldl -lm > out.txt 2>&1") == 0
@@ -3567,7 +3567,7 @@ fn scopefind(r mut report&) ? Failed {
 test "a checked build stops on an index, a division or a shift out of range; a release build checks none" { assert passed("checkedbuild") }
 
 fn checkedbuild(r mut report&) ? Failed {
-    dir := fresh("checkedbuild")
+    dir :~ fresh("checkedbuild")
     os.Run("cp checks/fixtures/checkedbuild/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" build release.olang > out.txt 2>&1 && ./build/release > out.txt") == 0 and
                  outOf(dir) == "20 0 2 10\n", "the release build", dir)
@@ -3590,7 +3590,7 @@ fn checkedbuild(r mut report&) ? Failed {
 test "tests that fail on purpose, and where an error went" { assert passed("testends") }
 
 fn testends(r mut report&) ? Failed {
-    dir := fresh("testends")
+    dir :~ fresh("testends")
     os.Run("cp checks/fixtures/testends/* " + $os.Quote(dir))
     # (OLANG_AUTORACE=0: some of these tests read what the one before left in a global - one that starts a task and the next - and
     # the evaluator's run below keeps the file's order, which the want file holds; the race build is the racetests scenario's, P7a)
@@ -3621,10 +3621,10 @@ fn testends(r mut report&) ? Failed {
 test "tests that start a task run under the race detector, the others do not" { assert passed("racetests") }
 
 fn racetests(r mut report&) ? Failed {
-    dir := fresh("racetests")
+    dir :~ fresh("racetests")
     os.Run("cp checks/fixtures/racetests/* " + $os.Quote(dir))
     try r.expect(sh(dir, "\"$OLANG\" test race.olang > out.txt 2>&1") == 1, "a race fails the file", dir)
-    out := outOf(dir)
+    out :~ outOf(dir)
     try r.expect(out.Contains("plain: race build false\nok - plain\n") and out.Contains("after: race build false\nok - after the race\n")
                  "the others in the ordinary build", dir)
     try r.expect(out.Contains("own: race build true\nok - tasks writing counters of their own\n") and
@@ -3650,7 +3650,7 @@ fn racetests(r mut report&) ? Failed {
 test "a file is built and run, and runs as a script" { assert passed("runfile") }
 
 fn runfile(r mut report&) ? Failed {
-    dir := fresh("runfile")
+    dir :~ fresh("runfile")
     os.Run(("cp checks/fixtures/runfile/* " + $os.Quote(dir) + " && mkdir " + $os.Quote($dir + "/bin") + " && ln -s " + $os.Quote(olang()) +
            " " + $os.Quote($dir + "/bin/olang")))
     try r.expect(sh(dir, "\"$OLANG\" script.olang a --x > out.txt 2>&1") == 0, "olang script.olang", dir)
@@ -3678,7 +3678,7 @@ fn runfile(r mut report&) ? Failed {
 test "-output names what build and compile write" { assert passed("output") }
 
 fn output(r mut report&) ? Failed {
-    dir := fresh("output")
+    dir :~ fresh("output")
     os.Run("cp checks/fixtures/output/* " + $os.Quote(dir) + " && mkdir " + $os.Quote($dir + "/out"))
     try r.expect(sh(dir, "\"$OLANG\" build -output out/p prog.olang > out.txt 2>&1 && test ! -e build/prog && ./out/p > out.txt") ==
                  0 and outOf(dir) == "written where -output said\n", "build -output", dir)
@@ -3701,7 +3701,7 @@ fn output(r mut report&) ? Failed {
 test "format writes the layout, and -check lists what is not in it" { assert passed("format") }
 
 fn formatting(r mut report&) ? Failed {
-    dir := fresh("format")
+    dir :~ fresh("format")
     os.Run("cp checks/fixtures/format/* " + $os.Quote(dir) + " && cd " + $os.Quote(dir) + " && cp ugly.olang u.olang && cp ugly.want w.olang && cp broken.olang b.olang")
     try r.expect(sh(dir, "\"$OLANG\" format -check u.olang w.olang > out.txt 2> err.txt") == 1 and outOf(dir) == "u.olang\n"
                  "format -check lists the file not in the layout", dir)
@@ -3721,7 +3721,7 @@ fn formatting(r mut report&) ? Failed {
 test "fix rewrites old code to the language of today, and -check only says so" { assert passed("fix") }
 
 fn fixing(r mut report&) ? Failed {
-    dir := fresh("fix")
+    dir :~ fresh("fix")
     os.Run("cp checks/fixtures/fix/* checks/fixtures/output/prog.olang " + $os.Quote(dir) + " && cd " + $os.Quote(dir) + " && cp old.olang o.olang && cp prog.olang p.olang && cp prog.olang prog.keep")
     env := "export OLANG_CACHE=" + $os.Quote($dir + "/cache") + " && "
     try r.expect(sh(dir, $env + "\"$OLANG\" fix -check o.olang p.olang > out.txt 2> err.txt") == 1 and outOf(dir) == "o.olang\n"
@@ -3753,17 +3753,16 @@ fn fixing(r mut report&) ? Failed {
     try r.expect(sh(dir, "\"$OLANG\" n.olang > out.txt 2>&1") == 0 and outOf(dir) == "127.0.0.1 127.0.0.1:80 1970 3\n"
                  "the program using std's renamed builders runs", dir)
     try r.expect(sh(dir, "\"$OLANG\" t.olang > out.txt 2>&1") == 0 and outOf(dir) == "bag.Bag(5) 3\n", "code of today runs as before", dir)
-    # S4f, E10d, E10c (2026-11-26): assign_migrate, from the checker's report, writes the links, reference locals,
-    # identity and null tests of old code in today's spellings - the program computes what it did, and a second run
-    # changes nothing
+    # E10c (2026-11-26): assign_migrate writes the null tests of old code, "== null" an error now, as "is null" - the
+    # program computes what it did, and a second run changes nothing
     os.Run("cp checks/fixtures/assign/old.olang " + $os.Quote(dir) + "/a.olang && cp checks/fixtures/assign/new.want " + $os.Quote(dir) + "/assign.want")
-    am := os.Quote($root() + "/tools/assign_migrate.olang")
+    am :~ os.Quote($root() + "/tools/assign_migrate.olang")
     try r.expect(sh(dir, $"\"$OLANG\" build -output am " + $am + " > out.txt 2>&1 && ./am --olang \"$OLANG\" a.olang > out.txt 2>&1") == 0 and
-                 outOf(dir) == "assign: 3 links, 2 reference locals, 2 identity tests, 3 null tests\n", "assign_migrate's count", dir)
+                 outOf(dir) == "assign: 3 null tests\n", "assign_migrate's count", dir)
     try r.expect(sh(dir, "cmp -s a.olang assign.want") == 0, "assign_migrate's result", dir)
     try r.expect(sh(dir, "\"$OLANG\" a.olang > out.txt 2>&1") == 0 and outOf(dir) == "3 5\n", "the migrated program computes what it did", dir)
     try r.expect(sh(dir, "./am --olang \"$OLANG\" a.olang > out.txt 2>&1 && cmp -s a.olang assign.want") == 0 and
-                 outOf(dir) == "assign: 0 links, 0 reference locals, 0 identity tests, 0 null tests\n", "assign_migrate a second time", dir)
+                 outOf(dir) == "assign: 0 null tests\n", "assign_migrate a second time", dir)
 }
 
 # B1: the command line is words - a mode, options checked against the modes they apply to, help - and a one-character
@@ -3771,7 +3770,7 @@ fn fixing(r mut report&) ? Failed {
 test "the command line is words" { assert passed("words") }
 
 fn words(r mut report&) ? Failed {
-    dir := fresh("words")
+    dir :~ fresh("words")
     os.Run("cp checks/fixtures/output/prog.olang " + $os.Quote(dir))
     os.Run("cp checks/cases/b14docbuilders.olang " + $os.Quote(dir) + "/b.olang")
     os.Run("cp checks/fixtures/output/words.olang " + $os.Quote(dir))
@@ -3797,10 +3796,10 @@ fn words(r mut report&) ? Failed {
                  "explain lists a type's builders before its methods (B11b)", dir)
     try r.expect(sh(dir, "\"$OLANG\" explain B3g > out.txt 2>&1") == 0 and outOf(dir).Contains("scripting mode"), "explain", dir)
     # B11b: a method of a type its file does not declare - an array's, a trait's default - named as a test names it
-    array := os.Quote($root() + "/std/prelude/array.olang")
+    array :~ os.Quote($root() + "/std/prelude/array.olang")
     try r.expect(sh(dir, $"\"$OLANG\" explain " + $array + " Array.Windows > out.txt 2>&1") == 0 and
                  outOf(dir).StartsWith("fn (a Array<T>&) Windows<T>(size ChunkSize)"), "explain of an array's method", dir)
-    iter := os.Quote($root() + "/std/prelude/iterator.olang")
+    iter :~ os.Quote($root() + "/std/prelude/iterator.olang")
     try r.expect(sh(dir, $"\"$OLANG\" explain " + $iter + " Iterator.TakeWhile > out.txt 2>&1") == 0 and
                  outOf(dir).Contains(") TakeWhile"), "explain of a trait's default", dir)
     # D18c, QCB: a generator's borrowed elements are written as a reference - no scope written - and their scope said

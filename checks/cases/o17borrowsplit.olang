@@ -7,7 +7,7 @@ type Box struct(n I64) {
 }
 fn (b Box&) size() I64 { return b.Data.Len() }
 fn (b mut Box&) regrow(v I64) {
-    b.Data = Array<I64>(8, v)
+    b.Data ~ Array<I64>(8, v)
 }
 fn Box.make(n I64) Box {
     b := Box(n)

@@ -5,8 +5,8 @@ type N struct() {
     v I64 = 0
 }
 fn link(bs mut Vec<mut N&>&, other mut N&) {
-    b := bs[0]
-    b.next = other
+    b :~ bs[0]
+    b.next ~ other
 }
 fn main() {
     fs := Vec<fn&(bs mut Vec<mut N&>&, other mut N&)>()

@@ -23,10 +23,10 @@ fn churn(d I64) I64 {
     return churn(d - 1) + a[3] - d
 }
 fn nv(n Node&) I64 {
-    if n.next == null: return 0
+    if n.next is null: return 0
     return n.next!.v
 }
-fn grow(x mut Node&) { x.next = Node(x.v + 100) }
+fn grow(x mut Node&) { x.next ~ Node(x.v + 100) }
 fn f(n mut Node&) mut Node& ? {
     if n.v > 0: error Stop.Here
     return n
@@ -35,8 +35,8 @@ fn Node.g(v I64) mut Node& { return Node(v) }
 fn id(n mut Node&) mut Node& { return n }
 fn (b Bag&) Str() String {
     h := fn() mut Node& { return Node(5) }
-    x := try f(b.head) catch default h()
-    b.head.next = x
+    x :~ try f(b.head) catch default h()
+    b.head.next ~ x
     return "b" + $b.k
 }
 fn main() ? {

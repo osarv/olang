@@ -7,7 +7,7 @@ fn fmt(secs I64) String {
 }
 
 fn parse(t String&) I64 ? ParseError {
-    p := t.Split(":")
+    p :~ t.Split(":")
     return try p[0].ParseInt() * 3600 + p[1].ParseInt() * 60 + p[2].ParseInt()
 }
 

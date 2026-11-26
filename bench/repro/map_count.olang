@@ -7,7 +7,7 @@ import "std/io"
 import "std/os"
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     n := try args[1].ParseInt()
     two Bool = args.Len() > 2 and args[2] == "two"
     m := Map<I64, I64>()

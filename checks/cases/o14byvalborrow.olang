@@ -19,7 +19,7 @@ type aPt struct(x I64, y I64) {
 fn bor(p aPt) aPt& { return p }
 fn main() ? {
     q := aPt(3, 4)
-    w := bor(q)
+    w :~ bor(q)
     q.x = 9
     churn()
     try io.PutLn($w.x + " " + $w.y + " " + $q.x)

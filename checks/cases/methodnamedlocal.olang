@@ -10,6 +10,6 @@ fn main() ? {
     a := box(os.Args().Len() + 40)
     count := a.count()
     assert count == 42
-    Args := os.Args()
+    Args :~ os.Args()
     assert Args.Len() == 1
 }

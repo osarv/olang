@@ -13,7 +13,7 @@ type Holder struct(log mut Tally&) {
 }
 fn note(h mut Holder&, id I64, other mut Holder&) {
     h.log.Saw(id)
-    h = other
+    h ~ other
     h.log.Saw(id + 100)
 }
 fn churn(d I64) I64 {

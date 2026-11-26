@@ -75,9 +75,9 @@ fn newId() String {
 # not listened at
 fn Serve(cfg mut build.Config&, file String&) I32 {
     session.IgnoreBrokenPipes()
-    text := try os.ReadFile(file) catch os.Error e { return fail($"cannot read the connection file " + $file + ": " + $e) }
-    conn := try json.Json.Parse(text) catch json.Error e { return fail($"the connection file is no JSON: " + $e) }
-    ip := try conn["ip"].AsStr() catch json.Error default "127.0.0.1"
+    text :~ try os.ReadFile(file) catch os.Error e { return fail($"cannot read the connection file " + $file + ": " + $e) }
+    conn :~ try json.Json.Parse(text) catch json.Error e { return fail($"the connection file is no JSON: " + $e) }
+    ip :~ try conn["ip"].AsStr() catch json.Error default "127.0.0.1"
     k mut kernel& = kernel($(try conn["key"].AsStr() catch json.Error default ""))
     ls Vec<net.Listener>
     for key in PortKeys {
@@ -184,7 +184,7 @@ fn (k mut kernel&) handle(s mut prompt.Session&, j I64, frames Array<String>&) {
     if role != Shell and role != Control: return
     rq := try k.read(frames) catch Unsigned { return }
     kind := kindOf(rq)
-    content := try json.Json.Parse(rq.Content) catch json.Error default json.Json.Null
+    content :~ try json.Json.Parse(rq.Content) catch json.Error default json.Json.Null
     k.publish("status", rq.Header, "{\"execution_state\":\"busy\"}")
     match kind {
         case "kernel_info_request": k.reply(j, rq, "kernel_info_reply", kernelInfo())
@@ -251,13 +251,13 @@ fn (k mut kernel&) frames(ids Array<String>&, kind String&, parent String&, cont
 
 # the reply to rq on socket j, its sender's ids before it
 fn (k mut kernel&) reply(j I64, rq request&, kind String&, content String&) {
-    msg := k.frames(rq.Ids, kind, rq.Header, content)
+    msg :~ k.frames(rq.Ids, kind, rq.Header, content)
     try k.Socks.RefMut(j).Send(...msg) catch net.Error { k.Roles[j] = -1 }
 }
 
 # a message to every subscriber of iopub, its topic before it
 fn (k mut kernel&) publish(kind String&, parent String&, content String&) {
-    msg := k.frames(Array<String>[$"kernel." + $k.Session + "." + $kind], kind, parent, content)
+    msg :~ k.frames(Array<String>[$"kernel." + $k.Session + "." + $kind], kind, parent, content)
     for j in range k.Socks.Len() {
         if k.Roles[j] != IOPub: continue
         try k.Socks.RefMut(j).Send(...msg) catch net.Error { k.Roles[j] = -1 }
@@ -283,7 +283,7 @@ fn kernelInfo() String {
 
 # a cell run: its code published, its output streamed, its value or what stopped it, then the reply
 fn (k mut kernel&) execute(s mut prompt.Session&, j I64, rq request&, content json.Json&) {
-    code := str(content, "code")
+    code :~ str(content, "code")
     silent := try content["silent"].AsBool() catch json.Error default false
     if not silent: k.Count++
     n := k.Count
@@ -294,17 +294,17 @@ fn (k mut kernel&) execute(s mut prompt.Session&, j I64, rq request&, content js
     said := out.End()
     complained := errs.End()
     k.stream(rq.Header, "stdout", said)
-    warnings := r.Diags if r.Checked else ""
+    warnings :~ r.Diags if r.Checked else ""
     k.stream(rq.Header, "stderr", $complained + $warnings + $r.Notes)
     if r.Shown and not silent {
         k.publish("execute_result", rq.Header, $"{\"execution_count\":" + $n + ",\"data\":" + $Data(r) + ",\"metadata\":{}}")
     }
-    failure := r.Failure if r.Checked else r.Diags
+    failure :~ r.Failure if r.Checked else r.Diags
     if failure == "" {
         k.reply(j, rq, "execute_reply", $"{\"status\":\"ok\",\"execution_count\":" + $n + ",\"user_expressions\":{},\"payload\":[]}")
         return
     }
-    ename := "RuntimeError" if r.Checked else "CompileError"
+    ename :~ "RuntimeError" if r.Checked else "CompileError"
     rows Vec<String&>
     for line in failure.TrimEnd().Lines(): rows.Push(Q(line))
     err := $"\"ename\":\"" + $ename + "\",\"evalue\":" + $Q(FirstLine(failure)) + ",\"traceback\":[" + $rows.Join(",") + "]"
@@ -320,7 +320,7 @@ fn Data(r prompt.Reply&) String {
     b := StringBuilder()
     b.Push($"{\"text/plain\":" + $Q(r.Text))
     if r.Mime != "" {
-        body := base64.Encode(r.Data) if r.Mime == "image/png" else r.Data
+        body :~ base64.Encode(r.Data) if r.Mime == "image/png" else r.Data
         b.Push($"," + $Q(r.Mime) + ":" + $Q(body))
     }
     b.PushChar('}')
@@ -338,15 +338,15 @@ Keywords Array<String&> = Array<String&>["fn", "type", "import", "for", "in", "i
 
 # the names the word before the cursor may finish: the session's declarations and values, then the keywords
 fn complete(s prompt.Session&, content json.Json&) String {
-    code := str(content, "code")
+    code :~ str(content, "code")
     at := try content["cursor_pos"].AsInt() catch json.Error default code.Len()
     if at > code.Len() or at < 0: at = code.Len()
     start := at
     for start > 0 and (code[start - 1].IsLetter() or code[start - 1].IsDigit() or code[start - 1] == '_'): start--
-    word := code[start:at]
+    word :~ code[start:at]
     names Vec<String&>
     for d in s.Decls.View() {
-        name := d.Key[7:] if d.Key.StartsWith("import ") else d.Key
+        name :~ d.Key[7:] if d.Key.StartsWith("import ") else d.Key
         if not name.StartsWith("text ") and not name.Contains("."): names.Push(name)
     }
     for v in s.Values.View(): names.Push(v.Name)
@@ -428,8 +428,8 @@ fn civil(days I64) I64, I64, I64 {
 # "olang serve jupyter -install": the kernel's spec written where Jupyter looks for a user's kernels - $JUPYTER_DATA_DIR,
 # else ~/.local/share/jupyter - as kernels/olang/kernel.json, running this olang
 fn Install(exe String&, c build.Config&) I32 {
-    base := try os.Env("JUPYTER_DATA_DIR") catch default ""
-    if base == "": base = $(try os.Env("HOME") catch default ".") + "/.local/share/jupyter"
+    base :~ try os.Env("JUPYTER_DATA_DIR") catch default ""
+    if base == "": base ~ $(try os.Env("HOME") catch default ".") + "/.local/share/jupyter"
     dir := $base + "/kernels/olang"
     try os.MkDirAll(dir) catch os.Error e { return fail($"cannot make " + $dir + ": " + $e) }
     opts := $(", \"-quick\"" if c.Quick else "") + $(", \"-checked\"" if c.Checked else "")     # (B23: the kernel's own options)

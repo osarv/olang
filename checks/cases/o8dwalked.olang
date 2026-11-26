@@ -25,10 +25,10 @@ fn churn() I64 {
 fn main() {
     h := Holder()
     for r in range 3 {
-        h.buf = Array<I64>(50, r)
+        h.buf ~ Array<I64>(50, r)
         t I64 = 0
         for x in h.buf {
-            h.buf = Array<I64>(50, x + 100)   # the array walked is let go of
+            h.buf ~ Array<I64>(50, x + 100)   # the array walked is let go of
             churn()
             t += x
         }

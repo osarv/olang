@@ -4,7 +4,7 @@
 # returned
 fn mk(n I64) Array<String&> {
     a := Array<String&>(1)
-    a[0] = $n + $n
+    a[0] ~ $n + $n
     return a
 }
 fn churn() I64 {

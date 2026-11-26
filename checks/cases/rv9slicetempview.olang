@@ -9,7 +9,7 @@ type H struct(k I64) {
     r Array<I64>& = Array<I64>(0)
 }
 fn set(h mut H&, n I64) {
-    h.r = Array<I64>(4, n)[0:4]
+    h.r ~ Array<I64>(4, n)[0:4]
 }
 fn churn() I64 {
     t := 0

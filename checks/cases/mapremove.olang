@@ -10,7 +10,7 @@ fn main() {
     for i in range 1000 {
         m.Put($i, Rec("payload " + $i))
         if i >= 100 {
-            x := try m.Get($(i - 100)) catch { unreachable }
+            x :~ try m.Get($(i - 100)) catch { unreachable }
             m.Remove($(i - 100))
             total += x.text.Len()
         }

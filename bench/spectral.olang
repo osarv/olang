@@ -33,7 +33,7 @@ fn timesAtA(v Array<F64>&, out mut Array<F64>&, tmp mut Array<F64>&) {
 }
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     n I64 = 100
     if args.Len() > 1: n = try args[1].ParseInt()
     u := Array<F64>(n, 1.0)

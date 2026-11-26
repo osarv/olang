@@ -136,7 +136,7 @@ type item struct(Start I64, End I64, Line I64) {
 # or a "catch" beginning the next line, which goes on with it (S1b, R9b)
 fn pieces(text String&) Vec<item> {
     ts := scan.Tokens.Scan(text)
-    toks := ts.Toks
+    toks :~ ts.Toks
     out Vec<item>
     depth I64 = 0
     first I64 = -1
@@ -174,7 +174,7 @@ fn item.Of(text String&, toks Array<token.Token>&, a I64, b I64) item {
     key := declKey(text, toks, a, b)
     if key != "" {
         it.IsDecl = true
-        it.Key = key
+        it.Key ~ key
         return it
     }
     names := localNames(text, toks, a, b)
@@ -365,7 +365,7 @@ fn (s Session&) write(ds Vec<Decl>&, vs Vec<Value>&, c cell&, keeping Bool) prog
     last := c.Items.Len() - 1
     for i, it in c.Items {
         if it.IsDecl: continue
-        t := c.Text[it.Start:it.End]
+        t :~ c.Text[it.Start:it.End]
         # (the value's text starts its own line, so a diagnostic's column is the cell's)
         # (the value is shown as "$" renders it, and richly where its type renders itself, B23)
         if c.Show and i == last: p.put("{\nolangShownValue := (", Synthetic, 0)
@@ -373,7 +373,8 @@ fn (s Session&) write(ds Vec<Decl>&, vs Vec<Value>&, c cell&, keeping Bool) prog
         if c.Show and i == last: p.put($")\n" + $ShownName + " = $olangShownValue\n" + $RichName + "(olangShownValue)\n}", Synthetic, 0)
     }
     if keeping {
-        for v in c.Keeps: p.put($KeepPrefix + $v.Name + " = " + $v.Name, c.Label, v.Root)
+        # (a reference kept is linked, S4f - "=" would write what the global names)
+        for v in c.Keeps: p.put($KeepPrefix + $v.Name + (" ~ " if v.Type.EndsWith("&") else " = ") + $v.Name, c.Label, v.Root)
     }
     if c.Show and not s.Interp: p.put(SayShown, Synthetic, 0)
     p.put("}", Synthetic, 0)
@@ -455,7 +456,7 @@ fn (s mut Session&) Cell(text String&, label String& = "") Reply {
         if plain.Checked or errorRows(plain.Diags) < errorRows(r.Diags): r = plain
         break
     }
-    r.Notes = $notes.ToString() + $r.Notes
+    r.Notes ~ $notes.ToString() + $r.Notes
     return r
 }
 
@@ -488,7 +489,7 @@ fn cellRows(t String&, label String&) String {
 fn flushRow(b mut StringBuilder&, row String&, label String&, seen mut Map<String&, Bool>&) {
     if row == "" or row in seen: return
     seen.Put(row, true)
-    head := row[:try row.FindByte('\n') catch default row.Len()]
+    head :~ row[:try row.FindByte('\n') catch default row.Len()]
     if head.Contains(": warning") and (not head.StartsWith($label + ":") or head.Contains("warning[M5a]")): return
     b.Push(row)
 }
@@ -508,9 +509,9 @@ fn (s mut Session&) attempt(ds Vec<Decl>&, vs Vec<Value>&, c mut cell&) Reply {
         d := diag.Diagnostics(false)
         d.Lenient = true
         p := s.write(ds, vs, c, false)
-        ch := s.check(p, d)
-        if ch == null {
-            r.Diags = cellRows(d.Render(), c.Label)
+        ch :~ s.check(p, d)
+        if ch is null {
+            r.Diags ~ cellRows(d.Render(), c.Label)
             return r
         }
         s.keptLocals(ch, c)
@@ -518,20 +519,20 @@ fn (s mut Session&) attempt(ds Vec<Decl>&, vs Vec<Value>&, c mut cell&) Reply {
     d := diag.Diagnostics(false)
     d.Lenient = true
     p := s.write(ds, vs, c, true)
-    ch := s.check(p, d)
-    if ch == null {
-        r.Diags = cellRows(d.Render(), c.Label)
+    ch :~ s.check(p, d)
+    if ch is null {
+        r.Diags ~ cellRows(d.Render(), c.Label)
         return r
     }
-    x := s.machine(ch, d, r)
-    if x == null {
-        r.Diags = cellRows(d.Render(), c.Label)
+    x :~ s.machine(ch, d, r)
+    if x is null {
+        r.Diags ~ cellRows(d.Render(), c.Label)
         return r
     }
     for n in s.mismatched(ch, x, vs): r.gone.Push(n)
     if r.gone.Len() > 0: return r
     r.Checked = true
-    r.Diags = cellRows(d.Warnings(), c.Label)
+    r.Diags ~ cellRows(d.Warnings(), c.Label)
     s.run(ch, x, d, ds, vs, c, r)
     return r
 }
@@ -543,13 +544,13 @@ fn (s mut Session&) attempt(ds Vec<Decl>&, vs Vec<Value>&, c mut cell&) Reply {
 fn (s mut Session&) startWorker() {
     if s.work.Running(): return
     why := ""
-    if cells.Builder == null: why = "this compiler builds no cells"
+    if cells.Builder is null: why = "this compiler builds no cells"
     else if s.Cfg.Clang == "": why = "there is no clang to build them with"
     else if s.Cfg.Target.Foreign: why = "they are built for another machine"
     if why == "" {
         # (a root of this session's own: what its cells' objects are named by is no other session's, which takes its
         # own away as it ends)
-        if not s.cc.Cell: s.Root = $s.Root[:s.Root.Len() - 6] + "-" + $build.Pid() + ".olang"
+        if not s.cc.Cell: s.Root ~ $s.Root[:s.Root.Len() - 6] + "-" + $build.Pid() + ".olang"
         s.cc = cells.Config(s.Cfg)
         s.work = cells.Worker(s.Relay)
         why = s.work.Start(s.cc)
@@ -574,13 +575,13 @@ fn (s mut Session&) attemptCompiled(ds Vec<Decl>&, vs Vec<Value>&, c mut cell&) 
     }
     d := diag.Diagnostics(false)
     d.Lenient = true
-    ch := s.check(s.write(ds, vs, c, false), d)
-    if ch == null {
-        r.Diags = cellRows(d.Render(), c.Label)
+    ch :~ s.check(s.write(ds, vs, c, false), d)
+    if ch is null {
+        r.Diags ~ cellRows(d.Render(), c.Label)
         return r
     }
     s.keptLocals(ch, c)
-    s.ident = $ch.P.L.Mods[ch.P.L.Root].Identity
+    s.ident ~ $ch.P.L.Mods[ch.P.L.Root].Identity
     lay := layouts(ch, ds, vs)
     build.Phase("cell probe")
     for v in vs {
@@ -598,7 +599,7 @@ fn (s Session&) probes(c cell&) Bool {
     for it in c.Items {
         if it.Names.Len() > 0: return true
         if not it.IsDecl: continue
-        t := c.Text[it.Start:it.End]
+        t :~ c.Text[it.Start:it.End]
         if not t.StartsWith("fn ") and not t.StartsWith("export fn "): return true
     }
     return false
@@ -613,7 +614,7 @@ fn layouts(c mut typecheck.Checker&, ds Vec<Decl>&, vs Vec<Value>&) Map<String&,
     x mut interp.Exec& = interp.Exec(c.P, c.Bodies, eval.Mode.Run)
     x.Need(mir.FnKey.Body(typed.BodyId(I32(b))))
     root := c.P.L.Root
-    names := c.P.L.Names
+    names :~ c.P.L.Names
     globals Vec<String&>
     for v in vs: globals.Push(v.Name)
     for dc in ds {
@@ -670,12 +671,12 @@ fn (s mut Session&) runCompiled(ds Vec<Decl>&, vs Vec<Value>&, ce cell&, lay Map
     spin.Begin("compiling")
     try cells.Build(s.cc, s.Root, p.B.ToString(), p.Kept.ToArray(), p.Paths.ToArray(), p.Lines.ToArray(), plan, so, d) catch build.Failed {
         spin.End()
-        r.Diags = cellRows(d.Render(), ce.Label)
-        if r.Diags == "": r.Diags = "olang: the cell cannot be built\n"
+        r.Diags ~ cellRows(d.Render(), ce.Label)
+        if r.Diags == "": r.Diags ~ "olang: the cell cannot be built\n"
         return
     }
     r.Checked = true
-    r.Diags = cellRows(d.Warnings(), ce.Label)
+    r.Diags ~ cellRows(d.Warnings(), ce.Label)
     spin.Retitle("running")
     o := s.work.Run(so, s.Watch)
     spin.End()
@@ -683,24 +684,24 @@ fn (s mut Session&) runCompiled(ds Vec<Decl>&, vs Vec<Value>&, ce cell&, lay Map
     s.Decls = ds
     vals Vec<Value>
     if o.Lost {
-        r.Failure = "olang: the session's worker ended, and the values it kept with it\n"
+        r.Failure ~ "olang: the session's worker ended, and the values it kept with it\n"
         s.Values = vals
         return
     }
     for v in vs: vals.Push(v)
     if o.Stopped != "" {
-        r.Failure = stopped(o.Stopped)
+        r.Failure ~ stopped(o.Stopped)
         s.Values = vals
         return
     }
-    r.Failure = places(o.Failure, p, s.Root)
+    r.Failure ~ places(o.Failure, p, s.Root)
     if o.Failure == "" {
         for v in ce.Keeps: vals.Push(s.kept(v.Name, v.Type, true, $KeepPrefix + $v.Name, lay))
         for g in fresh: vals.Push(s.kept(g, "", false, g, lay))
         r.Shown = o.Shown
-        r.Text = o.Text
-        r.Mime = o.Mime
-        r.Data = o.Data
+        r.Text ~ o.Text
+        r.Mime ~ o.Mime
+        r.Data ~ o.Data
     }
     s.Values = vals
 }
@@ -708,8 +709,8 @@ fn (s mut Session&) runCompiled(ds Vec<Decl>&, vs Vec<Value>&, ce cell&, lay Map
 # a value the cell made kept: its storage the cell's own global's (held)
 fn (s Session&) kept(name String&, ty String&, made Bool, held String&, lay Map<String&, String&>&) Value {
     v := Value($name, $ty, made)
-    v.Store = s.storeOf(held, s.Cells)
-    v.Layout = try lay.Get(name) catch default ""
+    v.Store ~ s.storeOf(held, s.Cells)
+    v.Layout ~ try lay.Get(name) catch default ""
     return v
 }
 
@@ -736,7 +737,7 @@ fn (s Session&) cellDir() String { return $s.cc.Dir + "/s" + $build.Pid() }
 
 # what stopped a cell's process, said: the session's values as they were before it
 fn stopped(how String&) String {
-    what := match how {
+    what :~ match how {
         case "interrupted": "interrupted"
         case _ if how.StartsWith("exited "): $"the cell ended the program with status " + $how[7:]
         case _ if how.StartsWith("signal "): $"the cell's run crashed (signal " + $how[7:] + ")"
@@ -778,7 +779,7 @@ fn (s mut Session&) endCompiled() {
     try os.RemoveAll(s.cellDir()) catch os.Error { }
     if s.ident == "": return
     base := build.Readable(s.ident)
-    names := try os.ReadDir(s.cc.Dir) catch os.Error { return }
+    names :~ try os.ReadDir(s.cc.Dir) catch os.Error { return }
     for name in names {
         if name.StartsWith($base + ".") or name.StartsWith($base + "__"): try os.Remove($s.cc.Dir + "/" + $name) catch os.Error { }
     }
@@ -793,7 +794,7 @@ fn (s mut Session&) check(p program&, d mut diag.Diagnostics&) mut typecheck.Che
     f mut fetch.Fetcher& = fetch.Fetcher(load.LockPath(root), fetch.CacheDir(), fetch.GitBase(), s.Cfg.Update, false)
     nm mut source.Names& = source.Names()
     l mut load.Loader& = load.Loader(load.StdDir(), consts, f, nm, d)
-    l.Clang = $s.Cfg.Clang
+    l.Clang ~ $s.Cfg.Clang
     for v in p.Kept: l.Shadowable.Put(v, true)
     l.Overlay.Put(root, p.B.ToString())
     l.Load(root)
@@ -808,7 +809,7 @@ fn (s mut Session&) check(p program&, d mut diag.Diagnostics&) mut typecheck.Che
 fn cellBody(c mut typecheck.Checker&) I64 {
     f := c.P.FnNamed(c.P.L.Root, c.P.L.Names.Intern(CellName))
     for i in range c.Bodies.Len() {
-        b := c.Bodies[i]
+        b :~ c.Bodies[i]
         match b.Of {
             case typed.BodyOf.Fn(inst) { if c.P.InstanceFn(inst) == f: return I64(i) }
             case _ { }
@@ -822,7 +823,7 @@ fn cellBody(c mut typecheck.Checker&) I64 {
 fn (s mut Session&) keptLocals(c mut typecheck.Checker&, ce mut cell&, kept Bool = true) {
     b := cellBody(c)
     if b < 0: return
-    body := c.Bodies[b]
+    body :~ c.Bodies[b]
     c.SpellFrom(c.P.L.Root)
     for lc in body.Locals {
         if lc.In != typed.BlockId(0) or lc.Kind != typed.LocalKind.Var or lc.Name == source.NameId(0): continue
@@ -870,11 +871,11 @@ fn (s mut Session&) machine(c mut typecheck.Checker&, d mut diag.Diagnostics&, r
         x.Lw.TwinBodies.Push(fr.Sc.TwinBody(t))
         x.Lw.TwinStable.Push(fr.Sc.TwinStable(t))
     }
-    x.Lw.Free = fr
+    x.Lw.Free ~ fr
     x.M.Soles = fr.Sole
     for bt in fr.GenOkNow(): x.M.GenOk.Put($bt.First + " " + $bt.Second, true)
     x.M.Args.Push("olang")
-    if s.Watch != null {
+    if s.Watch is not null {
         x.M.Watch = s.Watch
         x.M.StepBudget = 0
     }
@@ -882,7 +883,7 @@ fn (s mut Session&) machine(c mut typecheck.Checker&, d mut diag.Diagnostics&, r
 }
 
 # what the prompt cannot run, said as interpret says it (B3e)
-fn gap(r mut Reply&, why String&) { r.Failure = $r.Failure + "olang: the prompt cannot run this: " + $why + "\n" }
+fn gap(r mut Reply&, why String&) { r.Failure ~ $r.Failure + "olang: the prompt cannot run this: " + $why + "\n" }
 
 # the cell's function run on x: the session's values restored into it first, then kept again as it ends - with the
 # cell's locals where it ran to its end - and what nothing keeps let go, destructors run. The reply told what happened
@@ -892,14 +893,14 @@ fn (s mut Session&) run(c mut typecheck.Checker&, x mut interp.Exec&, d mut diag
     k := mir.FnKey.Body(typed.BodyId(I32(b)))
     x.Need(k)
     root := c.P.L.Root
-    names := c.P.L.Names
+    names :~ c.P.L.Names
     notes := StringBuilder()
     kept := s.restore(c, x, vs)
     for v in ce.Keeps: x.M.MarkSet(root, names.Intern($KeepPrefix + $v.Name))
     st := x.InitGlobals()
     if st == eval.Stop.None: st = x.M.Eval(k, Array<I64>(0))
     if st != eval.Stop.None {
-        r.Failure = $x.StopText(st, b, d) + "\n" + $x.TraceText(d)
+        r.Failure ~ $x.StopText(st, b, d) + "\n" + $x.TraceText(d)
     } else {
         for v in ce.Keeps {
             kv := Value(v.Name, v.Type, true)
@@ -909,9 +910,9 @@ fn (s mut Session&) run(c mut typecheck.Checker&, x mut interp.Exec&, d mut diag
     if ce.Show and st == eval.Stop.None {
         at, ty := try x.M.GlobalAt(root, names.Intern(ShownName)) catch eval.NotSaved { return }
         r.Shown = true
-        r.Text = x.M.Text(at, ty)
-        r.Mime = global(x, c, "olangShownMime")
-        r.Data = global(x, c, "olangShownData") if r.Mime != "" else ""
+        r.Text ~ x.M.Text(at, ty)
+        r.Mime ~ global(x, c, "olangShownMime")
+        r.Data ~ global(x, c, "olangShownData") if r.Mime != "" else ""
     }
     # kept again, from this machine
     s.snap.Clear()
@@ -925,7 +926,7 @@ fn (s mut Session&) run(c mut typecheck.Checker&, x mut interp.Exec&, d mut diag
         }
         nv := Value($v.Name, $v.Type, v.Made)
         nv.Root = idx
-        nv.Layout = x.M.Layout(ty)
+        nv.Layout ~ x.M.Layout(ty)
         vals.Push(nv)
     }
     # the globals the cell's declarations add, kept from now on
@@ -944,7 +945,7 @@ fn (s mut Session&) run(c mut typecheck.Checker&, x mut interp.Exec&, d mut diag
         }
         nv := Value($dc.Key, "", false)
         nv.Root = idx
-        nv.Layout = x.M.Layout(ty)
+        nv.Layout ~ x.M.Layout(ty)
         vals.Push(nv)
     }
     x.M.SaveRegs(s.snap)
@@ -952,7 +953,7 @@ fn (s mut Session&) run(c mut typecheck.Checker&, x mut interp.Exec&, d mut diag
     x.M.EndProgram(k)
     s.Decls = ds
     s.Values = vals
-    r.Notes = notes.ToString()
+    r.Notes ~ notes.ToString()
 }
 
 # a String global of the cell's program as the machine holds it, "" where it has none
@@ -966,7 +967,7 @@ fn global(x mut interp.Exec&, c mut typecheck.Checker&, name String&) String {
 # yet (its initializer runs)
 fn (s mut Session&) restore(c mut typecheck.Checker&, x mut interp.Exec&, vs Vec<Value>&) Vec<Value> {
     root := c.P.L.Root
-    names := c.P.L.Names
+    names :~ c.P.L.Names
     roots Map<I64, eval.Ptr>
     kept Vec<Value>
     for v in vs {
@@ -1005,11 +1006,11 @@ fn (s mut Session&) End() {
     c := cell("end", "")
     d := diag.Diagnostics(false)
     d.Lenient = true
-    ch := s.check(s.write(s.Decls, s.Values, c, false), d)
-    if ch == null: return
+    ch :~ s.check(s.write(s.Decls, s.Values, c, false), d)
+    if ch is null: return
     r := Reply()
-    x := s.machine(ch, d, r)
-    if x == null: return
+    x :~ s.machine(ch, d, r)
+    if x is null: return
     k := mir.FnKey.Body(typed.BodyId(I32(cellBody(ch))))
     x.Need(k)
     s.restore(ch, x, s.Values)
@@ -1023,9 +1024,9 @@ fn (s mut Session&) TypeOf(expr String&) Reply {
     r := Reply()
     d := diag.Diagnostics(false)
     d.Lenient = true
-    ch := s.check(s.write(s.Decls, s.Values, c, false), d)
-    if ch == null {
-        r.Diags = d.Render()
+    ch :~ s.check(s.write(s.Decls, s.Values, c, false), d)
+    if ch is null {
+        r.Diags ~ d.Render()
         return r
     }
     s.keptLocals(ch, c, false)
@@ -1033,14 +1034,14 @@ fn (s mut Session&) TypeOf(expr String&) Reply {
     for v in c.Keeps {
         if v.Name != "olangType": continue
         r.Shown = true
-        r.Text = v.Type
+        r.Text ~ v.Type
     }
     return r
 }
 
 # whether a declaration declares a global: "NAME mut ..."
 fn isGlobal(dc Decl&) Bool {
-    t := dc.Text
+    t :~ dc.Text
     return t.StartsWith(dc.Key) and t[dc.Key.Len():].TrimStart().StartsWith("mut ")
 }
 
@@ -1084,7 +1085,7 @@ fn Run(cfg mut build.Config&) I32 {
         if edit and s.work.Printed: say("\n")
         s.work.Printed = false
         entry := try nextEntry(ed, lines, edit, tty) catch Ended { break }
-        t := entry.Trim()
+        t :~ entry.Trim()
         if t == "": continue
         if not t.StartsWith(":") {
             tell(s.Cell(entry))
@@ -1111,7 +1112,7 @@ fn readEntry(lines mut io.Lines&, tty Bool) String ? Ended {
     first := true
     for {
         if tty and not waiting(lines): say(">>> " if first else "... ")
-        line := try lines.Next() catch {
+        line :~ try lines.Next() catch {
             if first: error Ended.Input
             break
         }
@@ -1148,8 +1149,8 @@ fn command(s mut Session&, ed mut lineedit.Editor&, t String&) {
         return
     }
     if t.StartsWith(":load ") {
-        path := t[6:].Trim()
-        text := try os.ReadFile(path) catch os.Error {
+        path :~ t[6:].Trim()
+        text :~ try os.ReadFile(path) catch os.Error {
             sayErr($"cannot read " + $path + "\n")
             return
         }

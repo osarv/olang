@@ -11,6 +11,6 @@ fn main() ? {
     keep Expr& = Expr.Lit(0)
     for i in range 3 {
         t Expr& = Expr.Lit(i)
-        keep = Expr.Add(keep, t)
+        keep ~ Expr.Add(keep, t)
     }
 }

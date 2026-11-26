@@ -37,7 +37,7 @@ fn total(a Array<I64>&) I64 {
 # a piece kept past the text it was cut from changing: its own copy (text that changes is an Array<Char>, a String never
 # does - T13a - so its pieces are cut by Windows)
 fn firstWord(t Array<Char>&) Array<Char> {
-    ps := t.Windows(3)
+    ps :~ t.Windows(3)
     return ps[0]
 }
 
@@ -54,10 +54,10 @@ test firstWord "a piece handed back is a copy the caller keeps" {
 
 test letters "elements of an array of text written in the walk are the elements as they were" {
     t := $"aa bb"
-    ps := t.Split(" ")
+    ps :~ t.Split(" ")
     n I64 = 0
     for p in ps {
-        ps[1] = "z"
+        ps[1] ~ "z"
         n += p.Len()
     }
     assert settle() > 0 and n == 3 and ps[1] == "z"
@@ -75,7 +75,7 @@ test total "a built result read where it stands, then kept as a copy" {
     v := Vec<I64>()
     v.Push(4)
     v.Push(5)
-    a := v.ToArray()
+    a :~ v.ToArray()
     s := a.Iter().Fold(I64(0), fn(acc I64, x I64) I64 { return acc + x })
     v[0] = 40
     assert settle() > 0 and s == 9 and a[0] == 4

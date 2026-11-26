@@ -11,7 +11,7 @@ fn inner() {
     a B& = B(1)
     if a.v > 0 {
         c B& = B(3)
-        r := try pick(a, false) catch default c
+        r :~ try pick(a, false) catch default c
         assert r.v == 3
     }
 }

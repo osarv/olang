@@ -12,7 +12,7 @@ type Holder struct() {
 }
 fn f(a mut Holder&, b mut Item&, n I64) {
     if n > 0: g(a, b, n - 1)
-    a.item = b
+    a.item ~ b
 }
 fn g(x mut Holder&, y mut Item&, n I64) { f(x, y, n) }
 fn main() ? {

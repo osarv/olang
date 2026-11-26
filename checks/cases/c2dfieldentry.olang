@@ -25,7 +25,7 @@ fn main() ? {
     for i in range 3 {
         l := Vec<I64>()
         l.Push(i * 10)
-        s = FeSlot(l)
+        s ~ FeSlot(l)
         all.Push(FeSlot(l))
     }
     churn()

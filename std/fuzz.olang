@@ -42,7 +42,7 @@ fn Check<? E>(f fn&(data Array<U8>&) ? E) ? E {
     data := try Input() catch Error {
         try f(Array<U8>(0))
         for path in Saved() {
-            saved := try os.ReadFile(path) catch os.Error { continue }
+            saved :~ try os.ReadFile(path) catch os.Error { continue }
             try io.PutErr($"fuzz: replaying " + $path + "\n") catch io.Error { }
             try f(saved)
         }
@@ -58,7 +58,7 @@ fn Saved() Vec<String&> {
     file := source()
     if name == "" or file == "": return out
     dir := Corpus(file, name)
-    names := try os.ReadDir(dir) catch os.Error { return out }
+    names :~ try os.ReadDir(dir) catch os.Error { return out }
     sorted := Vec<String&>()
     for n in names {
         if not n.StartsWith("."): sorted.Push($n)

@@ -14,7 +14,7 @@ fn filled(n I64) Array<F32> {
 }
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     n := try args[1].ParseInt()
     a := filled(n)
     try io.Put($a[n - 1] + "\n")

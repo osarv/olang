@@ -1,5 +1,5 @@
-# check: fail error[S4e]: 's' is repointed at a new value: the caller still sees what it passed
-# S4e: a reference parameter repointed at a value built here is refused even when it is read after: the caller still
+# check: fail error[S4e]: 's' is linked to a new value: the caller still sees what it passed
+# S4e: a reference parameter linked to a value built here is refused even when it is read after: the caller still
 # holds the old value
 type S struct(name String, xs Vec<I64>) {
     name
@@ -7,7 +7,7 @@ type S struct(name String, xs Vec<I64>) {
 }
 
 fn Relay(s mut S&, ok Bool) I64 {
-    if not ok: s = S("fallback", Vec<I64>())
+    if not ok: s ~ S("fallback", Vec<I64>())
     return s.xs.Len()
 }
 

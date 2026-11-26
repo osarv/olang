@@ -16,52 +16,52 @@ type Tree struct() {
 }
 
 fn (t mut Tree&) Insert(k I64) {
-    if t.root == null {
-        t.root = Node(k, null)
+    if t.root is null {
+        t.root ~ Node(k, null)
         t.n++
         return
     }
-    at := t.root!
+    at :~ t.root!
     for {
         if k < at.key {
-            l := at.left
-            if l == null {
-                at.left = Node(k, at)
+            l :~ at.left
+            if l is null {
+                at.left ~ Node(k, at)
                 t.n++
                 return
             }
-            at = l
+            at ~ l
         } else {
-            r := at.right
-            if r == null {
-                at.right = Node(k, at)
+            r :~ at.right
+            if r is null {
+                at.right ~ Node(k, at)
                 t.n++
                 return
             }
-            at = r
+            at ~ r
         }
     }
 }
 
 fn leftmost(n mut Node&) mut Node& {
-    at := n
+    at :~ n
     for {
-        l := at.left
-        if l == null: return at
-        at = l
+        l :~ at.left
+        if l is null: return at
+        at ~ l
     }
 }
 
 fn (t mut Tree&) replace(n mut Node&, c mut Node?&) {
-    p := n.parent
-    if c != null: c.parent = p
-    if p == null: t.root = c
-    else if p.left == n: p.left = c
-    else: p.right = c
+    p :~ n.parent
+    if c is not null: c.parent ~ p
+    if p is null: t.root ~ c
+    else if p.left is n: p.left ~ c
+    else: p.right ~ c
 }
 
 fn (t mut Tree&) DeleteMin() I64 {
-    m := leftmost(t.root!)
+    m :~ leftmost(t.root!)
     k := m.key
     t.replace(m, m.right)
     t.n--
@@ -69,10 +69,10 @@ fn (t mut Tree&) DeleteMin() I64 {
 }
 
 fn peakKb() I64 {
-    status := try os.ReadFile("/proc/self/status") catch default ""
+    status :~ try os.ReadFile("/proc/self/status") catch default ""
     at := try status.Find("VmHWM:") catch default -1
     if at < 0: return -1
-    line := status[at + 6:]
+    line :~ status[at + 6:]
     end := try line.FindByte('\n') catch default line.Len()
     return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1
 }

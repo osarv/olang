@@ -21,7 +21,7 @@ fn relay(f fn&(i I64) I64, k I64) I64 {
 fn main() ? {
     root Node& = Node(0)
     f := fn(i I64) I64 {
-        m := mk(root, i)
+        m :~ mk(root, i)
         return m.v
     }
     got mut Vec<I64>& = Vec<I64>()

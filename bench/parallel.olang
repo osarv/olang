@@ -27,7 +27,7 @@ fn longest(first I64, stride I64, n I64) I64, I64 {
 }
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     n I64 = 1000
     tasks I64 = 4
     if args.Len() > 1: n = try args[1].ParseInt()

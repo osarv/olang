@@ -6,7 +6,7 @@ Toks mut Vec<I64> = Vec<I64>()
 fn more() { for i in range 100 { Toks.Push(i) } }
 fn main() ? {
     Toks.Push(3)
-    d := Toks.View()
+    d :~ Toks.View()
     more()
     try io.PutLn($d[0])
 }

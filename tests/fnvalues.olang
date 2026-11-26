@@ -9,7 +9,7 @@ fn grab(v mut Vec<String&>&) mut Vec<String&>& { return v }
 fn built(n I64) Array<I64> { return Array<I64>(n, 7) }
 
 fn apply(f fn&(a Array<I64>&) Array<I64>&, xs Array<I64>&) I64 {
-    r := f(xs)
+    r :~ f(xs)
     return r[0] + r.Len()
 }
 
@@ -37,7 +37,7 @@ test "a result handed back through a value lands where its argument lives" {
     v Vec<String&>
     h := grab
     for _ in range 3 {
-        w := h(v)
+        w :~ h(v)
         w.Push("z")
     }
     churn(200)
@@ -49,7 +49,7 @@ test "text made in a loop, picked through a value and read in the turn" {
     total := 0
     for i in range 50 {
         t := $"#" + $i
-        r := g(t, "1")
+        r :~ g(t, "1")
         total += r.Len()
     }
     churn(200)

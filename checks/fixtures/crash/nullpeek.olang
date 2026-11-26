@@ -15,7 +15,7 @@ type Stack struct() {
 }
 
 fn (s mut Stack&) Push(v I64) {
-    s.top = Node(v, s.top)
+    s.top ~ Node(v, s.top)
     s.n++
 }
 

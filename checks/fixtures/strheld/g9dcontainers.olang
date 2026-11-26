@@ -20,7 +20,7 @@ fn main() ? {
     for i in range 5 {
         m := mk(i, Res(i))
         l := lst(Res(i))
-        x := try m.Get(i) catch { unreachable }
+        x :~ try m.Get(i) catch { unreachable }
         assert l.Len() == 1 and x.k == i
     }
     try io.PutLn("made " + $Made + " gone " + $Gone)

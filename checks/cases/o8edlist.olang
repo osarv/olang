@@ -17,32 +17,32 @@ type DList struct() {
 
 fn (l mut DList&) PushBack(v I64) {
     nd := Node(v)
-    t := l.tail
-    if t == null {
-        l.head = nd
+    t :~ l.tail
+    if t is null {
+        l.head ~ nd
     } else {
-        t.next = nd
-        nd.prev = t
+        t.next ~ nd
+        nd.prev ~ t
     }
-    l.tail = nd
+    l.tail ~ nd
     l.n++
 }
 
 fn (l mut DList&) PopFront() I64 {
-    h := l.head!
+    h :~ l.head!
     v := h.v
-    q := h.next
-    l.head = q
-    if q == null { l.tail = null } else { q.prev = null }
+    q :~ h.next
+    l.head ~ q
+    if q is null { l.tail ~ null } else { q.prev ~ null }
     l.n--
     return v
 }
 
 fn peakKb() I64 {
-    status := try os.ReadFile("/proc/self/status") catch default ""
+    status :~ try os.ReadFile("/proc/self/status") catch default ""
     at := try status.Find("VmHWM:") catch default -1
     if at < 0: return -1
-    line := status[at + 6:]
+    line :~ status[at + 6:]
     end := try line.FindByte('\n') catch default line.Len()
     return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1
 }

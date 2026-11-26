@@ -9,7 +9,7 @@ fn view(l Lexer&) Array<I64>& { return l.toks.View() }
 fn main() ? {
     l := Lexer(1)
     l.toks.Push(1)
-    d := view(l)
+    d :~ view(l)
     l.toks.Push(2)
     try io.PutLn($d[0])
 }

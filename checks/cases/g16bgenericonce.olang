@@ -15,8 +15,8 @@ type Lru<K Hashable<K>, V> struct() {
     head mut Node<K, V>?&
 }
 fn (c mut Lru<K, V>&) pushFront(n mut Node<K, V>&) {
-    n.next = c.head
-    c.head = n
+    n.next ~ c.head
+    c.head ~ n
 }
 fn (c mut Lru<K, V>&) Put(key K, value V) {
     n := Node(key, value)

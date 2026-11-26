@@ -102,7 +102,7 @@ fn migrate(src String&, n mut Count&) String {
         negated := at < v.Len() and v[at].k == token.Tok.Not
         if negated: at++
         if at >= v.Len() or v[at].k != token.Tok.NullLit: continue
-        op := "!= null" if negated else "== null"
+        op :~ "!= null" if negated else "== null"
         first := operandStop(v, i) + 1
         n.n++
         if (looser(v, i) or tighterAfter(src, v, at)) and first < i {
@@ -148,9 +148,9 @@ fn migrateMarkdown(src String&, n mut Count&) String {
     out := StringBuilder()
     block := StringBuilder()
     fence := ""
-    lines := src.Split("\n")
+    lines :~ src.Split("\n")
     for k in range lines.Len() {
-        line := lines[k]
+        line :~ lines[k]
         if fence == "olang" and line.StartsWith("```") {
             out.Push(migrate(block.ToString(), n))
             block.Clear()
@@ -179,9 +179,9 @@ fn main() ? {
     check := false
     verbose := false
     paths Vec<String&>
-    args := os.Args()
+    args :~ os.Args()
     for i in range 1, args.Len() {
-        a := args[i]
+        a :~ args[i]
         if a == "--check": check = true
         else if a == "-v": verbose = true
         else: paths.Push($a)
@@ -214,7 +214,7 @@ fn main() ? {
             os.Exit(1)
         }
     }
-    verb := "would change " if check else "changed "
+    verb :~ "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files: " + $total.n + " null tests")
     if check and changed > 0: os.Exit(1)
 }

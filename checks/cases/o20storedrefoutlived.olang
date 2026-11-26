@@ -14,9 +14,9 @@ fn Node.make(v I64) mut Node& ? E {
     return Node(v)
 }
 fn set(b mut Box&, other mut Node&, v I64) {
-    r := try Node.make(v) catch default other
+    r :~ try Node.make(v) catch default other
     r.v = 3
-    b.n = r
+    b.n ~ r
 }
 fn main() {
     b := Box(null)

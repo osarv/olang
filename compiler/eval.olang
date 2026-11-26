@@ -530,8 +530,8 @@ fn (m mut Machine&) Define(f mir.Fn&) {
     m.fnOf.Put(f.Of, i)
     m.fns.Push(f)
     if i >= m.cf.Len() {
-        old := m.cf
-        m.cf = Array<cfn>(2 * old.Len())
+        old :~ m.cf
+        m.cf ~ Array<cfn>(2 * old.Len())
         for k in range old.Len(): m.cf[k] = old[k]
     }
     m.cf[i] = m.decode(f)
@@ -547,7 +547,7 @@ fn (m mut Machine&) fnIndex(k mir.FnKey) I64 {
     have := try m.fnOf.Get(k) catch default -1
     if have >= 0: return have
     s := m.Supply
-    if s == null or not s(k): return -1
+    if s is null or not s(k): return -1
     return try m.fnOf.Get(k) catch default -1
 }
 
@@ -555,27 +555,27 @@ fn (m mut Machine&) fnIndex(k mir.FnKey) I64 {
 fn (m mut Machine&) decode(f mir.Fn&) cfn {
     c := cfn()
     c.File = f.File
-    c.Locals = f.Locals.ToArray()
-    c.Scopes = f.Scopes.ToArray()
-    c.Projs = f.Projs.ToArray()
-    c.Ops = f.Ops.ToArray()
-    c.Calls = f.Calls.ToArray()
-    c.Cases = f.Cases.ToArray()
+    c.Locals ~ f.Locals.ToArray()
+    c.Scopes ~ f.Scopes.ToArray()
+    c.Projs ~ f.Projs.ToArray()
+    c.Ops ~ f.Ops.ToArray()
+    c.Calls ~ f.Calls.ToArray()
+    c.Cases ~ f.Cases.ToArray()
     n I64 = 0
     for blockIx in range f.Blocks.Len(): n += f.Blocks[blockIx].Stmts.Len()
     nb := f.Blocks.Len()
-    c.Stmts = Array<mir.Stmt>(n)
-    c.Global = Array<Bool>(n)
+    c.Stmts ~ Array<mir.Stmt>(n)
+    c.Global ~ Array<Bool>(n)
     c.NVars = f.Vars.Len()
-    c.Fast = Array<I64>(n * fastStride)
-    c.FastOp = Array<typed.PrimOp>(n, typed.PrimOp.Add)
-    c.Sps = Array<source.Span>(n, source.Span(0, 0))
-    c.Start = Array<I64>(nb + 1)
-    c.Terms = Array<mir.Term>(nb)
-    c.TermGlobal = Array<Bool>(nb)
+    c.Fast ~ Array<I64>(n * fastStride)
+    c.FastOp ~ Array<typed.PrimOp>(n, typed.PrimOp.Add)
+    c.Sps ~ Array<source.Span>(n, source.Span(0, 0))
+    c.Start ~ Array<I64>(nb + 1)
+    c.Terms ~ Array<mir.Term>(nb)
+    c.TermGlobal ~ Array<Bool>(nb)
     k I64 = 0
     for bi in range nb {
-        b := f.Blocks.Ref(bi)
+        b :~ f.Blocks.Ref(bi)
         c.Start[bi] = k
         for st in b.Stmts {
             c.Stmts[k] = st
@@ -587,7 +587,7 @@ fn (m mut Machine&) decode(f mir.Fn&) cfn {
         c.TermGlobal[bi] = termNamesGlobal(f, b.T)
     }
     c.Start[nb] = k
-    c.Copied = Array<Bool>(f.Params.Len())
+    c.Copied ~ Array<Bool>(f.Params.Len())
     for i in range f.Params.Len() {
         c.Copied[i] = m.rtArrayValue(f.Locals[I64(f.Params[i])].Ty) and f.WritesInto(m.T, f.Params[i])
     }
@@ -827,7 +827,7 @@ fn (m mut Machine&) typeid(t types.TypeId) Ptr {
 fn (m mut Machine&) table(ti I64) Ptr {
     have := try m.tableAt.Get(ti) catch default 0
     if have != 0: return Ptr(have, 0)
-    keys := try m.tableKeys.Get(ti) catch {
+    keys :~ try m.tableKeys.Get(ti) catch {
         m.refuse(WhyNoBody)
         return NullPtr
     }
@@ -891,7 +891,7 @@ fn (m mut Machine&) freedEarly() {
 # a type's layout, computed the first time it is asked for, its embedded parts first (generic does the same, with
 # T16's report, for every type the program holds; here only for types a test or a request reaches first)
 fn (m mut Machine&) lay(ty types.TypeId) Bool {
-    t := m.T
+    t :~ m.T
     st := t.LayoutState(ty)
     if st == types.LaidOut: return true
     if st != types.NotLaidOut: return false
@@ -908,7 +908,7 @@ fn (m mut Machine&) lay(ty types.TypeId) Bool {
 
 # the declared types a reference's referent is over, laid out, so Repr and its shape are known
 fn (m mut Machine&) layRepr(ty types.TypeId) {
-    t := m.T
+    t :~ m.T
     k := t.KindOf(ty)
     if k == types.Kind.Named and t.DeclKindOf(t.DeclOf(ty)) == types.DeclKind.Over and t.HasBody(ty): m.lay(ty)
 }
@@ -932,9 +932,9 @@ fn (m mut Machine&) settled(ty types.TypeId) Bool {
         n := 2 * m.tySize.Len()
         for n <= i: n *= 2
         a, b, c := m.tySize, m.tyShape, m.tyWidth
-        m.tySize = Array<I64>(n, -1)
-        m.tyShape = Array<I64>(n, -1)
-        m.tyWidth = Array<I64>(n, -1)
+        m.tySize ~ Array<I64>(n, -1)
+        m.tyShape ~ Array<I64>(n, -1)
+        m.tyWidth ~ Array<I64>(n, -1)
         for k in range a.Len() {
             m.tySize[k] = a[k]
             m.tyShape[k] = b[k]
@@ -958,7 +958,7 @@ fn (m mut Machine&) shape(ty types.TypeId) I64 {
 }
 
 fn (m mut Machine&) shapeOf(ty types.TypeId) I64 {
-    t := m.T
+    t :~ m.T
     m.lay(ty)
     r := t.Repr(ty)
     return match t.KindOf(r) {
@@ -981,7 +981,7 @@ fn (m mut Machine&) shapeOf(ty types.TypeId) I64 {
 }
 
 fn (m mut Machine&) namedShape(r types.TypeId) I64 {
-    t := m.T
+    t :~ m.T
     return match t.DeclKindOf(t.DeclOf(r)) {
         case types.DeclKind.Struct: vAgg
         case types.DeclKind.Enum: vEnum if t.HasPayload(t.Cases(r)) else vOrd
@@ -992,7 +992,7 @@ fn (m mut Machine&) namedShape(r types.TypeId) I64 {
 
 # a struct's, tuple's or record's parts, in order
 fn (m mut Machine&) partList(ty types.TypeId) types.ListId {
-    t := m.T
+    t :~ m.T
     r := t.Repr(ty)
     return match t.KindOf(r) {
         case types.Kind.Tuple, types.Kind.Record: t.Parts(r)
@@ -1018,10 +1018,10 @@ fn (m mut Machine&) partOffset(ty types.TypeId, i I64) I64 {
 
 # an enum's case's payload, a Record (0 for none)
 fn (m mut Machine&) payloadType(ty types.TypeId, tag I64) types.TypeId {
-    t := m.T
+    t :~ m.T
     r := t.Repr(ty)
     cs := t.ShapeCases(r) if t.KindOf(r) == types.Kind.AnonEnum else t.Cases(r)
-    xs := t.Items(cs)
+    xs :~ t.Items(cs)
     return xs[tag] if tag >= 0 and tag < xs.Len() else types.TypeId(0)
 }
 
@@ -1046,7 +1046,7 @@ fn (m mut Machine&) widthOf(ty types.TypeId) I64 {
 fn (m mut Machine&) fixedLen(ty types.TypeId) I64 { return m.T.ConstValue(m.T.Length(m.T.Repr(ty))) }
 
 fn (m mut Machine&) elemOf(ty types.TypeId) types.TypeId {
-    t := m.T
+    t :~ m.T
     r := t.Repr(ty)
     if t.KindOf(r) == types.Kind.Ref: r = t.Repr(t.Referent(r))
     return t.Elem(r)
@@ -1055,7 +1055,7 @@ fn (m mut Machine&) elemOf(ty types.TypeId) types.TypeId {
 # whether a value of the type reaches storage a writable reference can change (K1): a writable reference in it, held in
 # place or through the references it holds
 fn (m mut Machine&) reachesWritable(ty types.TypeId) Bool {
-    t := m.T
+    t :~ m.T
     if ty in m.writableOf { return try m.writableOf.Get(ty) catch default false }
     m.writableOf.Put(ty, false)
     yes := false
@@ -1094,11 +1094,11 @@ fn (m mut Machine&) grow(need I64) {
     if need <= 8 * m.hw.Len(): return
     n := 8 * m.hw.Len()
     for n < need: n *= 2
-    old := m.hw
-    m.hw = Array<I64>(n / 8)
+    old :~ m.hw
+    m.hw ~ Array<I64>(n / 8)
     for i in range (m.top + 7) / 8: m.hw[i] = old[i]
-    oldp := m.prov
-    m.prov = Array<I64>(n / 8)
+    oldp :~ m.prov
+    m.prov ~ Array<I64>(n / 8)
     for i in range (m.top + 7) / 8: m.prov[i] = oldp[i]
 }
 
@@ -1160,8 +1160,8 @@ fn (m mut Machine&) allocate(n I64, kind I64, s0 I64) Ptr {
 
 fn (m mut Machine&) newSlot() I64 {
     if m.nAl >= m.al.Len() {
-        old := m.al
-        m.al = Array<alloc>(2 * old.Len())
+        old :~ m.al
+        m.al ~ Array<alloc>(2 * old.Len())
         for i in range m.nAl: m.al[i] = old[i]
     }
     m.nAl++
@@ -1199,7 +1199,7 @@ fn (m mut Machine&) retire(fi I64, p Ptr, ty types.TypeId) {
     k := fi
     for k >= 0 and m.Library.Has(m.fns.At(m.fs[k].Fn).File): k--
     if k >= 0 and k < fi {
-        f := m.fns.At(m.fs[k].Fn)
+        f :~ m.fns.At(m.fs[k].Fn)
         t := f.Blocks[m.fs[k].Block].T
         if t == mir.Term.Call: file, sp = f.File, t.sp
     }
@@ -1657,7 +1657,7 @@ fn (m mut Machine&) runDtor(closing I64, t types.TypeId, p Ptr) {
     }
     fr := m.pushFrame(fi, rDtor, 0)
     if fr < 0: return
-    f := m.fns.At(fi)
+    f :~ m.fns.At(fi)
     if f.Params.Len() > 0: m.wrPtr(m.localPtr(fr, f.Params[0]), p)
     # (O23a: its derived scopes found where it builds there - a scope's walk knows none)
     for i in range f.Vars.Len() { m.ws[m.fs[fr].Vars + i] = 0 if f.Vars[i] == mir.VarKind.Derived else closing }
@@ -1672,7 +1672,7 @@ fn (m mut Machine&) stopAtComparison() {
     k := m.nFs - 1
     for k > 0 and m.cf[m.fs[k].Fn].Equal: k--
     if k < 0: return
-    f := m.fns.At(m.fs[k].Fn)
+    f :~ m.fns.At(m.fs[k].Fn)
     t := f.Blocks[m.fs[k].Block].T
     if t == mir.Term.Call: m.stopFile, m.stopSp = f.File, t.sp
 }
@@ -1693,7 +1693,7 @@ fn (m mut Machine&) pushFrame(fi I64, ret I64, retArg I64) I64 {
         m.eqDepth++
     }
     if m.cf[fi].ReadsBuild: m.UsedBuild = true
-    ls := m.cf[fi].Locals
+    ls :~ m.cf[fi].Locals
     nl, ns, nv := ls.Len(), m.cf[fi].Scopes.Len(), m.cf[fi].NVars
     fr := frame()
     fr.Fn, fr.Ret, fr.RetArg = fi, ret, retArg
@@ -1702,10 +1702,10 @@ fn (m mut Machine&) pushFrame(fi I64, ret I64, retArg I64) I64 {
     fr.Store = m.newScope(sStore)
     need := m.nWs + nl + ns + nv
     if need > m.ws.Len() {
-        old := m.ws
+        old :~ m.ws
         n := old.Len()
         for n < need: n *= 2
-        m.ws = Array<I64>(n)
+        m.ws ~ Array<I64>(n)
         for i in range m.nWs: m.ws[i] = old[i]
     }
     for i in range nl {
@@ -1716,8 +1716,8 @@ fn (m mut Machine&) pushFrame(fi I64, ret I64, retArg I64) I64 {
     for i in range nl, need - m.nWs: m.ws[m.nWs + i] = 0
     m.nWs = need
     if m.nFs >= m.fs.Len() {
-        old := m.fs
-        m.fs = Array<frame>(2 * old.Len())
+        old :~ m.fs
+        m.fs ~ Array<frame>(2 * old.Len())
         for i in range m.nFs: m.fs[i] = old[i]
     }
     m.fs[m.nFs] = fr
@@ -1765,7 +1765,7 @@ fn wordValue(op typed.PrimOp, a I64, b I64) I64 {
 }
 
 fn (m mut Machine&) flat(fi I64, fk I64, i I64, kind I64) {
-    fast := m.cf[fk].Fast
+    fast :~ m.cf[fk].Fast
     o := i * fastStride
     m.stopFile = m.cf[fk].File
     m.stopSp = m.cf[fk].Sps[i]
@@ -1864,7 +1864,7 @@ fn (m mut Machine&) buildScope(fi I64, r mir.ScopeRef) I64 {
 
 # D9b: the by-value array parameters frame nf's body writes made its own copies, in the program's scope as emit's are
 fn (m mut Machine&) ownParams(nf I64, fi I64) {
-    copied := m.cf[fi].Copied
+    copied :~ m.cf[fi].Copied
     for i in range copied.Len() {
         if not copied[i]: continue
         l := m.fns.At(fi).Params[i]
@@ -1884,7 +1884,7 @@ fn (m mut Machine&) ownParams(nf I64, fi I64) {
 # a place's storage and its type, in frame fi
 fn (m mut Machine&) place(fi I64, p mir.Lvalue) Ptr, types.TypeId {
     k := m.fs[fi].Fn
-    t := m.T
+    t :~ m.T
     ptr := NullPtr
     ty := types.UnknownT
     match p.B {
@@ -1952,7 +1952,7 @@ fn (m mut Machine&) element(p Ptr, ty types.TypeId, i I64) Ptr, types.TypeId {
 # an array's elements and how many, from storage at p holding a value of type ty: a fixed array in place, a run-time
 # one or a reference to either through what it holds
 fn (m mut Machine&) arrayView(p Ptr, ty types.TypeId) Ptr, I64 {
-    t := m.T
+    t :~ m.T
     r := t.Repr(ty)
     if t.KindOf(r) == types.Kind.Ref {
         x := t.Repr(t.Referent(r))
@@ -1979,7 +1979,7 @@ fn (m mut Machine&) opType(fi I64, x mir.Operand) types.TypeId {
 # a place's type, its projections followed with no memory read
 fn (m mut Machine&) placeType(fi I64, p mir.Lvalue) types.TypeId {
     k := m.fs[fi].Fn
-    t := m.T
+    t :~ m.T
     ty := match p.B {
         case mir.Base.Local(l): m.cf[k].Locals[I64(l)].Ty
         case mir.Base.Global(_, _, gt): gt
@@ -2158,7 +2158,7 @@ fn (m mut Machine&) writeItem(f mir.Fn&, at Ptr, e types.TypeId, item mir.ConstN
 }
 
 fn (m mut Machine&) putData(fi I64, dst Ptr, ty types.TypeId, c I32, file I64, sp source.Span) {
-    f := m.fnOfFrame(fi)
+    f :~ m.fnOfFrame(fi)
     node := f.Consts[I64(c)]
     match node {
         case mir.ConstNode.Bits(v) {
@@ -2412,7 +2412,7 @@ fn (m mut Machine&) holders(p Ptr, ty types.TypeId, by I64) {
 # value itself where it is one, what it holds in place - a field not weak, a payload, a fixed array's elements - and at
 # the top an array of a run-time length's elements
 fn (m mut Machine&) genWalk(p Ptr, ty types.TypeId, top Bool, each fn&(q Ptr)) {
-    t := m.T
+    t :~ m.T
     r := t.Repr(ty)
     if m.halted or not m.Gen.HoldsGen(t, r): return
     k := t.KindOf(r)
@@ -2428,7 +2428,7 @@ fn (m mut Machine&) genWalk(p Ptr, ty types.TypeId, top Bool, each fn&(q Ptr)) {
         return
     }
     if mir.HasFields(t, r) {
-        fs := t.Items(m.partList(r))
+        fs :~ t.Items(m.partList(r))
         for i in range fs.Len() {
             if not m.Gen.WeakField(t, r, i): m.genWalk(Ptr(p.Id, p.Off + m.partOffset(r, i)), fs[i], false, each)
         }
@@ -2510,7 +2510,7 @@ fn (m mut Machine&) regionHome(r I64) I64 {
 
 # the array a type is, or a reference names; UnknownT for none
 fn (m mut Machine&) arrayOf(ty types.TypeId) types.TypeId {
-    t := m.T
+    t :~ m.T
     r := t.Repr(ty)
     if t.KindOf(r) == types.Kind.Ref: r = t.Repr(t.Referent(r))
     return r if t.KindOf(r) == types.Kind.Array else types.UnknownT
@@ -2520,7 +2520,7 @@ fn (m mut Machine&) arrayOf(ty types.TypeId) types.TypeId {
 # length one given storage of its own (which MIR does not place: the program's, as lowering's stand-in placement puts
 # what it builds), else its storage taken - or a fixed array's read whole
 fn (m mut Machine&) convertArray(fi I64, dst Ptr, x mir.Operand, to types.TypeId) {
-    t := m.T
+    t :~ m.T
     from := m.opType(fi, x)
     fa, ga := m.arrayOf(from), m.arrayOf(to)
     p := m.addr(fi, x, 1)
@@ -2576,7 +2576,7 @@ fn (m mut Machine&) aggregate(fi I64, dst Ptr, ty types.TypeId, tag I64, args mi
     if m.T.Packed(m.T.Repr(ty)) {
         # T13c: each field's bits placed after the one before's
         pt := m.T.Repr(ty)
-        fs := m.T.Items(m.T.Fields(pt))
+        fs :~ m.T.Items(m.T.Fields(pt))
         offs := m.T.BitOffsets(pt)
         for i in range args.N: m.packInto(s, offs[i], fs[i], m.addr(fi, m.arg(fi, args, i), 1))
         m.copy(dst, s, n)
@@ -2634,7 +2634,7 @@ fn (m mut Machine&) unpackInto(dst Ptr, ft types.TypeId, src Ptr, off I64) {
     }
     w := m.T.PackedBits(r)
     m.zero(dst, m.size(r))
-    raws := m.T.RawBits(r)
+    raws :~ m.T.RawBits(r)
     if m.T.RawType(r) == types.UnknownT or raws.Len() == 0 {
         m.copyBits(dst, 0, src, off, w)
         return
@@ -2663,7 +2663,7 @@ fn (m mut Machine&) packInto(dst Ptr, off I64, ft types.TypeId, src Ptr) {
         return
     }
     w := m.T.PackedBits(r)
-    raws := m.T.RawBits(r)
+    raws :~ m.T.RawBits(r)
     if m.T.RawType(r) == types.UnknownT or raws.Len() == 0 {
         m.copyBits(dst, off, src, 0, w)
         return
@@ -2797,7 +2797,7 @@ fn (m mut Machine&) closure(fi I64, dst Ptr, code mir.FnKey, s mir.ScopeRef, arg
         m.wrPtr(Ptr(dst.Id, dst.Off + 8), NullPtr)
         return
     }
-    f := m.fnOfFrame(fi)
+    f :~ m.fnOfFrame(fi)
     tys := Array<types.TypeId>(I64(args.N))
     for i in range args.N: tys[i] = m.opType(fi, f.Ops[I64(args.At) + i])
     offs, total := m.pack(tys)
@@ -2824,7 +2824,7 @@ fn (m mut Machine&) closure(fi I64, dst Ptr, code mir.FnKey, s mir.ScopeRef, arg
 # order) and as emit stores them - over what the capture's own value shows: a value capture (a struct holding a
 # reference) lives where the plan put its referent, not where the environment is
 fn (m mut Machine&) planCaps(fi I64, env Ptr, total I64, g mir.Fn&, caps mir.Range) {
-    f := m.fnOfFrame(fi)
+    f :~ m.fnOfFrame(fi)
     j := 0
     for v in g.Vars {
         ci := match v {
@@ -2843,7 +2843,7 @@ fn (m mut Machine&) planCaps(fi I64, env Ptr, total I64, g mir.Fn&, caps mir.Ran
 # the index of the generator's record, made here and registered in s, where it is closed with the scope if it stopped
 # part way
 fn (m mut Machine&) genClosure(fi I64, dst Ptr, cp Ptr, gi I64, s mir.ScopeRef, args mir.Range) {
-    f := m.fnOfFrame(fi)
+    f :~ m.fnOfFrame(fi)
     tys := Array<types.TypeId>(I64(args.N))
     for i in range args.N: tys[i] = m.opType(fi, f.Ops[I64(args.At) + i])
     offs, total := m.pack(tys)
@@ -2902,10 +2902,10 @@ fn (m mut Machine&) restoreGen(ri I64, ret I64, retArg I64) I64 {
     nl, ns := m.cf[fi].Locals.Len(), m.cf[fi].Scopes.Len()
     need := m.nWs + rec.WsN
     if need > m.ws.Len() {
-        old := m.ws
+        old :~ m.ws
         n := old.Len()
         for n < need: n *= 2
-        m.ws = Array<I64>(n)
+        m.ws ~ Array<I64>(n)
         for i in range m.nWs: m.ws[i] = old[i]
     }
     for i in range rec.WsN: m.ws[m.nWs + i] = m.genWords[rec.At + i]
@@ -2915,8 +2915,8 @@ fn (m mut Machine&) restoreGen(ri I64, ret I64, retArg I64) I64 {
     fr.Pending, fr.Done, fr.Raised = false, false, false
     m.nWs = need
     if m.nFs >= m.fs.Len() {
-        old := m.fs
-        m.fs = Array<frame>(2 * old.Len())
+        old :~ m.fs
+        m.fs ~ Array<frame>(2 * old.Len())
         for i in range m.nFs: m.fs[i] = old[i]
     }
     m.fs[m.nFs] = fr
@@ -2950,7 +2950,7 @@ fn (m mut Machine&) suspend(fi I64, x mir.Operand, resume mir.BlockId, held mir.
     }
     rec.WsN = n
     for i in range n: m.genWords[rec.At + i] = m.ws[fr.Locals + i]
-    f := m.fns.At(fr.Fn)
+    f :~ m.fns.At(fr.Fn)
     k := rec.At + n
     for i in range held.N {
         match f.Refs[I64(held.At) + i] {
@@ -3017,7 +3017,7 @@ fn (m mut Machine&) walksLetGo() Bool {
 
 # whether an unstarted walk of generator function fi holds parameters with destructors to run (its captures)
 fn (m Machine&) freshWork(r genRec) Bool {
-    g := m.fns.At(r.Fn)
+    g :~ m.fns.At(r.Fn)
     for l in g.Captures {
         ty := g.Locals[I64(l)].Ty
         if not m.T.IsRef(ty) and m.T.NeedsDrop(ty): return true
@@ -3027,9 +3027,9 @@ fn (m Machine&) freshWork(r genRec) Bool {
 
 # whether the drop path of generator function fi from block b does anything but close its scopes
 fn (m Machine&) dropWork(fi I64, b I64) Bool {
-    g := m.fns.At(fi)
+    g :~ m.fns.At(fi)
     for b >= 0 {
-        bb := g.Blocks.Ref(b)
+        bb :~ g.Blocks.Ref(b)
         for st in bb.Stmts {
             match st {
                 case mir.Stmt.Close(_, _), mir.Stmt.Dead(_, _), mir.Stmt.Deferred(_, _, _) { }
@@ -3049,7 +3049,7 @@ fn (m Machine&) dropWork(fi I64, b I64) Bool {
 # C11, S20: a walk let go before it started - the parameters it holds by value with destructors to run (its captures)
 # ended, last first, in the scope closing, as emit's freshDrops ends them (each a destructor's frame, pushed first ending last)
 fn (m mut Machine&) freshDrops(closing I64, rec genRec) {
-    g := m.fns.At(rec.Fn)
+    g :~ m.fns.At(rec.Fn)
     if g.Captures.Len() == 0 or rec.Env.Id == 0: return
     tys := Array<types.TypeId>(g.Captures.Len())
     for i in range g.Captures.Len(): tys[i] = g.Locals[I64(g.Captures[i])].Ty
@@ -3080,7 +3080,7 @@ fn (m mut Machine&) pack(tys Array<types.TypeId>&) Array<I64>, I64 {
 # an error code under one list as the same error under another (R6, R17)
 fn (m mut Machine&) recode(code I64, from types.ListId, to types.ListId) I64 {
     if code == 0: return 0
-    xs := m.T.Items(from)
+    xs :~ m.T.Items(from)
     k := (code >> 16) - 1
     if k < 0 or k >= xs.Len() {
         m.refuse(WhyNotModelled)
@@ -3245,7 +3245,7 @@ fn (m mut Machine&) rdPtrOrBits(p Ptr) Ptr {
 }
 
 fn (m mut Machine&) lenOf(fi I64, x mir.Operand, at types.TypeId) I64 {
-    t := m.T
+    t :~ m.T
     r := t.Repr(at)
     if t.KindOf(r) == types.Kind.Ref: r = t.Repr(t.Referent(r))
     if t.Length(r) != types.TypeId(0): return m.fixedLen(r)
@@ -4394,7 +4394,7 @@ fn (m mut Machine&) appendByte(bs I64, c I64) {
 # -i any (B5a): its initializer run as a frame before the statement, which runs again once it has. While compiling a
 # mutable one, or one whose value a writable reference reaches, is refused (K1). Whether the statement can run now
 fn (m mut Machine&) globalsReady(fi I64, p mir.Lvalue, rv mir.Rvalue) Bool {
-    f := m.fns.At(m.fs[fi].Fn)
+    f :~ m.fns.At(m.fs[fi].Fn)
     if m.When == Mode.Compile and not m.globalWritten(p): return false
     return match rv {
         case mir.Rvalue.Use(x), mir.Rvalue.New(_, x, _), mir.Rvalue.Recode(x, _, _): m.operandReady(fi, x)
@@ -4474,7 +4474,7 @@ fn (m mut Machine&) placeReady(fi I64, p mir.Lvalue) Bool {
 # increment or a compound assignment, whose read is lowered first: refused as the write it is, as stage 0's scan of the
 # statement meets it (K1)
 fn (m Machine&) writesAfter(fi I64, module I64, name source.NameId) Bool {
-    f := m.fns.At(m.fs[fi].Fn)
+    f :~ m.fns.At(m.fs[fi].Fn)
     stmts := f.Blocks[m.fs[fi].Block].Stmts
     k := m.fs[fi].Stmt
     if k >= stmts.Len(): return false
@@ -4606,7 +4606,7 @@ fn (m mut Machine&) calleeType(fi I64, c mir.Callee) types.TypeId {
 # a call of callee c from frame fi: a frame pushed with its arguments, scopes and captures - or an extern run now, its
 # result stored. The new frame's index, -1 for an extern's call done, -2 stopped
 fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range, ret I64, retArg I64) I64 {
-    f := m.fnOfFrame(fi)
+    f :~ m.fnOfFrame(fi)
     callee, env, ext := m.callee(fi, c)
     isExtern := ext >= 0
     if m.halted: return -2
@@ -4635,7 +4635,7 @@ fn (m mut Machine&) enter(fi I64, c mir.Callee, args mir.Range, scopes mir.Range
     }
     nf := m.restoreGen(ri, ret, retArg) if restored else m.pushFrame(callee, ret, retArg)
     if nf < 0: return -2
-    g := m.fns.At(callee)
+    g :~ m.fns.At(callee)
     dispatched := match c {
         case mir.Callee.Dispatch(_, _, _): true
         case _: false
@@ -4728,13 +4728,13 @@ fn (m mut Machine&) genOver(fi I64, callee I64, c mir.Callee, ret I64, retArg I6
 # struct likewise; a pointer C gave (an extern type's reference, X10, X22) as itself; null as a null pointer. A
 # variable argument (X21) is passed as its own type says, the call prepared as C's variadic one
 fn (m mut Machine&) callExtern(fi I64, e I64, ty types.TypeId, args mir.Range, dst Ptr, hasDst Bool) Bool {
-    f := m.fnOfFrame(fi)
-    name := try m.externs.Get(e) catch {
+    f :~ m.fnOfFrame(fi)
+    name :~ try m.externs.Get(e) catch {
         m.refuse(WhyNoBody)
         return false
     }
-    t := m.T
-    ps := t.Items(t.Params(ty))
+    t :~ m.T
+    ps :~ t.Items(t.Params(ty))
     res := t.Result(ty)
     # B19b: std/bench's runtime functions have no effect skipping would show - no benchmark build is evaluated, so
     # nothing is counted and the work runs once
@@ -4875,7 +4875,7 @@ ForeignId I64 = slotMask
 
 # whether ty is a reference only C can give - to an extern type (X10): held, compared and passed back, never read
 fn (m mut Machine&) foreignRef(ty types.TypeId) Bool {
-    t := m.T
+    t :~ m.T
     r := t.Repr(ty)
     if t.KindOf(r) != types.Kind.Ref: return false
     x := t.Repr(t.Referent(r))
@@ -4926,7 +4926,7 @@ extern {
 }
 
 fn (m mut Machine&) runtimeFn(fi I64, name String&, args mir.Range, ty types.TypeId, dst Ptr, hasDst Bool) Bool {
-    f := m.fnOfFrame(fi)
+    f :~ m.fnOfFrame(fi)
     x := fn(i I64) mir.Operand { return f.Ops[I64(args.At) + i] }
     v I64 = 0
     match name {
@@ -4936,7 +4936,7 @@ fn (m mut Machine&) runtimeFn(fi I64, name String&, args mir.Range, ty types.Typ
             if i < 0 or i >= m.Args.Len() {
                 v = -1
             } else {
-                s := m.Args[i]
+                s :~ m.Args[i]
                 b := Array<U8>(s.Len())
                 for k in range s.Len(): b[k] = U8(s[k])
                 m.putBytes(fi, x(1), b, m.intArg(fi, x(2)))
@@ -4996,7 +4996,7 @@ fn (m mut Machine&) runtimeFn(fi I64, name String&, args mir.Range, ty types.Typ
         }
         case "__olang_test_running", "__olang_test_source" {
             # B19: the harness's names, as its runtime holding them - -1 where none is set
-            t := m.TestName if name == "__olang_test_running" else m.TestFile
+            t :~ m.TestName if name == "__olang_test_running" else m.TestFile
             v = -1
             if t != "" {
                 b := Array<U8>(t.Len())
@@ -5226,8 +5226,8 @@ fn (m mut Machine&) jump(fi I64, b mir.BlockId) {
 }
 
 fn (m mut Machine&) externCall(fi I64, c mir.Call, e I64, ty types.TypeId) {
-    name := try m.externs.Get(e) catch default ""
-    f := m.fnOfFrame(fi)
+    name :~ try m.externs.Get(e) catch default ""
+    f :~ m.fnOfFrame(fi)
     # __olang_run_on_stack(bytes, f): the call f() (X6, K1)
     if name == "__olang_run_on_stack" {
         callee := mir.Callee.Value(f.Ops[I64(c.Args.At) + 1])
@@ -5263,7 +5263,7 @@ fn (m mut Machine&) exit(fi I64, file I64, sp source.Span, kind mir.ExitKind, ms
         data, n := m.arrayView(p, m.opType(fi, msg))
         b := StringBuilder()
         for i in range n: b.PushChar(Char(U8(m.rd(Ptr(data.Id, data.Off + i), 1))))
-        text = b.ToString()
+        text ~ b.ToString()
     }
     m.stop(Stop.Exited(kind, file, sp, text))
 }
@@ -5403,7 +5403,7 @@ fn (m mut Machine&) waitsForTask(name String&) Bool {
     m.WaitTaskFile = -1
     if running >= 0 {
         tk := m.tasks[running]
-        st := m.cf[tk.Fn].Stmts
+        st :~ m.cf[tk.Fn].Stmts
         for i in range st.Len() {
             sw := st[i]
             if sw == mir.Stmt.Spawn and I64(sw.task) == tk.Task: m.WaitTaskFile, m.WaitTaskSp = m.cf[tk.Fn].File, sw.sp
@@ -5443,7 +5443,7 @@ fn (m mut Machine&) traced(fi I64, k I64, sp source.Span) {
     m.trace.Push(m.cf[k].File)
     m.trace.Push(I64(sp.Start))
     m.trace.Push(kind)
-    what := m.fns.At(m.fs[fi].Fn).RaiseText(sp) if kind == tRaised else ""
+    what :~ m.fns.At(m.fs[fi].Fn).RaiseText(sp) if kind == tRaised else ""
     if what.Len() > 0 {
         m.trace.Push(m.whats.Len())
         m.whats.Push(what)
@@ -5473,7 +5473,7 @@ fn (m mut Machine&) taskLayout(f mir.Fn&, k mir.Task, fi I64) Array<I64>, I64 {
 }
 
 fn (m mut Machine&) spawn(fi I64, j mir.ScopeId, ti I32) {
-    f := m.fnOfFrame(fi)
+    f :~ m.fnOfFrame(fi)
     k := f.Tasks[I64(ti)]
     js := m.ws[m.fs[fi].Scopes + I64(j)]
     if not m.live(js) {
@@ -5563,7 +5563,7 @@ fn (m mut Machine&) wait(fi I64, j mir.ScopeId, ok mir.BlockId, code mir.LocalId
 fn (m mut Machine&) startTask(fi I64, slot I64) {
     m.tasks[slot].PayBase = m.payScopes.Len()
     tk := m.tasks[slot]
-    f := m.fns.At(tk.Fn)
+    f :~ m.fns.At(tk.Fn)
     k := f.Tasks[tk.Task]
     offs, total := m.taskLayout(f, k, fi)
     nt, nc, ns := I64(k.Targets.N), I64(k.Clauses.N), I64(k.Scopes.N)
@@ -5593,7 +5593,7 @@ fn (m mut Machine&) startTask(fi I64, slot I64) {
     m.traceStack.Push(m.TraceDropped)
     m.trace.Clear()
     m.TraceDropped = 0
-    g := m.fns.At(callee)
+    g :~ m.fns.At(callee)
     for i in range k.Args.N {
         if i < g.Params.Len() {
             l := g.Params[i]
@@ -5642,7 +5642,7 @@ fn (m mut Machine&) loadCaptures(nf I64, g mir.Fn&, env Ptr, passed I64) {
 # a task's result stored into its targets (P1g): one result whole, several part by part
 fn (m mut Machine&) toTargets(fi I64, slot I64, x mir.Operand, xt types.TypeId) {
     tk := m.tasks[slot]
-    f := m.fns.At(tk.Fn)
+    f :~ m.fns.At(tk.Fn)
     k := f.Tasks[tk.Task]
     _, total := m.taskLayout(f, k, fi - 1)
     nt := I64(k.Targets.N)
@@ -5698,7 +5698,7 @@ fn (m mut Machine&) taskEnded(fr frame) {
     }
     slot := fr.RetArg
     tk := m.tasks[slot]
-    f := m.fns.At(tk.Fn)
+    f :~ m.fns.At(tk.Fn)
     k := f.Tasks[tk.Task]
     waiter := m.nFs - 1
     ty := match k.Target {
@@ -5706,7 +5706,7 @@ fn (m mut Machine&) taskEnded(fr frame) {
         case mir.Callee.Value(x): m.T.Repr(m.opType(waiter, x))
     }
     errs := m.T.Errors(ty)
-    xs := m.T.Items(errs)
+    xs :~ m.T.Items(errs)
     ki := (fr.Code >> 16) - 1
     word := fr.Code & 0xFFFF
     et := xs[ki] if ki >= 0 and ki < xs.Len() else types.DefaultErrT
@@ -5738,7 +5738,7 @@ fn (m mut Machine&) taskEnded(fr frame) {
         }
         nf := m.pushFrame(hf, rClause, slot)
         if nf < 0: return
-        g := m.fns.At(hf)
+        g :~ m.fns.At(hf)
         passed I64 = 0
         for kv in g.Vars {
             match kv {
@@ -5766,7 +5766,7 @@ fn (m mut Machine&) taskEnded(fr frame) {
         return
     }
     # no clause: kept for the join, re-encoded under its list, where the join holding none from an earlier task
-    wf := m.fnOfFrame(waiter)
+    wf :~ m.fnOfFrame(waiter)
     match wf.Blocks[m.fs[waiter].Block].T {
         case mir.Term.Wait(_, j, _, _, _) {
             js := m.ws[m.fs[waiter].Scopes + I64(j)]
@@ -5800,7 +5800,7 @@ fn (m mut Machine&) payDrop(base I64) {
 # and goes on to the next look where not
 fn (m mut Machine&) overBudget() Bool {
     w := m.Watch
-    if w != null {
+    if w is not null {
         if not w() {
             m.StepBudget = m.Steps + WatchSteps
             return false
@@ -5833,7 +5833,7 @@ fn (m mut Machine&) loop(base I64) {
         end := m.cf[k].Start[b + 1]
         if i < end and m.cf[k].Fast[i * fastStride] != 0 {
             # a run of flat statements: no scope closes, no frame changes, nothing waits between them
-            fast := m.cf[k].Fast
+            fast :~ m.cf[k].Fast
             for {
                 m.flat(fi, k, i, fast[i * fastStride])
                 if m.halted: return
@@ -5871,7 +5871,7 @@ fn (m mut Machine&) Eval(k mir.FnKey, args Array<I64>&) Stop {
         m.refuse(WhyNoBody)
         return m.Stopped
     }
-    f := m.fns.At(fi)
+    f :~ m.fns.At(fi)
     # where a refusal is reported until a statement with a place of its own is reached: the function itself
     m.stopFile, m.stopSp = f.File, f.Sp
     base := m.nFs
@@ -6361,7 +6361,7 @@ fn (m mut Machine&) Layout(ty types.TypeId) String {
 }
 
 fn (m mut Machine&) layoutOf(ty types.TypeId, b mut StringBuilder&, seen mut Map<String&, Bool>&) {
-    t := m.T
+    t :~ m.T
     key := t.Canon(ty)
     b.Push(key)
     if key in seen {
@@ -6531,9 +6531,9 @@ fn (m mut Machine&) Why(k mir.FnKey) String, I64, source.Span {
     seen.Put(start, true)
     for work.Len() > 0 {
         fi := try work.Pop() catch { break }
-        f := m.fns.At(fi)
+        f :~ m.fns.At(fi)
         for blockIx in range f.Blocks.Len() {
-            bb := f.Blocks.Ref(blockIx)
+            bb :~ f.Blocks.Ref(blockIx)
             for s in bb.Stmts {
                 why, sp := m.whyStmt(f, s)
                 if why != "": return why, f.File, sp
@@ -6578,7 +6578,7 @@ fn (m mut Machine&) whyTerm(f mir.Fn&, t mir.Term, seen mut Map<I64, Bool>&, wor
 fn (m mut Machine&) whyCall(target mir.Callee, sp source.Span, seen mut Map<I64, Bool>&, work mut Vec<I64>&) String, source.Span {
     match target {
         case mir.Callee.Extern(e, ty) {
-            name := try m.externs.Get(e) catch default ""
+            name :~ try m.externs.Get(e) catch default ""
             if name != "__olang_run_on_stack" and not typed.MathExtern(name, m.T.Items(m.T.Params(ty)).Len()) { return WhyExtern, sp }
         }
         case mir.Callee.Pointer(_, _) { return WhyCFunc, sp }

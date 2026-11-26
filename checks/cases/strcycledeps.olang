@@ -17,7 +17,7 @@ fn ca(g fn&(x mut Node&), n mut Node&, c I64) {
     g(n)
 }
 fn cb(n mut Node&, c I64) {
-    ca(fn(x mut Node&) { x.next = Node(x.v + 100) }, n, c)
+    ca(fn(x mut Node&) { x.next ~ Node(x.v + 100) }, n, c)
 }
 fn (b Bag&) Str() String {
     ca(fn(x mut Node&) { }, b.head, 2)

@@ -12,7 +12,7 @@ type W struct(b Box) {
 }
 fn (b Box&) size() I64 { return b.Data.Len() }
 fn (b mut Box&) regrow(v I64) {
-    f := fn() { b.Data = Array<I64>(8, v) }
+    f := fn() { b.Data ~ Array<I64>(8, v) }
     f()
 }
 fn bump(src mut W&) {

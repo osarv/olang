@@ -9,7 +9,7 @@ fn N.g(k I64) N& ? E {
 }
 fn a(k I64) I64 {
     x N&
-    x = try N.g(k) catch E {
+    x ~ try N.g(k) catch E {
         y := x.v
         return y
     }

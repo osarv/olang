@@ -12,7 +12,7 @@ type Conn struct(db Db?&, tag I64) {
 
 fn (d Db&) Twice(n I64) I64 { return n * 2 }
 
-fn keep(c mut Conn&, d Db?&) { c.db = d }
+fn keep(c mut Conn&, d Db?&) { c.db ~ d }
 
 fn main() ? {
     c := Conn(null, 1)
@@ -21,8 +21,8 @@ fn main() ? {
         d Db?& = null
         keep(c, d)
         l.Push(d)
-        G = d
+        G ~ d
     }
-    assert c.db == null and l[2] == null and G == l[0]
+    assert c.db is null and l[2] is null and G == l[0]
     assert $c == "Conn(null, 1)"
 }

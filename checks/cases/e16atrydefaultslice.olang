@@ -21,7 +21,7 @@ fn main() ? {
     a := Array<Array<I64>>(1, Array<I64>(2))
     a[0][0] = 11
     a[0][1] = 22
-    v := view(a)
+    v :~ view(a)
     t := deep(5)
     try churn()
     x := v[0]

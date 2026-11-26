@@ -101,11 +101,11 @@ fn (s mut Server&) send(body String&) { session.WriteFramed(1, body) }
 
 # one message from the editor
 fn (s mut Server&) handle(body String&) {
-    msg := try json.Json.Parse(body) catch json.Error {
+    msg :~ try json.Json.Parse(body) catch json.Error {
         s.send(errorReply("null", -32700, "the message is not JSON"))
         return
     }
-    method := str(msg, "method")
+    method :~ str(msg, "method")
     id := idOf(msg)
     if method == "initialize" {
         s.initialize(msg, id)
@@ -125,21 +125,21 @@ fn (s mut Server&) handle(body String&) {
         return
     }
     if method == "textDocument/didOpen" {
-        td := try msg["params"]["textDocument"] catch json.Error { return }
+        td :~ try msg["params"]["textDocument"] catch json.Error { return }
         s.opened(str(td, "uri"), str(td, "text"))
         return
     }
     if method == "textDocument/didChange" {
-        p := try msg["params"] catch json.Error { return }
-        uri := str(try p["textDocument"] catch json.Error { return }, "uri")
-        changes := try p["contentChanges"].AsArr() catch json.Error { return }
+        p :~ try msg["params"] catch json.Error { return }
+        uri :~ str(try p["textDocument"] catch json.Error { return }, "uri")
+        changes :~ try p["contentChanges"].AsArr() catch json.Error { return }
         if changes.Len() == 0: return
         # full sync: the last change is the whole text
         s.changed(uri, str(changes[changes.Len() - 1], "text"))
         return
     }
     if method == "textDocument/didClose" {
-        td := try msg["params"]["textDocument"] catch json.Error { return }
+        td :~ try msg["params"]["textDocument"] catch json.Error { return }
         s.closed(str(td, "uri"))
         return
     }
@@ -156,7 +156,7 @@ Requests := Array<String&>["textDocument/hover", "textDocument/definition", "tex
                     "textDocument/completion", "textDocument/formatting", "textDocument/codeAction"]
 
 fn (s mut Server&) initialize(msg json.Json&, id String&) {
-    encs := try msg["params"]["capabilities"]["general"]["positionEncodings"].AsArr() catch json.Error default Array<json.Json&>(0)
+    encs :~ try msg["params"]["capabilities"]["general"]["positionEncodings"].AsArr() catch json.Error default Array<json.Json&>(0)
     if encs.Len() > 0 {
         for e in encs {
             if (try e.AsStr() catch json.Error default "") == "utf-8": s.Utf8 = true
@@ -194,10 +194,10 @@ fn (s mut Server&) opened(uri String&, text String&) {
             s.Docs.Push(d)
             k = s.Docs.Len() - 1
         } else {
-            d := s.Docs[k]
-            d.Uri = uri
-            d.Path = path
-            d.Real = session.RealOf(path)
+            d :~ s.Docs[k]
+            d.Uri ~ uri
+            d.Path ~ path
+            d.Real ~ session.RealOf(path)
             d.Open = true
             d.Deps.Clear()
             d.Foreign.Clear()
@@ -216,7 +216,7 @@ fn (s mut Server&) changed(uri String&, text String&) {
 }
 
 fn (s mut Server&) setText(k I64, text String&) {
-    d := s.Docs[k]
+    d :~ s.Docs[k]
     d.Text.Clear()
     d.Text.Push(text)
     s.due(k)
@@ -225,7 +225,7 @@ fn (s mut Server&) setText(k I64, text String&) {
 fn (s mut Server&) closed(uri String&) {
     k := s.slotOf(uri)
     if k < 0: return
-    d := s.Docs[k]
+    d :~ s.Docs[k]
     d.Open = false
     d.Text.Clear()
     # what was said of a closed file goes with it, as editors expect
@@ -282,7 +282,7 @@ fn (s mut Server&) startWorker() {
     session.CloseFd(fromW)
     s.W.Pid = pid
     s.W.To = toW
-    s.W.From = session.Reader(fromR)
+    s.W.From ~ session.Reader(fromR)
     s.W.Started = time.Now()
 }
 
@@ -358,7 +358,7 @@ fn (s mut Server&) fromWorker() {
         }
         if body.StartsWith("{\"jsonrpc\":\"2.0\",\"id\":") {
             # an answer: no longer waited for
-            msg := try json.Json.Parse(body) catch json.Error { continue }
+            msg :~ try json.Json.Parse(body) catch json.Error { continue }
             n := try idOf(msg).ParseInt() catch default -1
             s.Waiting.Remove(n)
         }
@@ -368,16 +368,16 @@ fn (s mut Server&) fromWorker() {
 
 # the worker's note on a file it checked: {"olang":"checked","slot":k,"deps":[...],"foreign":[...]}
 fn (s mut Server&) note(body String&) {
-    msg := try json.Json.Parse(body) catch json.Error { return }
+    msg :~ try json.Json.Parse(body) catch json.Error { return }
     k := try msg["slot"].AsInt() catch json.Error default -1
     if k < 0 or k >= s.Docs.Len(): return
     s.Pending.Remove(k)
-    d := s.Docs[k]
+    d :~ s.Docs[k]
     d.Deps.Clear()
-    deps := try msg["deps"].AsArr() catch json.Error { return }
+    deps :~ try msg["deps"].AsArr() catch json.Error { return }
     for x in deps { d.Deps.Push(try x.AsInt() catch json.Error default -1) }
     d.Foreign.Clear()
-    foreign := try msg["foreign"].AsArr() catch json.Error { return }
+    foreign :~ try msg["foreign"].AsArr() catch json.Error { return }
     for x in foreign { d.Foreign.Push($(try x.AsStr() catch json.Error default "")) }
 }
 
@@ -412,9 +412,9 @@ type worker struct(s Server&, Cfg mut build.Config&, In I32, Out I32) {
 
 # the analysis of the open file in slot k as the files are now: the last one where it is that file's
 fn (w mut worker&) analysis(k I64, d mut diag.Diagnostics&) mut session.Analysis& {
-    if k == w.lastSlot and w.last != null: return w.last!
-    a := session.Analysis.Analyze(w.s.Docs[k].Path, w.Cfg, d, w.overlay, kept = true)
-    w.last = a
+    if k == w.lastSlot and w.last is not null: return w.last!
+    a :~ session.Analysis.Analyze(w.s.Docs[k].Path, w.Cfg, d, w.overlay, kept = true)
+    w.last ~ a
     w.lastSlot = k
     return a
 }
@@ -439,17 +439,17 @@ fn (w mut worker&) send(body String&) { session.WriteFramed(w.Out, body) }
 # the open file in slot k checked as the root of its program: its diagnostics, and those of the other files the program
 # reaches, published; then the server's note of what it reaches
 fn (w mut worker&) check(k I64) {
-    doc := w.s.Docs[k]
-    cfg := w.Cfg
+    doc :~ w.s.Docs[k]
+    cfg :~ w.Cfg
     d mut diag.Diagnostics& = diag.Diagnostics(false)
     # what the checker says is published as soon as it is said; section 8's errors, which take a while longer on a large
     # program, follow if there are any
-    a := session.Analysis.Analyze(doc.Path, cfg, d, w.overlay, false, true)
+    a :~ session.Analysis.Analyze(doc.Path, cfg, d, w.overlay, false, true)
     said := d.Errors()
     foreign := w.publishAll(k, a, d, doc.Foreign)
     session.Hold(a, cfg)
     if d.Errors() != said: foreign = w.publishAll(k, a, d, foreign)
-    w.last = a
+    w.last ~ a
     w.lastSlot = k
     # the note: which open files this one's program reaches
     nb := StringBuilder()
@@ -477,7 +477,7 @@ fn (w mut worker&) check(k I64) {
 # other file it reaches that is not checked as a root of its own here - and an empty list for each file in before (the
 # other files published to the last time) not published to now: the other files published to
 fn (w mut worker&) publishAll(k I64, a session.Analysis&, d mut diag.Diagnostics&, before Vec<String&>&) Vec<String&> {
-    doc := w.s.Docs[k]
+    doc :~ w.s.Docs[k]
     # each file's diagnostics, by real path, as LSP's Diagnostic objects
     files Vec<String&>
     lists Vec<StringBuilder>
@@ -496,7 +496,7 @@ fn (w mut worker&) publishAll(k I64, a session.Analysis&, d mut diag.Diagnostics
             lists.Push(StringBuilder())
             at = files.Len() - 1
         }
-        b := lists.RefMut(at)
+        b :~ lists.RefMut(at)
         if b.Len() > 0: b.PushChar(',')
         w.diagnostic(b, a, d, items, i, real)
     }
@@ -561,7 +561,7 @@ fn (w worker&) uriOf(real String&) String {
 
 # the text a file has here: an open file's as the editor holds it, else the analysis's
 fn (w worker&) textOf(a session.Analysis&, real String&) String {
-    t := try w.overlay.Get(real) catch default ""
+    t :~ try w.overlay.Get(real) catch default ""
     if t != "": return $t
     mi := a.ModuleOf(real)
     return $a.TextOf(mi) if mi >= 0 else ""
@@ -616,26 +616,26 @@ fn (w worker&) rangeOf(b mut StringBuilder&, p session.Positions&, it diag.Item&
 
 # a request answered
 fn (w mut worker&) answer(body String&) {
-    msg := try json.Json.Parse(body) catch json.Error { return }
+    msg :~ try json.Json.Parse(body) catch json.Error { return }
     id := idOf(msg)
-    method := str(msg, "method")
-    p := try msg["params"] catch json.Error {
+    method :~ str(msg, "method")
+    p :~ try msg["params"] catch json.Error {
         w.send(reply(id, "null"))
         return
     }
-    uri := str(try p["textDocument"] catch json.Error { return }, "uri")
+    uri :~ str(try p["textDocument"] catch json.Error { return }, "uri")
     k := w.s.slotOf(uri)
     if k < 0 {
         w.send(reply(id, "null"))
         return
     }
-    doc := w.s.Docs[k]
-    text := try w.overlay.Get(doc.Real) catch default ""
+    doc :~ w.s.Docs[k]
+    text :~ try w.overlay.Get(doc.Real) catch default ""
     pos := session.Positions(text, w.s.Utf8)
     line := try p["position"]["line"].AsInt() catch json.Error default 0
     ch := try p["position"]["character"].AsInt() catch json.Error default 0
     at := pos.Offset(line, ch)
-    cfg := w.Cfg
+    cfg :~ w.Cfg
     d mut diag.Diagnostics& = diag.Diagnostics(false)
     if method == "textDocument/formatting" {
         formatted := try session.Format(doc.Path, text) catch {
@@ -663,7 +663,7 @@ fn (w mut worker&) answer(body String&) {
         w.complete(id, doc, text, at, cfg, d)
         return
     }
-    a := w.analysis(k, d)
+    a :~ w.analysis(k, d)
     if method == "textDocument/documentSymbol" {
         mi := a.ModuleOf(doc.Real)
         if mi < 0 or a.L.Mods[mi].Decls.Len() == 0 {
@@ -726,10 +726,10 @@ fn (w mut worker&) complete(id String&, doc Doc&, text String&, at I64, cfg mut 
         overlay := Map<String&, String&>()
         for e in w.overlay: overlay.Put(e.Key, e.Value)
         overlay.Put(doc.Real, cut)
-        a := session.Analysis.Analyze(doc.Path, cfg, d, overlay)
+        a :~ session.Analysis.Analyze(doc.Path, cfg, d, overlay)
         a.Members(it, doc.Real, dot)
     } else {
-        a := session.Analysis.Analyze(doc.Path, cfg, d, w.overlay, kept = true)
+        a :~ session.Analysis.Analyze(doc.Path, cfg, d, w.overlay, kept = true)
         a.Names(it, doc.Real, at)
     }
     w.send(reply(id, $"{\"isIncomplete\":false,\"items\":[" + $it.B.ToString() + "]}"))
@@ -737,7 +737,7 @@ fn (w mut worker&) complete(id String&, doc Doc&, text String&, at I64, cfg mut 
 
 # the quick fixes for the diagnostics a codeAction request names: for M10, the import std has inserted (B15)
 fn codeActions(p json.Json&, uri String&, text String&, pos session.Positions&) String {
-    diags := try p["context"]["diagnostics"].AsArr() catch json.Error default Array<json.Json&>(0)
+    diags :~ try p["context"]["diagnostics"].AsArr() catch json.Error default Array<json.Json&>(0)
     b := StringBuilder()
     b.PushChar('[')
     for dg in diags {
@@ -767,7 +767,7 @@ fn str(j json.Json&, key String&) String& {
 
 # a message's id as JSON writes it, "" for none (a notification)
 fn idOf(msg json.Json&) String {
-    v := try msg["id"] catch json.Error { return "" }
+    v :~ try msg["id"] catch json.Error { return "" }
     return json.Encode(v)
 }
 
@@ -794,7 +794,7 @@ fn publish(uri String&, diagnostics String&) String {
 # a file URI's path: "file://" taken off, %XX decoded; a URI of another scheme as it is
 fn PathOf(uri String&) String {
     if not uri.StartsWith("file://"): return $uri
-    t := uri[7:]
+    t :~ uri[7:]
     b := StringBuilder()
     i I64 = 0
     for i < t.Len() {
@@ -838,7 +838,7 @@ test "a file URI and its path" {
 
 # the compiler under test: $OLANG, else build/olang
 fn compilerUnderTest() String {
-    c := try os.Env("OLANG") catch default ""
+    c :~ try os.Env("OLANG") catch default ""
     if c != "": return c
     # (absolute: a test running it from a directory of its own finds it too)
     return $(try os.Cwd() catch os.Error default ".") + "/build/olang"
@@ -850,15 +850,15 @@ fn framed(body String&) String { return $"Content-Length: " + $body.Len() + "\r\
 # the messages an LSP output holds, each body
 fn frames(out String&) Vec<String&>& {
     l mut Vec<String&>& = Vec<String&>()
-    r := out[:]
+    r :~ out[:]
     for {
         at := try r.Find("Content-Length: ") catch { break }
-        rest := r[at + 16:]
+        rest :~ r[at + 16:]
         nl := try rest.Find("\r\n\r\n") catch { break }
         n := try rest[:nl].Trim().ParseInt() catch { break }
         if rest.Len() < nl + 4 + n: break
         l.Push(rest[nl + 4:nl + 4 + n])
-        r = rest[nl + 4 + n:]
+        r ~ rest[nl + 4 + n:]
     }
     return l
 }
@@ -868,7 +868,7 @@ SessionSrc String& = ("import \"std/io\"\n\n# a point on a plane\ntype Point str
                       "fn main() {\n    q := Point(1, 2)\n    io.PutLn($sum(q))!\n    bad I32 = \"x\"\n}\n")
 
 test "olang serve lsp answers a scripted session: diagnostics, hover, definition, symbols, completion, formatting (B15)" {
-    dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
+    dir :~ try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
     defer: try os.RemoveAll(dir) catch os.Error { }
     path := $dir + "/p.olang"
     try os.WriteFile(path, SessionSrc) catch os.Error { unreachable "no file" }
@@ -901,7 +901,7 @@ test "olang serve lsp answers a scripted session: diagnostics, hover, definition
     got := Map<String&, String&>()
     diags := ""
     for m in frames(out.Stdout) {
-        msg := try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " + $m }
+        msg :~ try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " + $m }
         if str(msg, "method") == "textDocument/publishDiagnostics": diags = $m
         id := idOf(msg)
         if id != "": got.Put(id, m)
@@ -928,7 +928,7 @@ EditSrc String& = ("import \"std/io\"\n\ntype Point struct(X I64, Y I64) {\n    
                    "    n I64 = 3\n    v := Vec<I64>()\n    io.\n    p.\n    q := p.X\n    l.A.\n    n.\n    v.\n    io.PutLn(p.\n}\n")
 
 test "olang serve lsp completes after '.' while the line is unfinished: an import, a value, a word begun, a chain (B15)" {
-    dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
+    dir :~ try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
     defer: try os.RemoveAll(dir) catch os.Error { }
     path := $dir + "/e.olang"
     try os.WriteFile(path, EditSrc) catch os.Error { unreachable "no file" }
@@ -953,7 +953,7 @@ test "olang serve lsp completes after '.' while the line is unfinished: an impor
     assert out.Status == 0, "olang serve lsp ended with " + $out.Status + ": " + $out.Stderr
     got := Map<String&, String&>()
     for m in frames(out.Stdout) {
-        msg := try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " + $m }
+        msg :~ try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " + $m }
         id := idOf(msg)
         if id != "": got.Put(id, m)
     }
@@ -978,7 +978,7 @@ PathSrc String& = "import \"std/\nimport \"./\nimport \"github.com/x/\nimport \"
 FixSrc String& = "import \"std/io\"\n\nfn main() {\n    io.PutLn(json.Encode(1))!\n}\n"
 
 test "olang serve lsp completes import paths and offers M10's missing import as a quick fix (B15)" {
-    dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
+    dir :~ try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
     defer: try os.RemoveAll(dir) catch os.Error { }
     try os.MkDirAll($dir + "/sub") catch os.Error { unreachable "no folder" }
     path := $dir + "/c.olang"
@@ -1014,17 +1014,17 @@ test "olang serve lsp completes import paths and offers M10's missing import as 
     assert out.Status == 0, "olang serve lsp ended with " + $out.Status + ": " + $out.Stderr
     got := Map<String&, String&>()
     for m in frames(out.Stdout) {
-        msg := try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " + $m }
+        msg :~ try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " + $m }
         id := idOf(msg)
         if id != "": got.Put(id, m)
     }
-    caps := got.Get("1")!
+    caps :~ got.Get("1")!
     assert caps.Contains("\"codeActionProvider\":true") and caps.Contains("\"/\""), caps
     assert offers(got, "2", "json") and offers(got, "2", "io") and not offers(got, "2", "prelude"), got.Get("2")!
     assert offers(got, "3", "other") and offers(got, "3", "sub") and offers(got, "3", "c"), got.Get("3")!
     assert not offers(got, "4", "json"), got.Get("4")!
     assert offers(got, "5", "std/") and offers(got, "5", "./"), got.Get("5")!
-    act := got.Get("9")!
+    act :~ got.Get("9")!
     fixed := act.Contains("\"kind\":\"quickfix\"") and act.Contains("\"newText\":\"import \\\"std/json\\\"\\n\"")
     assert fixed and act.Contains("\"range\":{\"start\":{\"line\":1,\"character\":0}"), act
 }
@@ -1045,7 +1045,7 @@ StepLibs := Array<String&>[
     "import \"std/list\"\n\nfn Keep(a mut Vec<String&>&, s String&) { a.Push(s) }\n\nfn Count(a Vec<String&>&) I64 { return a.Len() }\n\nfn f(ok list.List<I64>&) I64 {\n    a := list.List.FromIter(ok.Iter())\n    return a.Len()\n}\n"]
 
 test "olang serve lsp checks an edited program as a build does, taking the records the checks before it left (B3i, T8)" {
-    dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
+    dir :~ try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
     defer: try os.RemoveAll(dir) catch os.Error { }
     main := $dir + "/main.olang"
     try os.WriteFile(main, StepMain) catch os.Error { unreachable "no file" }
@@ -1075,11 +1075,11 @@ fn lspSaid(dir String&, main String&) String, String {
     assert out.Status == 0, out.Stderr
     lines Vec<String&>
     for m in frames(out.Stdout) {
-        msg := try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " + $m }
+        msg :~ try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " + $m }
         if str(msg, "method") != "textDocument/publishDiagnostics": continue
-        params := try msg["params"] catch json.Error { continue }
+        params :~ try msg["params"] catch json.Error { continue }
         file := baseName(PathOf(str(params, "uri")))
-        ds := try params["diagnostics"].AsArr() catch json.Error { continue }
+        ds :~ try params["diagnostics"].AsArr() catch json.Error { continue }
         for d in ds {
             line := try d["range"]["start"]["line"].AsInt() catch json.Error default -1
             if (try d["severity"].AsInt() catch json.Error default 1) <= 2: lines.Push($file + ":" + $(line + 1) + ":" + $str(d, "code"))
@@ -1102,11 +1102,11 @@ fn buildSaid(dir String&) String {
     lines Vec<String&>
     for l in out.Stdout.Lines() {
         at := try l.Find(": error[") catch { continue }
-        head := l[:at].Split(":").ToVec()
+        head :~ l[:at].Split(":").ToVec()
         if head.Len() < 3: continue
         file := baseName(head[0])
-        rule := l[at + 8:]
-        rule = rule[:try rule.Find("]") catch default rule.Len()]
+        rule :~ l[at + 8:]
+        rule ~ rule[:try rule.Find("]") catch default rule.Len()]
         lines.Push($file + ":" + $head[1] + ":" + $rule)
     }
     lines.Sort(fn(a String&, b String&) Bool { return a < b })
@@ -1139,7 +1139,7 @@ ExamplesSrc String& = """
     """
 
 test "a hover on a function shows the first test naming it and how many more there are (B7a, B15)" {
-    dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
+    dir :~ try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
     defer: try os.RemoveAll(dir) catch os.Error { }
     path := $dir + "/e.olang"
     try os.WriteFile(path, ExamplesSrc) catch os.Error { unreachable "no file" }
@@ -1172,7 +1172,7 @@ DeprecatedSrc String& = """
     """
 
 test "a deprecated item: hover shows the note, completion tags it, its uses get a Hint tagged Deprecated (L4b, B15)" {
-    dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
+    dir :~ try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
     defer: try os.RemoveAll(dir) catch os.Error { }
     path := $dir + "/d.olang"
     try os.WriteFile(path, DeprecatedSrc) catch os.Error { unreachable "no file" }
@@ -1195,12 +1195,12 @@ test "a deprecated item: hover shows the note, completion tags it, its uses get 
     got := Map<String&, String&>()
     diags := ""
     for m in frames(out.Stdout) {
-        msg := try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " + $m }
+        msg :~ try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " + $m }
         if str(msg, "method") == "textDocument/publishDiagnostics": diags = $m
         if idOf(msg) != "": got.Put(idOf(msg), m)
     }
     assert (got.Get("2")!).Contains("Deprecated: use New"), got.Get("2")!
-    comp := got.Get("3")!
+    comp :~ got.Get("3")!
     assert comp.Contains("\"label\":\"Old\"") and comp.Split("\"tags\":[1]").Len() == 2, comp
     assert diags.Contains("\"severity\":4") and diags.Contains("\"tags\":[2]"), diags
     assert diags.Contains("\"start\":{\"line\":4,\"character\":9}") and not diags.Contains("\"line\":1,"), diags
@@ -1210,7 +1210,7 @@ test "a deprecated item: hover shows the note, completion tags it, its uses get 
 test "unused names are warnings, other rules errors (B15, D3b, M5a)" {
     assert severityOf("D3b") == 2 and severityOf("M5a") == 2
     assert severityOf("T6") == 1 and severityOf("") == 1
-    dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
+    dir :~ try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
     defer: try os.RemoveAll(dir) catch os.Error { }
     path := $dir + "/u.olang"
     src := "fn main() {\n    x := 1\n}\n"
@@ -1240,7 +1240,7 @@ FitsSrc String& = """
     """
 
 test "a hover on a function shows its # fits: line; a promise word is followed by the line's parameters (T21c, B11b, B15)" {
-    dir := try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
+    dir :~ try os.MkTemp() catch os.Error { unreachable "no temporary directory" }
     defer: try os.RemoveAll(dir) catch os.Error { }
     path := $dir + "/f.olang"
     try os.WriteFile(path, FitsSrc) catch os.Error { unreachable "no file" }
@@ -1260,7 +1260,7 @@ test "a hover on a function shows its # fits: line; a promise word is followed b
     assert out.Status == 0, out.Stderr
     got := Map<String&, String&>()
     for m in frames(out.Stdout) {
-        msg := try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " + $m }
+        msg :~ try json.Json.Parse(m) catch json.Error { unreachable "a message that is no JSON: " + $m }
         if idOf(msg) != "": got.Put(idOf(msg), m)
     }
     assert (got.Get("2")!).Contains("# fits: fn&(a mut N&, b N&) returns noalloc"), got.Get("2")!
@@ -1270,8 +1270,8 @@ test "a hover on a function shows its # fits: line; a promise word is followed b
 }
 
 test "lsp and explain write nothing in the directory they run in: their records go to olang's cache (B15a)" {
-    dir := try os.MkTemp(prefix = "olang-lspdir-") catch os.Error { unreachable "no temporary directory" }
-    cache := try os.MkTemp(prefix = "olang-lspcache-") catch os.Error { unreachable "no temporary directory" }
+    dir :~ try os.MkTemp(prefix = "olang-lspdir-") catch os.Error { unreachable "no temporary directory" }
+    cache :~ try os.MkTemp(prefix = "olang-lspcache-") catch os.Error { unreachable "no temporary directory" }
     src := "fn main() {\n    x := 1\n    assert x == 1\n}\n"
     try os.WriteFile($dir + "/m.olang", src) catch os.Error { unreachable "cannot write m.olang" }
     defer: try os.RemoveAll(dir) catch os.Error { }
@@ -1294,6 +1294,6 @@ test "lsp and explain write nothing in the directory they run in: their records 
         unreachable "olang explain did not run"
     }
     assert ex.Status == 0, ex.Stdout + ex.Stderr
-    left := try os.ReadDir(dir) catch os.Error default Array<String&>(0)
+    left :~ try os.ReadDir(dir) catch os.Error default Array<String&>(0)
     assert left == Array<String&>["m.olang"], "left beside the program: " + $left.Len()
 }

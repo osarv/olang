@@ -35,9 +35,9 @@ type Res struct(Pid I64, Mb I64, Now I64) {
 }
 
 fn main() {
-    args := os.Args()
-    dir := try os.Env("OLANG_MEMGATE") catch default ""
-    if dir == "": dir = "build/memgate"
+    args :~ os.Args()
+    dir :~ try os.Env("OLANG_MEMGATE") catch default ""
+    if dir == "": dir ~ "build/memgate"
     if args.Len() == 2 and args[1] == "-table" {
         table(dir)
         return
@@ -52,7 +52,7 @@ fn main() {
         try io.PutErrLn("usage: memgate [-key KEY] COMMAND ARGS... | memgate -table") catch io.Error { }
         os.Exit(2)
     }
-    cmd := args[from:]
+    cmd :~ args[from:]
     if key == "": key = $cmd[cmd.Len() - 1]
     try os.MkDirAll(dir) catch os.Error { }
     mb := expected(dir, key)
@@ -82,7 +82,7 @@ Recent I64 = 4
 
 # the most of the last Recent "KEY MB" lines of a file for key, 0 where it has none
 fn peakIn(path String&, key String&) I64 {
-    text := try os.ReadFile(path) catch os.Error { return 0 }
+    text :~ try os.ReadFile(path) catch os.Error { return 0 }
     last Vec<I64>
     for line in text.Lines() {
         w := words(line)
@@ -97,7 +97,7 @@ fn peakIn(path String&, key String&) I64 {
 
 # the runs' measured peaks, the latest for each key, sorted by key
 fn table(dir String&) {
-    text := try os.ReadFile($dir + "/peaks.txt") catch os.Error { return }
+    text :~ try os.ReadFile($dir + "/peaks.txt") catch os.Error { return }
     last Map<String, I64>
     for line in text.Lines() {
         w := words(line)
@@ -112,7 +112,7 @@ fn table(dir String&) {
 fn record(dir String&, key String&, peak I64) {
     locked(dir)
     defer: unlock(dir)
-    old := try os.ReadFile($dir + "/peaks.txt") catch os.Error default ""
+    old :~ try os.ReadFile($dir + "/peaks.txt") catch os.Error default ""
     try os.WriteFile($dir + "/peaks.txt", $old + $key + " " + $peak + "\n") catch os.Error { }
 }
 
@@ -152,7 +152,7 @@ fn fits(dir String&, mb I64) Bool {
 # the reservations of the commands running - a file whose gate has ended (killed before it removed it) is removed
 fn reservations(dir String&) Vec<Res> {
     out Vec<Res>
-    names := try os.ReadDir(dir) catch os.Error { return out }
+    names :~ try os.ReadDir(dir) catch os.Error { return out }
     live := livePids()
     for name in names {
         if not name.StartsWith("res."): continue
@@ -283,7 +283,7 @@ fn availableMb() I64 {
 
 # MemAvailable, or on a system with no /proc (macOS) vm_stat's free, inactive and speculative pages
 fn systemMb() I64 {
-    info := try os.ReadFile("/proc/meminfo") catch os.Error { return vmStatMb() }
+    info :~ try os.ReadFile("/proc/meminfo") catch os.Error { return vmStatMb() }
     for line in info.Lines() {
         w := words(line)
         if w.Len() >= 2 and w[0] == "MemAvailable:": return (try w[1].ParseInt() catch default 0) / 1024
@@ -307,10 +307,10 @@ fn vmStatMb() I64 {
 
 # the least headroom of the cgroups this process is in and their parents, in MB; -1 where none limits it
 fn cgroupMb() I64 {
-    groups := try os.ReadFile("/proc/self/cgroup") catch os.Error { return -1 }
+    groups :~ try os.ReadFile("/proc/self/cgroup") catch os.Error { return -1 }
     best I64 = -1
     for line in groups.Lines() {
-        parts := line.Split(":")
+        parts :~ line.Split(":")
         if parts.Len() != 3: continue
         if parts[0] == "0" and parts[1] == "": best = least(best, walkUp("/sys/fs/cgroup", parts[2], true))
         if "memory" in parts[1].Split(","): best = least(best, walkUp("/sys/fs/cgroup/memory", parts[2], false))
@@ -348,12 +348,12 @@ fn headroom(dir String&, v2 Bool) I64 {
 
 # a file holding one number, -1 where it is missing or "max"
 fn number(path String&) I64 {
-    text := try os.ReadFile(path) catch os.Error { return -1 }
+    text :~ try os.ReadFile(path) catch os.Error { return -1 }
     return try text.Trim().ParseInt() catch default -1
 }
 
 fn statValue(path String&, key String&) I64 {
-    text := try os.ReadFile(path) catch os.Error { return 0 }
+    text :~ try os.ReadFile(path) catch os.Error { return 0 }
     for line in text.Lines() {
         w := words(line)
         if w.Len() == 2 and w[0] == key: return try w[1].ParseInt() catch default 0

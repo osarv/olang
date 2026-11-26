@@ -145,8 +145,8 @@ if TargetOs != "windows" {
 
     # the SHA-256 (of its DER form) of the peer's certificate - empty when there is none
     fn digestOf(session ssl.SSL&) Array<U8> {
-        cert := ssl.SSL_get1_peer_certificate(session)
-        if cert == null: return Array<U8>(0)
+        cert :~ ssl.SSL_get1_peer_certificate(session)
+        if cert is null: return Array<U8>(0)
         got := Array<U8>(32)
         len := Array<U32>(1)
         ok := ssl.X509_digest(cert, ssl.EVP_sha256(), got, len) == 1 and len[0] == 32
@@ -160,8 +160,8 @@ if TargetOs != "windows" {
     # a context trusting "ca" where that names a file and the system's store where it is empty - or, for a pinned dial,
     # one that checks no chain (the pin is the check)
     fn newContext(ca String&, pinned Bool) ssl.SSL_CTX& ? Error {
-        ctx := ssl.SSL_CTX_new(ssl.TLS_client_method())
-        if ctx == null: error Error.Failed
+        ctx :~ ssl.SSL_CTX_new(ssl.TLS_client_method())
+        if ctx is null: error Error.Failed
         if pinned: return ctx
         ok := ssl.SSL_CTX_load_verify_file(ctx, ca.ToC()) if ca != "" else ssl.SSL_CTX_set_default_verify_paths(ctx)
         if ok != 1 {
@@ -175,8 +175,8 @@ if TargetOs != "windows" {
     # name that certificate must carry - and the session it made; "ctx" and "fd" are let go of here when the session
     # does not come
     fn newSession(ctx ssl.SSL_CTX&, fd I32, host String&, pin Array<U8>&, learn Bool) ssl.SSL& ? Error {
-        session := ssl.SSL_new(ctx)
-        if session == null {
+        session :~ ssl.SSL_new(ctx)
+        if session is null {
             ssl.SSL_CTX_free(ctx)
             unistd.close(fd)
             error Error.Failed
@@ -186,7 +186,7 @@ if TargetOs != "windows" {
         pinned := pin.Len() > 0
         unchecked := pinned or learn
         connected := (unchecked or ssl.SSL_set1_host(session, host.ToC()) == 1) and ssl.SSL_connect(session) == 1
-        why := "" if unchecked else verifyFailure(session)
+        why :~ "" if unchecked else verifyFailure(session)
         mismatch := connected and pinned and not sameDigest(digestOf(session), pin)
         if connected and why == "" and not mismatch: return session
         ssl.SSL_free(session)
@@ -199,9 +199,9 @@ if TargetOs != "windows" {
 
     # the session over a copy of tcp's socket (tcp closes its own where its holder lets go)
     fn Conn.over(tcp net.Conn&, host String&, ca String&, pin Array<U8>&, learn Bool) Conn ? Error {
-        ctx := try newContext(ca, pin.Len() > 0 or learn)
+        ctx :~ try newContext(ca, pin.Len() > 0 or learn)
         fd := unistd.dup(tcp.Fd())
-        session := try newSession(ctx, fd, host, pin, learn)
+        session :~ try newSession(ctx, fd, host, pin, learn)
         return Conn(fd, session, ctx)
     }
 
@@ -495,7 +495,7 @@ if TargetOs == "windows" {
                 expiry)
         }
         token := pointerAt(outBufs, 8)
-        if token != null {
+        if token is not null {
             out := bytesAt(token, I64(u32At(outBufs, 0)))
             FreeContextBuffer(token)
             try sendAll(c.fd, out)
@@ -539,7 +539,7 @@ if TargetOs == "windows" {
 
     fn (c Conn&) peerDigest() Array<U8> {
         cert := c.peerCert()
-        if cert == null: return Array<U8>(0)
+        if cert is null: return Array<U8>(0)
         der := derOf(cert)
         CertFreeCertificateContext(cert)
         return sha256.Sum(der)
@@ -553,7 +553,7 @@ if TargetOs == "windows" {
             return
         }
         cert := c.peerCert()
-        if cert == null: error Error.Verify("no certificate")
+        if cert is null: error Error.Verify("no certificate")
         defer: CertFreeCertificateContext(cert)
         why := try verifyChain(cert, host, ca)
         if why != "": error Error.Verify(why)
@@ -596,17 +596,17 @@ if TargetOs == "windows" {
     fn verifyChain(cert CVoid?&, host String&, ca String&) String ? Error {
         anchors := try anchorsIn(ca)
         store := CertOpenStore(2, 0, 0, 0, null)                # CERT_STORE_PROV_MEMORY
-        if store == null: error Error.Failed
+        if store is null: error Error.Failed
         defer: CertCloseStore(store, 0)
         sent := pointerAt(bytesAt(cert, 40), 32)                # the store of what the server sent
         e := CertEnumCertificatesInStore(sent, null)
-        for e != null {
+        for e is not null {
             CertAddCertificateContextToStore(store, e, 4, null)     # CERT_STORE_ADD_ALWAYS
             e = CertEnumCertificatesInStore(sent, e)
         }
         for der in anchors {
             x := CertCreateCertificateContext(0x10001, der, U32(der.Len()))   # X509_ASN_ENCODING | PKCS_7_ASN_ENCODING
-            if x == null: error Error.Failed
+            if x is null: error Error.Failed
             CertAddCertificateContextToStore(store, x, 4, null)
             CertFreeCertificateContext(x)
         }
@@ -666,7 +666,7 @@ if TargetOs == "windows" {
         expiry := Array<I64>(1)
         InitializeSecurityContextA(cred, ctx, "".ToC(), iscFlags, 0, 0, null, 0, next, outDesc, attrs, expiry)
         sent := pointerAt(outBufs, 8)
-        if sent == null: return
+        if sent is null: return
         out := bytesAt(sent, I64(u32At(outBufs, 0)))
         FreeContextBuffer(sent)
         try sendAll(fd, out) catch { }
@@ -760,7 +760,7 @@ fn freePort() I64 ? net.Error {
 # where p is, as the host's sh names it - on Windows (under Wine, B12f) the Z: drive is the host's /
 fn hostPath(p String&) String {
     if TargetOs != "windows": return p
-    full := try os.RealPath(p) catch { return p }
+    full :~ try os.RealPath(p) catch { return p }
     b := StringBuilder()
     for ch in full[2:]: b.PushChar('/' if ch == '\\' else ch)
     return b.ToString()
@@ -776,14 +776,14 @@ fn sh(dir String&, cmd String&, background Bool = false) Bool {
         return os.Run(cmd) == 0
     }
     host := hostPath(dir)
-    name := "bg.sh" if background else "run.sh"
-    tail := " >/dev/null 2>&1 &\n" if background else "\necho $? > " + host + "/status\n"
+    name :~ "bg.sh" if background else "run.sh"
+    tail :~ " >/dev/null 2>&1 &\n" if background else "\necho $? > " + host + "/status\n"
     try os.WriteFile(dir + "/" + name, "cd '" + hostPath(".") + "'\n" + cmd + tail) catch { return false }
     if background: return os.Run("start /unix /bin/sh " + host + "/" + name) == 0
     try os.Remove(dir + "/status") catch { }
     os.Run("start /unix /bin/sh " + host + "/" + name)
     for _ in range 600 {                                # "start" does not wait for a program of the host's
-        status := try os.ReadFile(dir + "/status") catch default ""
+        status :~ try os.ReadFile(dir + "/status") catch default ""
         if status.EndsWith("\n"): return status.Trim() == "0"
         time.Sleep(time.Duration.Millis(100))
     }
@@ -799,7 +799,7 @@ fn firstLine(host String&, port I64, ca String&, pin String& = "") String {
         } catch Error.Verify { return "verify" } catch Error.Pin { return "pin" } catch Error.Handshake { return "handshake" } catch { return "failed" }
         try c.Write("GET / HTTP/1.0\r\n\r\n") catch { return "write failed" }
         buf := Array<U8>(4096)
-        got := try c.Read(buf) catch { return "read failed" }
+        got :~ try c.Read(buf) catch { return "read failed" }
         return String(got[:12])
     }
     return "never up"
@@ -812,7 +812,7 @@ fn learnedPrint(port I64) String ? Error, net.Error {
 }
 
 test "a session to a server whose certificate is trusted and names the host carries bytes both ways" {
-    dir := try os.MkTemp("build", "tls")
+    dir :~ try os.MkTemp("build", "tls")
     assert sh(dir, "openssl req -x509 -newkey rsa:2048 -nodes -days 2 -subj /CN=localhost -addext subjectAltName=DNS:localhost -keyout " + dir + "/k.pem -out " + dir + "/c.pem 2>/dev/null")
     port := try freePort()
     # a wall-clock limit (timeout) ends the server even if this test dies

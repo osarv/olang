@@ -9,11 +9,11 @@ import "std/os"
 import "benchlib"
 
 fn main() {
-    args := os.Args()
+    args :~ os.Args()
     if args.Len() < 2: benchlib.Fail("usage: ir PROG [CPROG]", 1)
     prog := $args[1]
     cprog := $args[2] if args.Len() > 2 else prog
-    dir := benchlib.Dir
+    dir :~ benchlib.Dir
     try os.MkDirAll($dir + "/build/lto") catch os.Error { benchlib.Fail("cannot make bench/build/lto", 1) }
     others := benchlib.Objects(dir, Array<String&>[".main.ll", ".test.ll"])
     link := Vec<String&>()
@@ -28,7 +28,7 @@ fn main() {
     benchlib.Must(Array<String&>["llvm-dis", "build/lto/" + $cprog + ".c.0.5.precodegen.bc", "-o", "build/lto/" + $cprog + ".c.ll"])
     benchlib.MustInto(Array<String&>["llvm-objdump", "-d", "--no-show-raw-insn", "build/lto/" + $cprog + ".c"], dir, "build/lto/" + $cprog + ".c.s")
     # rm -f build/lto/*.bc build/lto/*.o build/lto/*.resolution.txt
-    names := try os.ReadDir($dir + "/build/lto") catch default Array<String&>(0)
+    names :~ try os.ReadDir($dir + "/build/lto") catch default Array<String&>(0)
     for n in names {
         if n.EndsWith(".bc") or n.EndsWith(".o") or n.EndsWith(".resolution.txt") {
             try os.Remove($dir + "/build/lto/" + $n) catch os.Error { }

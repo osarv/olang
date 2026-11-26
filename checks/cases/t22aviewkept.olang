@@ -20,7 +20,7 @@ fn main() {
     r String& = "x"
     for i in range 3 {
         t := $i
-        r = g(t)
+        r ~ g(t)
     }
     churn()
     io.PutLn(r)!

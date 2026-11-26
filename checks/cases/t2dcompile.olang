@@ -14,12 +14,12 @@ type Chain struct() {
 fn gone() Bool {
     c := Chain()
     h := Node(1)
-    c.head = h
-    h.next = Node(2)
-    n := h.next!
-    n.prev = h
-    c.head = null
-    return n.prev == null
+    c.head ~ h
+    h.next ~ Node(2)
+    n :~ h.next!
+    n.prev ~ h
+    c.head ~ null
+    return n.prev is null
 }
 
 assert gone()

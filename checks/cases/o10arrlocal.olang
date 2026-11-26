@@ -7,7 +7,7 @@ fn main() ? {
     y Array<I64>& = Array<I64>[0]
     {
         x mut Array<I64>& = Array<I64>(4)
-        y = x
+        y ~ x
     }
     try io.PutLn($y[0])
 }

@@ -19,7 +19,7 @@ import "std/io"
 import "srcmask"
 
 fn main() ? io.Error {
-    args := os.Args()
+    args :~ os.Args()
     texts Vec<String>
     for k in range 1, args.Len() {
         texts.Push(try os.ReadFile(args[k]) catch os.Error {
@@ -30,7 +30,7 @@ fn main() ? io.Error {
     }
     listed := 0
     for k in range 1, args.Len() {
-        path := args[k]
+        path :~ args[k]
         text := texts[k - 1]
         if text.Len() == 0: continue
         if reachesClone(path, text) {
@@ -75,7 +75,7 @@ fn migrate(text String&) String {
 # whether text declares a method named Clone ("fn (t Tensor<T>&) Clone() Tensor<T>"), in code
 fn declaresClone(text String&) Bool {
     for l in text.Lines() {
-        t := srcmask.StripStart(l)
+        t :~ srcmask.StripStart(l)
         if not t.StartsWith("fn ("): continue
         close := try t.Find(") Clone(") catch { continue }
         if not t[4:close].Contains(")"): return true
@@ -98,15 +98,15 @@ fn reachesClone(path String&, text String&) Bool {
 fn reached(path String&, text String&, seen mut Map<String, String>&) {
     if path in seen: return
     seen.Put($path, $text)
-    dir := path[:(try path.FindLast("/") catch default -1) + 1]
+    dir :~ path[:(try path.FindLast("/") catch default -1) + 1]
     for l in text.Lines() {
         if not l.StartsWith("import "): continue
         q := try l.Find("\"") catch { continue }
         e := try l[q + 1:].Find("\"") catch { continue }
-        spec := l[q + 1:q + 1 + e]
+        spec :~ l[q + 1:q + 1 + e]
         if spec.StartsWith("std/"): continue
         p := $dir + $spec + ".olang"
-        t := try os.ReadFile(p) catch os.Error { continue }
+        t :~ try os.ReadFile(p) catch os.Error { continue }
         reached(p, t, seen)
     }
 }
@@ -118,8 +118,8 @@ fn cloneLines(text String&) Vec<I64> {
 
 # the line numbers (from 1) where two texts of as many lines differ
 fn changedLines(a String&, b String&) Vec<I64> {
-    xs := a.Split("\n")
-    ys := b.Split("\n")
+    xs :~ a.Split("\n")
+    ys :~ b.Split("\n")
     out Vec<I64>
     for i in range xs.Len().Min(ys.Len()) {
         if xs[i] != ys[i]: out.Push(i + 1)
@@ -148,7 +148,7 @@ test declaresClone "a type's own Clone is found; a call is no declaration" {
 }
 
 test reachesClone "a Clone() declared in the file or in a module it imports, through others too" {
-    dir := os.MkTemp(dir = "/tmp", prefix = "clone_migrate.")!
+    dir :~ os.MkTemp(dir = "/tmp", prefix = "clone_migrate.")!
     os.WriteFile(dir + "/tensor.olang", "fn (t T&) Clone() T { return t }\n")!
     os.WriteFile(dir + "/graph.olang", "import \"tensor\"\n")!
     assert reachesClone(dir + "/quantgraph.olang", "import \"graph\"\nb := g.Value(y).Clone()\n")

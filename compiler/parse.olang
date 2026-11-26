@@ -45,7 +45,7 @@ fn (o mut Oracle&) AddFn(names mut source.Names&, alias String&, name String&) {
 # the generic functions a file declares: "fn name<", by name
 fn GenericFnNames(text String&, ts scan.Tokens&) Vec<String&>& {
     out mut Vec<String&>& = Vec<String&>()
-    toks := ts.Toks
+    toks :~ ts.Toks
     for i in range toks.Len() - 2 {
         if toks[i].Kind == token.Tok.Fn and toks[i + 1].Kind == token.Tok.Iden and toks[i + 2].Kind == token.Tok.Lt {
             out.Push(text[toks[i + 1].Start:toks[i + 1].End])
@@ -291,7 +291,7 @@ fn (p Parser&) memberNext() Bool {
 }
 
 fn isWordKeyword(k token.Tok) Bool {
-    t := k.Text()
+    t :~ k.Text()
     return t.Len() > 0 and t[0].IsLetter() and k != token.Tok.BoolLit and k != token.Tok.NullLit
 }
 
@@ -520,7 +520,7 @@ fn (p mut Parser&) item() {
     p.tooDeep = false
     p.unclosed = false
     p.salvage.Truncate(0)
-    d := try p.decl() catch {
+    d :~ try p.decl() catch {
         p.ItemKept[k] = false
         # a function or type whose body did not parse stays declared by its signature or its name, its body never
         # checked - so a use of it is not reported again (SNTX_BODY_UNPARSED)
@@ -558,7 +558,7 @@ fn (p mut Parser&) decl() ast.Decl?& ? Fail {
         }
         case token.Tok.Type { return try p.typeDecl() }
         case token.Tok.Fn {
-            f := try p.function()
+            f :~ try p.function()
             return ast.Decl.Fn(f)
         }
         case token.Tok.Extern {
@@ -575,7 +575,7 @@ fn (p mut Parser&) decl() ast.Decl?& ? Fail {
             link := try p.linkClause()
             if p.sees(token.Tok.LBrace): return try p.externBlock(at, link)
             if link.End > I32(0): try p.fail(token.Tok.LBrace.Describe())
-            f := try p.externFn(at)
+            f :~ try p.externFn(at)
             try p.endStmt()
             return ast.Decl.Extern(f)
         }
@@ -583,20 +583,20 @@ fn (p mut Parser&) decl() ast.Decl?& ? Fail {
             p.advance()
             # B14: a test may name what it is an example of - a function, a type, Type.Method
             target ast.Path?& = null
-            if p.sees(token.Tok.Iden): target = try p.path()
+            if p.sees(token.Tok.Iden): target ~ try p.path()
             if not p.sees(token.Tok.StrLit): try p.fail(token.Tok.StrLit.Describe())
             nt := p.tk()
             p.advance()
-            body := try p.body()
+            body :~ try p.body()
             return ast.Decl.Test(p.from(at), source.Span(nt.Start, nt.End), body, target)
         }
         case token.Tok.If { return try p.topIf() }
         case token.Tok.Assert {
             # S17a: a top-level assert, decided while compiling
             p.advance()
-            cond := try p.expr()
+            cond :~ try p.expr()
             msg ast.Expr?& = null
-            if p.accept(token.Tok.Comma): msg = try p.expr()
+            if p.accept(token.Tok.Comma): msg ~ try p.expr()
             sp := p.from(at)
             try p.endStmt()
             return ast.Decl.Assert(sp, cond, msg)
@@ -605,7 +605,7 @@ fn (p mut Parser&) decl() ast.Decl?& ? Fail {
             # X12: export fn - a contextual word too
             if p.text(p.tk()) == "export" and p.look(1) == token.Tok.Fn {
                 p.advance()
-                xf := try p.function()
+                xf :~ try p.function()
                 return ast.Decl.Fn(ast.Func(p.from(at), xf.Recv, xf.Name, xf.S, xf.Body, xf.TypeParams, xf.Bodied, true
                                             xf.Owner, xf.Member))
             }
@@ -614,12 +614,12 @@ fn (p mut Parser&) decl() ast.Decl?& ? Fail {
                 nt := p.tk()
                 n := try p.name()
                 p.advance()
-                value := try p.expr()
+                value :~ try p.expr()
                 ssp := p.from(at)
                 try p.endStmt()
                 return ast.Decl.Set(ssp, ast.Expr.Name(source.Span(nt.Start, nt.End), n), value)
             }
-            v := try p.declNames(false)
+            v :~ try p.declNames(false)
             sp := p.from(at)
             try p.endStmt()
             return ast.Decl.Global(sp, v)
@@ -643,7 +643,7 @@ fn (p mut Parser&) externFn(at I32) ast.Func& ? Fail {
     try p.want(token.Tok.Fn)
     name := try p.name()
     p.variadicOk = true
-    s := try p.sig(false) catch {
+    s :~ try p.sig(false) catch {
         p.variadicOk = false
         error Fail.Syntax
     }
@@ -671,7 +671,7 @@ fn (p mut Parser&) externBlock(at I32, link source.Span) ast.Decl& ? Fail {
         p.skipEnds()
     }
     p.advance()
-    ds := gather(p.decls, from)
+    ds :~ gather(p.decls, from)
     return ast.Decl.ExternBlock(p.from(at), link, ds)
 }
 
@@ -698,20 +698,20 @@ fn (p mut Parser&) entryEnd() ? Fail {
 # a top-level if (B9): every branch parsed, each item of it an item of its own
 fn (p mut Parser&) topIf() ast.Decl& ? Fail {
     at := p.here()
-    t := try p.topIfRest()
+    t :~ try p.topIfRest()
     return ast.Decl.If(p.from(at), t)
 }
 
 fn (p mut Parser&) topIfRest() ast.TopIf& ? Fail {
     try p.want(token.Tok.If)
-    cond := try p.expr()
-    then := try p.topBranch()
+    cond :~ try p.expr()
+    then :~ try p.topBranch()
     if not p.accept(token.Tok.Else): return ast.TopIf(cond, then, null, null)
     if p.sees(token.Tok.If) {
-        inner := try p.topIfRest()
+        inner :~ try p.topIfRest()
         return ast.TopIf(cond, then, inner, null)
     }
-    els := try p.topBranch()
+    els :~ try p.topBranch()
     return ast.TopIf(cond, then, null, els)
 }
 
@@ -729,7 +729,7 @@ fn (p mut Parser&) topBranch() ast.TopBranch& ? Fail {
     p.diags.EndHold()
     try p.want(token.Tok.RBrace)
     sp := p.from(at)
-    decls := gather(p.decls, from)
+    decls :~ gather(p.decls, from)
     return ast.TopBranch(sp, decls, g)
 }
 
@@ -804,7 +804,7 @@ fn (p mut Parser&) errorWords(cases mut Vec<ast.CaseDecl&>&) ? Fail {
         at := p.here()
         w := try p.name()
         payload Array<ast.Param&>& = Array<ast.Param&>(0)
-        if p.accept(token.Tok.LParen): payload = try p.params(false)
+        if p.accept(token.Tok.LParen): payload ~ try p.params(false)
         cases.Push(ast.CaseDecl(p.from(at), w, payload))
         try p.entryEnd()
     }
@@ -829,22 +829,22 @@ fn (p mut Parser&) memberDecl(at I32) ast.Decl& ? Fail {
     ot := p.tk()
     on := try p.name()
     oargs Array<ast.TypeRef&>& = Array<ast.TypeRef&>(0)
-    if p.sees(token.Tok.Lt): oargs = try p.typeArgs()
+    if p.sees(token.Tok.Lt): oargs ~ try p.typeArgs()
     owner := ast.TypeRef.Named(p.from(ot.Start), Array<source.NameId>(1, on), oargs)
     try p.want(token.Tok.Dot)
     member := try p.name()
     p.receiverVars(owner, false)
     if p.sees(token.Tok.Lt) or p.sees(token.Tok.Assign) {
         tps Array<ast.TypeParam&>& = Array<ast.TypeParam&>(0)
-        if p.sees(token.Tok.Lt): tps = try p.typeParams()
+        if p.sees(token.Tok.Lt): tps ~ try p.typeParams()
         try p.want(token.Tok.Assign)
-        ty := try p.typeExpr()
+        ty :~ try p.typeExpr()
         sp := p.from(at)
         try p.endStmt()
         return ast.Decl.Member(sp, ast.MemberDecl(owner, member, tps, ty))
     }
     name := p.names.Intern($p.names.Text(on) + "." + $p.names.Text(member))
-    d := try p.typeDeclRest(at, name) catch {
+    d :~ try p.typeDeclRest(at, name) catch {
         p.salvage.Push(ast.Decl.Type(p.from(at), ast.TypeDecl(name, Array<ast.TypeParam&>(0), false, null, ast.DeclWord.Plain, false, owner, member)))
         error Fail.Syntax
     }
@@ -858,11 +858,11 @@ fn (p mut Parser&) memberDecl(at I32) ast.Decl& ? Fail {
 }
 
 fn (p mut Parser&) typeDeclRest(at I32, name source.NameId) ast.Decl& ? Fail {
-    p.typeParamsRead = Array<ast.TypeParam&>(0)
+    p.typeParamsRead ~ Array<ast.TypeParam&>(0)
     params Array<ast.TypeParam&>& = Array<ast.TypeParam&>(0)
     if p.sees(token.Tok.Lt) {
-        params = try p.typeParams()
-        p.typeParamsRead = params
+        params ~ try p.typeParams()
+        p.typeParamsRead ~ params
     }
     # T13a, T13b: "immut" or "unique" before the body; the two are never one type's, an error where both are written
     word := ast.DeclWord.Plain
@@ -875,7 +875,7 @@ fn (p mut Parser&) typeDeclRest(at I32, name source.NameId) ast.Decl& ? Fail {
     }
     isPacked := p.packedWord()
     extending := p.accept(token.Tok.Extends)
-    body := try p.typeBody()
+    body :~ try p.typeBody()
     sp := p.from(at)
     if p.sees(token.Tok.StmtEnd): p.advance()
     return ast.Decl.Type(sp, ast.TypeDecl(name, params, extending, body, word, isPacked))
@@ -916,17 +916,17 @@ fn (p mut Parser&) typeBody() ast.TypeBody?& ? Fail {
         case token.Tok.Struct {
             p.advance()
             tps Array<ast.TypeParam&>& = Array<ast.TypeParam&>(0)
-            if p.sees(token.Tok.Lt) { tps = try p.typeParams() }      # G10d: "struct<T>(g Graph<T>&)" (QW)
+            if p.sees(token.Tok.Lt) { tps ~ try p.typeParams() }      # G10d: "struct<T>(g Graph<T>&)" (QW)
             try p.want(token.Tok.LParen)
-            params := try p.params(false)
-            errs := try p.errorSet()
+            params :~ try p.params(false)
+            errs :~ try p.errorSet()
             p.ctorBody = true
-            body := try p.ctorBlock()
+            body :~ try p.ctorBlock()
             dsp := source.Span(0, 0)
             dtor Array<ast.Stmt&>& = Array<ast.Stmt&>(0)
             if p.sees(token.Tok.Destruct) {
                 dat := p.advance()
-                dtor = try p.body()
+                dtor ~ try p.body()
                 dsp = p.from(dat)
             }
             return ast.TypeBody.Struct(ast.StructBody(params, errs, body, dsp, dtor, tps))
@@ -934,7 +934,7 @@ fn (p mut Parser&) typeBody() ast.TypeBody?& ? Fail {
         case token.Tok.Enum {
             p.advance()
             raw ast.TypeRef?& = null
-            if not p.sees(token.Tok.LBrace) and not p.sees(token.Tok.Colon) { raw = try p.typeExpr() }   # T17e: "enum String {"
+            if not p.sees(token.Tok.LBrace) and not p.sees(token.Tok.Colon) { raw ~ try p.typeExpr() }   # T17e: "enum String {"
             try p.want(token.Tok.LBrace)
             cases mut Vec<ast.CaseDecl&>& = Vec<ast.CaseDecl&>()
             p.skipEnds()
@@ -944,17 +944,17 @@ fn (p mut Parser&) typeBody() ast.TypeBody?& ? Fail {
                 payload Array<ast.Param&>& = Array<ast.Param&>(0)
                 whole := false
                 if p.accept(token.Tok.LParen) {
-                    payload = try p.params(false)
+                    payload ~ try p.params(false)
                 } else if not p.sees(token.Tok.Comma) and not p.sees(token.Tok.StmtEnd) and not p.sees(token.Tok.RBrace) and
                           not p.sees(token.Tok.Eof) and not p.sees(token.Tok.Assign) {
                     # T17: a payload of one type written whole, "Round Circle"
                     tat := p.here()
-                    ty := try p.typeExpr()
-                    payload = Array<ast.Param&>[ast.Param(p.from(tat), cn, ty, null)]
+                    ty :~ try p.typeExpr()
+                    payload ~ Array<ast.Param&>[ast.Param(p.from(tat), cn, ty, null)]
                     whole = true
                 }
                 value ast.Expr?& = null
-                if p.accept(token.Tok.Assign) { value = try p.expr() }   # T17e: a raw value
+                if p.accept(token.Tok.Assign) { value ~ try p.expr() }   # T17e: a raw value
                 cases.Push(ast.CaseDecl(p.from(cat), cn, payload, whole, value))
                 try p.entryEnd()
             }
@@ -964,8 +964,8 @@ fn (p mut Parser&) typeBody() ast.TypeBody?& ? Fail {
         case token.Tok.Trait {
             p.advance()
             # "extends A, B" (T30a) and "for X, Y" (T31a), before the methods
-            exts := try p.typeList(token.Tok.Extends)
-            members := try p.typeList(token.Tok.For)
+            exts :~ try p.typeList(token.Tok.Extends)
+            members :~ try p.typeList(token.Tok.For)
             try p.want(token.Tok.LBrace)
             methods mut Vec<ast.Func&>& = Vec<ast.Func&>()
             p.skipEnds()
@@ -977,24 +977,24 @@ fn (p mut Parser&) typeBody() ast.TypeBody?& ? Fail {
                     mt := p.tk()
                     p.advance()
                     msp := source.Span(mt.Start, mt.End)
-                    recv = ast.Param(msp, source.NameId(0), ast.TypeRef.Perm(msp, null, true), null)
+                    recv ~ ast.Param(msp, source.NameId(0), ast.TypeRef.Perm(msp, null, true), null)
                 }
                 # T30b: "T.Parse(...)" - a builder the type a parameter names must have
                 owner ast.TypeRef?& = null
                 member := source.NameId(0)
                 on := source.NameId(0)
-                if recv == null and p.sees(token.Tok.Iden) and p.look(1) == token.Tok.Dot {
+                if recv is null and p.sees(token.Tok.Iden) and p.look(1) == token.Tok.Dot {
                     ot := p.tk()
                     on = try p.name()
-                    owner = ast.TypeRef.Named(source.Span(ot.Start, ot.End), Array<source.NameId>(1, on), Array<ast.TypeRef&>(0))
+                    owner ~ ast.TypeRef.Named(source.Span(ot.Start, ot.End), Array<source.NameId>(1, on), Array<ast.TypeRef&>(0))
                     p.advance()
                 }
                 mn := try p.methodName()
-                if owner != null {
+                if owner is not null {
                     member = mn
                     mn = p.names.Intern($p.names.Text(on) + "." + $p.names.Text(member))
                 }
-                s := try p.sig(false, false, true, true)
+                s :~ try p.sig(false, false, true, true)
                 methods.Push(ast.Func(p.from(mat), recv, mn, s, Array<ast.Stmt&>(0), Array<ast.TypeParam&>(0), false, false
                                       owner, member))
                 try p.entryEnd()
@@ -1004,13 +1004,13 @@ fn (p mut Parser&) typeBody() ast.TypeBody?& ? Fail {
         }
         case _ {
             p.fnBase = true
-            base := try p.typeExpr()
+            base :~ try p.typeExpr()
             p.fnBase = false
             if p.sees(token.Tok.LParen) {      # a constructor over a primitive (T29d)
                 cat := p.advance()
-                cp := try p.params(false)
-                ce := try p.errorSet()
-                cb := try p.body()
+                cp :~ try p.params(false)
+                ce :~ try p.errorSet()
+                cb :~ try p.body()
                 s := ast.Sig(cp, Array<ast.TypeRef&>(0), ce.HasErrors, ce.Errors)
                 return ast.TypeBody.Over(base, ast.Func(p.from(cat), null, source.NameId(0), s, cb))
             }
@@ -1028,7 +1028,7 @@ fn (p mut Parser&) function() ast.Func& ? Fail {
     owner ast.TypeRef?& = null
     member := source.NameId(0)
     if p.accept(token.Tok.LParen) {
-        recv = try p.param(false)
+        recv ~ try p.param(false)
         try p.want(token.Tok.RParen)
         name = try p.methodName()
     } else if p.ownerAhead() {
@@ -1036,8 +1036,8 @@ fn (p mut Parser&) function() ast.Func& ? Fail {
         ot := p.tk()
         on := try p.name()
         oargs Array<ast.TypeRef&>& = Array<ast.TypeRef&>(0)
-        if p.sees(token.Tok.Lt): oargs = try p.typeArgs()
-        owner = ast.TypeRef.Named(p.from(ot.Start), Array<source.NameId>(1, on), oargs)
+        if p.sees(token.Tok.Lt): oargs ~ try p.typeArgs()
+        owner ~ ast.TypeRef.Named(p.from(ot.Start), Array<source.NameId>(1, on), oargs)
         try p.want(token.Tok.Dot)
         member = try p.methodName()
         name = p.names.Intern($p.names.Text(on) + "." + $p.names.Text(member))
@@ -1048,14 +1048,14 @@ fn (p mut Parser&) function() ast.Func& ? Fail {
     # QW: "fn max<T>(...)" - the function's own type variables (G3); a method's receiver introduces its type's
     # variables bare ("fn (l List<T>&) Push(x T)"): names no type has, written as its type's arguments
     tps Array<ast.TypeParam&>& = Array<ast.TypeParam&>(0)
-    if p.sees(token.Tok.Lt): tps = try p.typeParams()
-    if recv != null and recv.Ty != null: p.receiverVars(recv.Ty!, false)
-    nm := p.names.Text(name)
-    p.valueAfter = recv != null and (nm == "SetAt" or nm == "setAt" or nm == "SetSlice" or nm == "setSlice")
-    s := try p.sig(false, false, true)
+    if p.sees(token.Tok.Lt): tps ~ try p.typeParams()
+    if recv is not null and recv.Ty is not null: p.receiverVars(recv.Ty!, false)
+    nm :~ p.names.Text(name)
+    p.valueAfter = recv is not null and (nm == "SetAt" or nm == "setAt" or nm == "SetSlice" or nm == "setSlice")
+    s :~ try p.sig(false, false, true)
     p.valueAfter = false
     braced := p.sees(token.Tok.LBrace)
-    body := try p.body() catch {
+    body :~ try p.body() catch {
         if braced {
             p.salvage.Push(ast.Decl.Fn(ast.Func(p.from(at), recv, name, s, Array<ast.Stmt&>(0), tps, false, false
                                                 owner, member)))
@@ -1096,7 +1096,7 @@ fn (p mut Parser&) receiverVars(t ast.TypeRef&, inArgs Bool) {
         case ast.TypeRef.Named(_, path, args) {
             if inArgs and path.Len() == 1 and args.Len() == 0 {
                 n := path[0]
-                tx := p.names.Text(n)
+                tx :~ p.names.Text(n)
                 if not p.oracle.bare.Has(n) and not builtinType(tx): p.vars.Push(n)
                 return
             }
@@ -1104,7 +1104,7 @@ fn (p mut Parser&) receiverVars(t ast.TypeRef&, inArgs Bool) {
         }
         case ast.TypeRef.Ref(_, of, _, _) { p.receiverVars(of, inArgs) }
         case ast.TypeRef.Perm(_, of, _) {
-            if of != null: p.receiverVars(of, inArgs)
+            if of is not null: p.receiverVars(of, inArgs)
         }
         case _ { }
     }
@@ -1155,10 +1155,10 @@ fn (p mut Parser&) typeParams() Array<ast.TypeParam&>& ? Fail {
             wasNoGt, wasItem := p.noGt, p.item
             p.noGt = true
             p.item = true
-            t := try p.typeExpr()
+            t :~ try p.typeExpr()
             p.noGt = wasNoGt
             p.item = wasItem
-            if ty == null { ty = t } else { also.Push(t) }
+            if ty is null { ty ~ t } else { also.Push(t) }
         }
         # G4a: "= type", the type the variable takes where nothing else gives one
         dflt ast.TypeRef?& = null
@@ -1166,7 +1166,7 @@ fn (p mut Parser&) typeParams() Array<ast.TypeParam&>& ? Fail {
             wasNoGt, wasItem := p.noGt, p.item
             p.noGt = true
             p.item = true
-            dflt = try p.typeExpr()
+            dflt ~ try p.typeExpr()
             p.noGt = wasNoGt
             p.item = wasItem
         }
@@ -1187,7 +1187,7 @@ fn (p mut Parser&) sig(lambda Bool, value Bool = false, named Bool = false, ofTr
     try p.want(token.Tok.LParen)
     p.sawVariadic = false
     p.spreadOk = true
-    params := try p.params(lambda)
+    params :~ try p.params(lambda)
     variadic := p.sawVariadic
     p.sawVariadic = false
     results Array<ast.TypeRef&>& = Array<ast.TypeRef&>(0)
@@ -1197,7 +1197,7 @@ fn (p mut Parser&) sig(lambda Bool, value Bool = false, named Bool = false, ofTr
         wasItem := p.item
         p.item = true
         for {
-            t := try p.typeExpr() catch {
+            t :~ try p.typeExpr() catch {
                 p.item = wasItem
                 p.tys.Truncate(from)
                 error Fail.Syntax
@@ -1206,7 +1206,7 @@ fn (p mut Parser&) sig(lambda Bool, value Bool = false, named Bool = false, ofTr
             if one or not p.accept(token.Tok.Comma): break
         }
         p.item = wasItem
-        results = gather(p.tys, from)
+        results ~ gather(p.tys, from)
     }
     # E31c: "commutes" after a method's result
     swaps := false
@@ -1214,11 +1214,11 @@ fn (p mut Parser&) sig(lambda Bool, value Bool = false, named Bool = false, ofTr
         p.advance()
         swaps = true
     }
-    errs := try p.errorSet(one)
+    errs :~ try p.errorSet(one)
     # T21c: a function type's promises follow its signature - and a trait's method's (T30c) - written nowhere else
-    words := try p.promises()
+    words :~ try p.promises()
     if words.Len() > 0 and (lambda or not value) and not ofTrait {
-        w := words[0]
+        w :~ words[0]
         p.report(w.Sp.Start, w.Sp.End, msgs.PromiseMisplaced(w.Word.Text()))
     }
     return ast.Sig(params, results, errs.HasErrors, errs.Errors, noReturn, swaps, variadic, words, ext)
@@ -1288,7 +1288,7 @@ fn (p mut Parser&) path() ast.Path& ? Fail {
         p.advance()
         p.ids.Push(try p.methodName())
     }
-    parts := gather(p.ids, from)
+    parts :~ gather(p.ids, from)
     return ast.Path(p.from(at), parts)
 }
 
@@ -1317,7 +1317,7 @@ fn (p mut Parser&) params(lambda Bool) Array<ast.Param&>& ? Fail {
     p.skip = wasSkip
     p.brackets--
     try p.want(token.Tok.RParen)
-    ps := gather(p.prms, from)
+    ps :~ gather(p.prms, from)
     p.trailingDefaults(ps)
     p.spreadRules(ps, ok, p.spreadOk, va)
     p.spreadOk = false
@@ -1329,7 +1329,7 @@ fn (p mut Parser&) params(lambda Bool) Array<ast.Param&>& ? Fail {
 fn (p mut Parser&) trailingDefaults(ps Array<ast.Param&>&) {
     seen := false
     for prm in ps {
-        if prm.Dflt != null {
+        if prm.Dflt is not null {
             seen = true
         } else if seen {
             p.report(prm.Sp.Start, prm.Sp.End, msgs.DefaultNotTrailing(msgs.Tok(p.names.Text(prm.Name))))
@@ -1344,14 +1344,14 @@ fn (p mut Parser&) trailingDefaults(ps Array<ast.Param&>&) {
 fn (p mut Parser&) spreadRules(ps Array<ast.Param&>&, inExtern Bool, allowed Bool, valueAfter Bool) {
     seen := -1
     for i in range ps.Len() {
-        ty := ps[i].Ty
+        ty :~ ps[i].Ty
         # E31e: a SetAt's or SetSlice's value, its last parameter, follows its variadic one
-        if seen >= 0 and ps[i].Dflt == null and valueAfter and i == ps.Len() - 1 and i == seen + 1: continue
-        if seen >= 0 and ps[i].Dflt == null {
+        if seen >= 0 and ps[i].Dflt is null and valueAfter and i == ps.Len() - 1 and i == seen + 1: continue
+        if seen >= 0 and ps[i].Dflt is null {
             p.report(ps[i].Sp.Start, ps[i].Sp.End, msgs.VariadicNotLast())
             return
         }
-        if ty == null or not isSpreadType(ty): continue
+        if ty is null or not isSpreadType(ty): continue
         if inExtern or not allowed {
             p.report(ty.Span().Start, ty.Span().End, msgs.VariadicHere("an extern's" if inExtern else "a constructor's or a case's", "C's variable arguments are '...'" if inExtern else "take an array, 'xs Array<T>&'"))
             return
@@ -1360,7 +1360,7 @@ fn (p mut Parser&) spreadRules(ps Array<ast.Param&>&, inExtern Bool, allowed Boo
             p.report(ps[i].Sp.Start, ps[i].Sp.End, msgs.VariadicNotLast())
             return
         }
-        if ps[i].Dflt != null: p.report(ps[i].Dflt!.Span().Start, ps[i].Dflt!.Span().End, msgs.VariadicDefault())
+        if ps[i].Dflt is not null: p.report(ps[i].Dflt!.Span().Start, ps[i].Dflt!.Span().End, msgs.VariadicDefault())
         seen = i
     }
 }
@@ -1386,13 +1386,13 @@ fn (p mut Parser&) param(lambda Bool) ast.Param& ? Fail {
         # D8g: "xs ...T" - a variadic parameter, the call's arguments there gathered into a read-only array
         sat := p.here()
         for _ in range 3: p.advance()
-        of := try p.typeExpr()
-        ty = ast.TypeRef.Spread(p.from(sat), of)
+        of :~ try p.typeExpr()
+        ty ~ ast.TypeRef.Spread(p.from(sat), of)
     } else if not (lambda and (p.sees(token.Tok.Comma) or p.sees(token.Tok.RParen) or p.sees(token.Tok.StmtEnd))) {
-        ty = try p.typeExpr()
+        ty ~ try p.typeExpr()
     }
     dflt ast.Expr?& = null
-    if p.accept(token.Tok.Assign): dflt = try p.expr()
+    if p.accept(token.Tok.Assign): dflt ~ try p.expr()
     return ast.Param(p.from(at), name, ty, dflt)
 }
 
@@ -1430,8 +1430,8 @@ fn (p mut Parser&) typeExpr() ast.TypeRef& ? Fail {
     at := p.here()
     if p.sees(token.Tok.Weak): return try p.weakType()
     writable := p.accept(token.Tok.Mut)
-    t := try p.typeBase()
-    t = p.markers(at, t)
+    t :~ try p.typeBase()
+    t ~ p.markers(at, t)
     if writable: return ast.TypeRef.Perm(p.from(at), t, writable)
     return t
 }
@@ -1441,9 +1441,9 @@ fn (p mut Parser&) typeExpr() ast.TypeRef& ? Fail {
 fn (p mut Parser&) weakType() ast.TypeRef& ? Fail {
     at := p.here()
     p.advance()
-    t := try p.typeExpr()
-    w := weakened(t)
-    if w == null {
+    t :~ try p.typeExpr()
+    w :~ weakened(t)
+    if w is null {
         p.report(at, at + 4, msgs.WeakNotNullable($p.src.Text[I64(at) + 5:I64(p.prevEnd)]))
         return t
     }
@@ -1455,9 +1455,9 @@ fn weakened(t ast.TypeRef&) ast.TypeRef?& {
     match t {
         case ast.TypeRef.Ref(sp, of, nullable, _) { return ast.TypeRef.Ref(sp, of, true, true) if nullable else null }
         case ast.TypeRef.Perm(sp, of, w) {
-            if of == null: return null
-            inner := weakened(of)
-            return ast.TypeRef.Perm(sp, inner, w) if inner != null else null
+            if of is null: return null
+            inner :~ weakened(of)
+            return ast.TypeRef.Perm(sp, inner, w) if inner is not null else null
         }
         case _ { return null }
     }
@@ -1485,7 +1485,7 @@ fn (p mut Parser&) typeBase() ast.TypeRef& ? Fail {
             nullable := p.sees(token.Tok.Question)
             if nullable: p.advance()
             if marked: p.advance()
-            s := try p.sig(false, true, ext = ext)
+            s :~ try p.sig(false, true, ext = ext)
             f := ast.TypeRef.Func(p.from(at), s)
             if marked: return ast.TypeRef.Ref(p.from(at), f, nullable, false)
             if not bareOk {
@@ -1495,13 +1495,13 @@ fn (p mut Parser&) typeBase() ast.TypeRef& ? Fail {
             return f
         }
         case token.Tok.Enum, token.Tok.Struct, token.Tok.Trait {
-            body := try p.typeBody()
+            body :~ try p.typeBody()
             return ast.TypeRef.Shape(p.from(at), body!)
         }
         case token.Tok.Any {
             # T32: "any" before a type's name - a run-time trait value
             p.advance()
-            of := try p.typeBase()
+            of :~ try p.typeBase()
             return ast.TypeRef.Any(p.from(at), of)
         }
         case token.Tok.Iden {
@@ -1511,9 +1511,9 @@ fn (p mut Parser&) typeBase() ast.TypeRef& ? Fail {
                 p.advance()
                 p.ids.Push(try p.name())
             }
-            path := gather(p.ids, from)
+            path :~ gather(p.ids, from)
             args Array<ast.TypeRef&>& = Array<ast.TypeRef&>(0)
-            if p.sees(token.Tok.Lt): args = try p.typeArgs()
+            if p.sees(token.Tok.Lt): args ~ try p.typeArgs()
             return ast.TypeRef.Named(p.from(at), path, args)
         }
         # L18c: a function type an item of a list, parenthesized whole where it holds a comma of its own
@@ -1523,7 +1523,7 @@ fn (p mut Parser&) typeBase() ast.TypeRef& ? Fail {
             wasItem, wasSkip := p.item, p.skip
             p.item = false
             p.skip = false
-            t := try p.typeExpr() catch {
+            t :~ try p.typeExpr() catch {
                 p.item = wasItem
                 p.skip = wasSkip
                 error Fail.Syntax
@@ -1554,8 +1554,8 @@ fn isFuncType(t ast.TypeRef&) Bool { return t.IsFunc() }
 # L18c: whether a parenthesized type is grouped as it may be - a function type holding a comma of its own (several
 # results or several error items), or one with no error set before the "?" of the signature it is a result of
 fn (p Parser&) grouped(t ast.TypeRef&) Bool {
-    s := t.FuncSig()
-    if s == null: return false
+    s :~ t.FuncSig()
+    if s is null: return false
     if s.Results.Len() > 1 or s.Errors.Len() > 1: return true
     return not s.HasErrors and p.sees(token.Tok.Question)
 }
@@ -1568,7 +1568,7 @@ fn (p mut Parser&) markers(at I32, t ast.TypeRef&) ast.TypeRef& {
         nullable := p.sees(token.Tok.Question)
         if nullable: p.advance()
         p.advance()
-        r = ast.TypeRef.Ref(p.from(at), r, nullable, false)
+        r ~ ast.TypeRef.Ref(p.from(at), r, nullable, false)
     }
     return r
 }
@@ -1718,7 +1718,7 @@ fn (p mut Parser&) exprAsType(x ast.Expr&) ast.TypeRef& ? Fail {
             }
             case ast.Expr.Member(_, b, n) {
                 p.ids.Push(n)
-                e = b
+                e ~ b
             }
             case _ {
                 p.ids.Truncate(from)
@@ -1726,7 +1726,7 @@ fn (p mut Parser&) exprAsType(x ast.Expr&) ast.TypeRef& ? Fail {
             }
         }
     }
-    parts := gather(p.ids, from)
+    parts :~ gather(p.ids, from)
     rev mut Array<source.NameId>& = Array<source.NameId>(parts.Len())
     for i in range parts.Len(): rev[i] = parts[parts.Len() - 1 - i]
     return ast.TypeRef.Named(x.Span(), rev, Array<ast.TypeRef&>(0))
@@ -1784,7 +1784,7 @@ fn (p mut Parser&) block() Array<ast.Stmt&>& ? Fail {
         }
         marks := p.marks()
         start := p.pos
-        s := try p.stmt() catch {
+        s :~ try p.stmt() catch {
             if p.tooDeep or p.unclosed {
                 p.stmts.Truncate(from)
                 error Fail.Syntax
@@ -1810,7 +1810,7 @@ fn (p mut Parser&) stmt() ast.Stmt& ? Fail {
     p.stmtRoom()
     match p.peek() {
         case token.Tok.If {
-            s := try p.ifStmt()
+            s :~ try p.ifStmt()
             return s
         }
         case token.Tok.For { return try p.forStmt() }
@@ -1821,15 +1821,15 @@ fn (p mut Parser&) stmt() ast.Stmt& ? Fail {
         }
         case token.Tok.Do {
             p.advance()
-            body := try p.doBody()
+            body :~ try p.doBody()
             try p.want(token.Tok.For)
-            cond := try p.expr()
+            cond :~ try p.expr()
             sp := p.from(at)
             try p.endStmt()
             return ast.Stmt.DoFor(sp, body, cond)
         }
         case token.Tok.Match {
-            m := try p.matchBody(false)
+            m :~ try p.matchBody(false)
             sp := p.from(at)
             if p.sees(token.Tok.StmtEnd): p.advance()
             return ast.Stmt.MatchS(sp, m)
@@ -1839,10 +1839,10 @@ fn (p mut Parser&) stmt() ast.Stmt& ? Fail {
             values Array<ast.Expr&>& = Array<ast.Expr&>(0)
             if not p.atEnd() and p.lamItem {
                 # a lambda's one-line body, the lambda an item of a list: its "," is the list's (L18c)
-                values = Array<ast.Expr&>[try p.expr()]
+                values ~ Array<ast.Expr&>[try p.expr()]
             } else if not p.atEnd() {
                 p.listTry = p.here()
-                values = try p.exprList()
+                values ~ try p.exprList()
             }
             sp := p.from(at)
             try p.endStmt()
@@ -1851,7 +1851,7 @@ fn (p mut Parser&) stmt() ast.Stmt& ? Fail {
         case token.Tok.Become {
             # S21: a guaranteed tail call
             p.advance()
-            x := try p.expr()
+            x :~ try p.expr()
             sp := p.from(at)
             try p.endStmt()
             return ast.Stmt.Become(sp, x)
@@ -1859,7 +1859,7 @@ fn (p mut Parser&) stmt() ast.Stmt& ? Fail {
         case token.Tok.Yield {
             # QAG: a generator's value, handed to the Next that asked for it
             p.advance()
-            x := try p.expr()
+            x :~ try p.expr()
             sp := p.from(at)
             try p.endStmt()
             return ast.Stmt.Yield(sp, x)
@@ -1869,26 +1869,26 @@ fn (p mut Parser&) stmt() ast.Stmt& ? Fail {
             p.advance()
             # S16d: "unreachable why" - a message, evaluated only where it is reached
             msg ast.Expr?& = null
-            if k == token.Tok.Unreachable and not p.atEnd(): msg = try p.expr()
+            if k == token.Tok.Unreachable and not p.atEnd(): msg ~ try p.expr()
             sp := p.from(at)
             try p.endStmt()
             return ast.Stmt.Jump(sp, k, msg)
         }
         case token.Tok.Assert {
             p.advance()
-            cond := try p.expr()
+            cond :~ try p.expr()
             msg ast.Expr?& = null
-            if p.accept(token.Tok.Comma): msg = try p.expr()
+            if p.accept(token.Tok.Comma): msg ~ try p.expr()
             sp := p.from(at)
             try p.endStmt()
             return ast.Stmt.Assert(sp, cond, msg)
         }
         case token.Tok.Error {
             p.advance()
-            word := try p.path()
+            word :~ try p.path()
             # T19b: a word carrying a payload raised with its fields, "error ParseError.Bad(line, col)"
             args Array<ast.Expr&>?& = null
-            if p.sees(token.Tok.LParen): args = try p.args()
+            if p.sees(token.Tok.LParen): args ~ try p.args()
             sp := p.from(at)
             try p.endStmt()
             return ast.Stmt.Raise(sp, word, args)
@@ -1901,9 +1901,9 @@ fn (p mut Parser&) stmt() ast.Stmt& ? Fail {
                 if not p.accept(token.Tok.Comma): break
             }
             if p.accept(token.Tok.Assign) {
-                targets := gather(p.exprs, from)
+                targets :~ gather(p.exprs, from)
                 if targets.Len() > 1: p.listTry = p.here()
-                call := try p.expr()
+                call :~ try p.expr()
                 sp := p.from(at)
                 try p.endStmt()
                 return ast.Stmt.Spawn(sp, targets, call)
@@ -1912,27 +1912,27 @@ fn (p mut Parser&) stmt() ast.Stmt& ? Fail {
                 p.exprs.Truncate(from)
                 try p.fail(token.Tok.Assign.Describe())
             }
-            call := p.exprs[from]
+            call :~ p.exprs[from]
             p.exprs.Truncate(from)
             sp := p.from(at)
             try p.endStmt()
             return ast.Stmt.Spawn(sp, Array<ast.Expr&>(0), call)
         }
         case token.Tok.Join {
-            j := try p.joinRest(false)
+            j :~ try p.joinRest(false)
             return ast.Stmt.Join(p.from(at), j)
         }
         case token.Tok.Defer, token.Tok.ErrDefer {
             onError := p.sees(token.Tok.ErrDefer)
             p.advance()
             if p.sees(token.Tok.LBrace) {
-                body := try p.block()
+                body :~ try p.block()
                 sp := p.from(at)
                 if p.sees(token.Tok.StmtEnd): p.advance()
                 return ast.Stmt.Defer(sp, ast.Stmt.Block(sp, body), onError)
             }
             if p.sees(token.Tok.Colon) {
-                line := try p.lineBody()
+                line :~ try p.lineBody()
                 return ast.Stmt.Defer(p.from(at), line[0], onError)
             }
             # the bare "defer stmt" is gone (S19): one way to write each thing, "defer: stmt"
@@ -1941,7 +1941,7 @@ fn (p mut Parser&) stmt() ast.Stmt& ? Fail {
             error Fail.Syntax
         }
         case token.Tok.LBrace {
-            body := try p.block()
+            body :~ try p.block()
             sp := p.from(at)
             if p.sees(token.Tok.StmtEnd): p.advance()
             return ast.Stmt.Block(sp, body)
@@ -2032,7 +2032,7 @@ fn (p mut Parser&) idenStmt() ast.Stmt& ? Fail {
 
 # the names of a declaration list, held while its type and values are read
 fn (p mut Parser&) varDecl(at I32, names NameList&) ast.Stmt& ? Fail {
-    v := try p.declRest(names, p.inCtor)
+    v :~ try p.declRest(names, p.inCtor)
     sp := p.from(at)
     if p.inCtor and p.sees(token.Tok.Comma) {
         # fields on one line are separated by "," (C2, QY)
@@ -2070,24 +2070,24 @@ fn (p mut Parser&) declRest(names NameList&, field Bool) ast.VarDecl& ? Fail {
         mat := p.advance()
         perm := ast.TypeRef.Perm(source.Span(mat, p.prevEnd), null, true)
         p.advance()
-        values := try p.values(names, field)
+        values :~ try p.values(names, field)
         return ast.VarDecl(names.Names, names.Sps, perm, values, true, field)
     }
     if p.accept(token.Tok.Define) {
-        values := try p.values(names, field)
+        values :~ try p.values(names, field)
         if names.Names.Len() > 1 and values.Len() != names.Names.Len(): p.countDiag(names, values.Len())
         return ast.VarDecl(names.Names, names.Sps, null, values, true, field)
     }
     if p.accept(token.Tok.DefineLink) {
         # S4f: "r :~ x" declares a reference local linked to x
-        values := try p.values(names, field)
+        values :~ try p.values(names, field)
         if names.Names.Len() > 1 and values.Len() != names.Names.Len(): p.countDiag(names, values.Len())
         return ast.VarDecl(names.Names, names.Sps, null, values, true, field, true)
     }
-    ty := try p.typeExpr()
+    ty :~ try p.typeExpr()
     values Array<ast.Expr&>& = Array<ast.Expr&>(0)
     if p.accept(token.Tok.Assign) {
-        values = try p.values(names, field)
+        values ~ try p.values(names, field)
         if values.Len() != names.Names.Len() and names.Names.Len() > 1: p.countDiag(names, values.Len())
     }
     return ast.VarDecl(names.Names, names.Sps, ty, values, false, field)
@@ -2149,25 +2149,26 @@ fn isAssignOp(k token.Tok) Bool {
 # cover grammar of DESIGN.md point 3)
 fn (p mut Parser&) exprStmt() ast.Stmt& ? Fail {
     at := p.here()
-    first := try p.expr()
+    first :~ try p.expr()
     if p.sees(token.Tok.Comma) {
         from := p.exprs.Len()
         p.exprs.Push(first)
         for p.accept(token.Tok.Comma): p.exprs.Push(try p.expr())
-        targets := gather(p.exprs, from)
+        targets :~ gather(p.exprs, from)
         if p.sees(token.Tok.Define) and p.inCtor {
-            names := try p.namesOf(targets)
+            names :~ try p.namesOf(targets)
             return try p.varDecl(at, names)
         }
-        if p.accept(token.Tok.Define) or p.accept(token.Tok.Assign) {
+        if p.accept(token.Tok.Define) or p.accept(token.Tok.Assign) or p.accept(token.Tok.Tilde) {
             define := p.prevKind == token.Tok.Define
+            link := p.prevKind == token.Tok.Tilde
             p.listTry = p.here()
-            values := try p.exprList()
+            values :~ try p.exprList()
             sp := p.from(at)
             try p.endStmt()
-            return ast.Stmt.Multi(sp, ast.Multi(targets, define, values))
+            return ast.Stmt.Multi(sp, ast.Multi(targets, define, values, link))
         }
-        names := try p.namesOf(targets)
+        names :~ try p.namesOf(targets)
         if p.inCtor and (p.sees(token.Tok.StmtEnd) or p.sees(token.Tok.RBrace) or p.sees(token.Tok.Eof)) {
             sp := p.from(at)
             try p.endStmt()
@@ -2178,7 +2179,7 @@ fn (p mut Parser&) exprStmt() ast.Stmt& ? Fail {
     k := p.peek()
     if isAssignOp(k) {
         p.advance()
-        value := try p.expr()
+        value :~ try p.expr()
         sp := p.from(at)
         try p.endStmt()
         return ast.Stmt.Assign(sp, k, first, value)
@@ -2215,24 +2216,24 @@ fn (p mut Parser&) tryStmt() ast.Stmt& ? Fail {
     defer { p.limitAt = was }
     p.limitAt = -1
     if p.sees(token.Tok.Join) {
-        j := try p.joinRest(true)
+        j :~ try p.joinRest(true)
         return ast.Stmt.Join(p.from(at), j)
     }
     if p.sees(token.Tok.Inc) or p.sees(token.Tok.Dec) {
-        x := try p.unary()
+        x :~ try p.unary()
         inner := ast.Stmt.ExprS(x.Span(), x)
-        cl := try p.clauses(false)
+        cl :~ try p.clauses(false)
         sp := p.from(at)
         try p.endStmt()
         return ast.Stmt.TryStore(sp, inner, cl)
     }
-    x := try p.postfix()
+    x :~ try p.postfix()
     k := p.peek()
     if isAssignOp(k) {
         p.advance()
-        value := try p.expr()
+        value :~ try p.expr()
         inner := ast.Stmt.Assign(source.Span(x.Span().Start, p.prevEnd), k, x, value)
-        cl := try p.clauses(false)
+        cl :~ try p.clauses(false)
         sp := p.from(at)
         try p.endStmt()
         return ast.Stmt.TryStore(sp, inner, cl)
@@ -2241,7 +2242,7 @@ fn (p mut Parser&) tryStmt() ast.Stmt& ? Fail {
         case ast.Expr.Postfix(_, op, _) {
             if op == token.Tok.Inc or op == token.Tok.Dec {
                 inner := ast.Stmt.ExprS(x.Span(), x)
-                cl := try p.clauses(false)
+                cl :~ try p.clauses(false)
                 sp := p.from(at)
                 try p.endStmt()
                 return ast.Stmt.TryStore(sp, inner, cl)
@@ -2250,10 +2251,10 @@ fn (p mut Parser&) tryStmt() ast.Stmt& ? Fail {
         case _ { }
     }
     # E24: the whole expression the postfix begins, then the clauses
-    x = try p.binaryFrom(x, 1)
-    x = try p.condFrom(x)
+    x ~ try p.binaryFrom(x, 1)
+    x ~ try p.condFrom(x)
     reached := p.limitAt
-    cl := try p.clauses(false)
+    cl :~ try p.clauses(false)
     if cl.Len() == 0 and reached >= 0 {
         p.tooDeepAt(reached)
         error Fail.Syntax
@@ -2267,23 +2268,23 @@ fn (p mut Parser&) tryStmt() ast.Stmt& ? Fail {
 # "join { body } [catch ...]" - "try" already read when tried
 fn (p mut Parser&) joinRest(tried Bool) ast.JoinS& ? Fail {
     try p.want(token.Tok.Join)
-    body := try p.body()
-    cl := try p.clauses(false)
+    body :~ try p.body()
+    cl :~ try p.clauses(false)
     if p.sees(token.Tok.StmtEnd): p.advance()
     return ast.JoinS(tried, body, cl)
 }
 
 fn (p mut Parser&) ifStmt() ast.Stmt& ? Fail {
     at := try p.want(token.Tok.If)
-    cond := try p.expr()
-    then := try p.branch()
+    cond :~ try p.expr()
+    then :~ try p.branch()
     els ast.Stmt?& = null
     if p.accept(token.Tok.Else) {
         if p.sees(token.Tok.If) {
-            els = try p.ifStmt()
+            els ~ try p.ifStmt()
         } else {
-            b := try p.branch()
-            els = ast.Stmt.If(b.Sp, ast.If(null, b, null))
+            b :~ try p.branch()
+            els ~ ast.Stmt.If(b.Sp, ast.If(null, b, null))
         }
     }
     sp := p.from(at)
@@ -2297,7 +2298,7 @@ fn (p mut Parser&) branch() ast.Branch& ? Fail {
     at := p.here()
     if p.sees(token.Tok.Colon) {
         g := p.diags.Hold()
-        body := try p.lineBody() catch {
+        body :~ try p.lineBody() catch {
             p.diags.EndHold()
             if p.tooDeep or p.unclosed: error Fail.Syntax
             p.syncFrom()
@@ -2309,7 +2310,7 @@ fn (p mut Parser&) branch() ast.Branch& ? Fail {
     if not p.sees(token.Tok.LBrace): try p.fail(token.Tok.LBrace.Describe())
     g := p.diags.Hold()
     open := p.pos
-    body := try p.block() catch {
+    body :~ try p.block() catch {
         p.diags.EndHold()
         if p.tooDeep or p.unclosed: error Fail.Syntax
         close := p.ts.Match(I32(open))
@@ -2346,7 +2347,7 @@ fn (p mut Parser&) doBody() Array<ast.Stmt&>& ? Fail {
         p.doLine = wasDo
         p.keepEnd = wasKeep
     }
-    body := try p.lineBody()
+    body :~ try p.lineBody()
     if not p.sees(token.Tok.StmtEnd): return body
     # its "for" on the next line: said, and read as the loop's, so nothing more is said of it
     p.reportAt(p.pos, msgs.DoLineFor())
@@ -2390,7 +2391,7 @@ fn (p mut Parser&) lineBody(field Bool = false) Array<ast.Stmt&>& ? Fail {
     wasCtor := p.inCtor
     p.inCtor = field
     defer { p.inCtor = wasCtor }
-    st := try p.stmt()
+    st :~ try p.stmt()
     if field: return Array<ast.Stmt&>[st]
     match st {
         case ast.Stmt.Var(sp, _) {
@@ -2430,7 +2431,7 @@ fn (p mut Parser&) forStmt(comptimeAt I32 = -1) ast.Stmt& ? Fail {
     unrolled := comptimeAt >= 0
     if unrolled { at = comptimeAt }
     if p.sees(token.Tok.LBrace) or p.sees(token.Tok.Colon) {
-        body := try p.body()
+        body :~ try p.body()
         sp := p.from(at)
         if p.sees(token.Tok.StmtEnd): p.advance()
         return ast.Stmt.Forever(sp, body)
@@ -2447,17 +2448,17 @@ fn (p mut Parser&) forStmt(comptimeAt I32 = -1) ast.Stmt& ? Fail {
             }
             try p.want(token.Tok.In)
             tried := p.accept(token.Tok.Try)
-            src := try p.forSource()
+            src :~ try p.forSource()
             # G13, G33: an item of a reflected list names types its loop's matches take ("match f.Type")
             reflAt := p.reflNames.Len()
             if p.reflListPath(src): p.reflNames.Push(name)
-            body := try p.body() catch {
+            body :~ try p.body() catch {
                 p.reflNames.Truncate(reflAt)
                 error Fail.Syntax
             }
             p.reflNames.Truncate(reflAt)
             cl Array<ast.Catch&>& = Array<ast.Catch&>(0)
-            if tried: cl = try p.clauses(false)
+            if tried: cl ~ try p.clauses(false)
             sp := p.from(at)
             if p.sees(token.Tok.StmtEnd): p.advance()
             return ast.Stmt.ForIn(sp, ast.ForIn(key, name, src, tried, body, cl, unrolled))
@@ -2467,24 +2468,24 @@ fn (p mut Parser&) forStmt(comptimeAt I32 = -1) ast.Stmt& ? Fail {
             iat := p.here()
             nt := p.tk()
             name := try p.name()
-            names := p.one(name, source.Span(nt.Start, nt.End))
+            names :~ p.one(name, source.Span(nt.Start, nt.End))
             v ast.VarDecl?& = null
             if p.accept(token.Tok.Define) or p.accept(token.Tok.DefineLink) {
                 link := p.prevKind == token.Tok.DefineLink
-                x := try p.expr()
-                v = ast.VarDecl(names.Names, names.Sps, null, Array<ast.Expr&>[x], true, false, link)
+                x :~ try p.expr()
+                v ~ ast.VarDecl(names.Names, names.Sps, null, Array<ast.Expr&>[x], true, false, link)
             } else {
-                ty := try p.typeExpr()
+                ty :~ try p.typeExpr()
                 try p.want(token.Tok.Assign)
-                x := try p.expr()
-                v = ast.VarDecl(names.Names, names.Sps, ty, Array<ast.Expr&>[x], false, false)
+                x :~ try p.expr()
+                v ~ ast.VarDecl(names.Names, names.Sps, ty, Array<ast.Expr&>[x], false, false)
             }
             init := ast.Stmt.Var(p.from(iat), v!)
             try p.want(token.Tok.Comma)
-            cond := try p.expr()
+            cond :~ try p.expr()
             try p.want(token.Tok.Comma)
-            post := try p.simpleStmt()
-            body := try p.body()
+            post :~ try p.simpleStmt()
+            body :~ try p.body()
             sp := p.from(at)
             if p.sees(token.Tok.StmtEnd): p.advance()
             return ast.Stmt.For3(sp, ast.For3(init, cond, post, body))
@@ -2492,8 +2493,8 @@ fn (p mut Parser&) forStmt(comptimeAt I32 = -1) ast.Stmt& ? Fail {
     }
     # K3a: only a for-in is unrolled
     if unrolled { try p.fail("'for NAME in' after 'comptime'") }
-    cond := try p.expr()
-    body := try p.body()
+    cond :~ try p.expr()
+    body :~ try p.body()
     sp := p.from(at)
     if p.sees(token.Tok.StmtEnd): p.advance()
     return ast.Stmt.While(sp, cond, body)
@@ -2503,7 +2504,7 @@ fn (p mut Parser&) forStmt(comptimeAt I32 = -1) ast.Stmt& ? Fail {
 fn (p mut Parser&) forSource() ast.Expr& ? Fail {
     if p.sees(token.Tok.Range) {
         at := p.advance()
-        args := try p.exprList()
+        args :~ try p.exprList()
         return ast.Expr.Range(p.from(at), args)
     }
     return try p.expr()
@@ -2512,11 +2513,11 @@ fn (p mut Parser&) forSource() ast.Expr& ? Fail {
 # a for's post clause: an assignment or an expression, with no statement end
 fn (p mut Parser&) simpleStmt() ast.Stmt& ? Fail {
     at := p.here()
-    e := try p.expr()
+    e :~ try p.expr()
     k := p.peek()
     if isAssignOp(k) {
         p.advance()
-        v := try p.expr()
+        v :~ try p.expr()
         return ast.Stmt.Assign(p.from(at), k, e, v)
     }
     return ast.Stmt.ExprS(p.from(at), e)
@@ -2547,14 +2548,14 @@ fn (p mut Parser&) matchBody(value Bool) ast.Match& ? Fail {
         ok := known
         steps := 0
         for ok and p.ts.Toks[i].Kind == token.Tok.Dot and p.ts.Toks[i + 1].Kind == token.Tok.Iden {
-            w := p.text(p.ts.Toks[i + 1])
+            w :~ p.text(p.ts.Toks[i + 1])
             if not typeWord(w): ok = false
             i += 2
             steps++
         }
         if ok and steps > 0 and p.ts.Toks[i].Kind == token.Tok.LBrace: onType = true
     }
-    subject := try p.expr()
+    subject :~ try p.expr()
     try p.want(token.Tok.LBrace)
     wasBrackets := p.brackets
     p.brackets = 0
@@ -2572,13 +2573,13 @@ fn (p mut Parser&) matchBody(value Bool) ast.Match& ? Fail {
             if onType {
                 p.tys.Push(try p.caseType())
             } else {
-                x := try p.binary(1)
+                x :~ try p.binary(1)
                 if isTypeCasePath(x) and p.sees(token.Tok.Iden) and not p.tk().Has(token.LineBreak) {
                     # T34: "case Button b", "case Box<I64> b" - a type, then the name its instance is bound to ("_" for
                     # none)
                     nat := p.here()
                     n := try p.name()
-                    ty := p.caseTypeRef(x)
+                    ty :~ p.caseTypeRef(x)
                     p.pats.Push(ast.Pattern.Type(source.Span(x.Span().Start, p.prevEnd), ty, n, p.from(nat)))
                 } else {
                     p.pats.Push(p.pattern(x, true))
@@ -2595,10 +2596,10 @@ fn (p mut Parser&) matchBody(value Bool) ast.Match& ? Fail {
             }
             p.advance()
         }
-        alts := gather(p.pats, pfrom)
-        types := gather(p.tys, tfrom)
+        alts :~ gather(p.pats, pfrom)
+        types :~ gather(p.tys, tfrom)
         guard ast.Expr?& = null
-        if p.accept(token.Tok.If): guard = try p.expr()
+        if p.accept(token.Tok.If): guard ~ try p.expr()
         body, v := try p.caseBody(value)
         cases.Push(ast.Case(p.from(cat), alts, types, guard, body, v))
         if p.sees(token.Tok.StmtEnd): p.advance()
@@ -2618,7 +2619,7 @@ fn (p mut Parser&) caseType() ast.TypeRef& ? Fail {
 # statement does - or "case P: return x", one statement that leaves; in a match statement a block or "case P: stmt"
 fn (p mut Parser&) caseBody(value Bool) Array<ast.Stmt&>&, ast.Expr?& ? Fail {
     if p.sees(token.Tok.Colon) and (not value or leavingWord(p.look(1))) {
-        st := try p.lineBody()
+        st :~ try p.lineBody()
         return st, null
     }
     if p.sees(token.Tok.Colon) {
@@ -2629,7 +2630,7 @@ fn (p mut Parser&) caseBody(value Bool) Array<ast.Stmt&>&, ast.Expr?& ? Fail {
             p.report(colon.Start, colon.End, msgs.LineBodyOnLine())
             error Fail.Syntax
         }
-        v := try p.expr()
+        v :~ try p.expr()
         return Array<ast.Stmt&>(0), v
     }
     if value {
@@ -2639,7 +2640,7 @@ fn (p mut Parser&) caseBody(value Bool) Array<ast.Stmt&>&, ast.Expr?& ? Fail {
         p.report(at, at + 1, msgs.ValueCaseBlock())
         return Array<ast.Stmt&>(0), ast.Expr.Unreachable(p.from(at), null)
     }
-    body := try p.block()
+    body :~ try p.block()
     return body, null
 }
 
@@ -2713,7 +2714,7 @@ fn isPatPath(x ast.Expr&) Bool {
 fn (p mut Parser&) elemsPattern(sp source.Span, x ast.Expr&, items Array<ast.Expr&>&) ast.Pattern& {
     from := p.pats.Len()
     for it in items {
-        sub := p.pattern(it, false)
+        sub :~ p.pattern(it, false)
         if not valuePattern(sub) {
             p.pats.Push(sub)
             continue
@@ -2762,7 +2763,7 @@ fn (p mut Parser&) caseTypeRef(x ast.Expr&) ast.TypeRef& {
 fn (p mut Parser&) reflListPath(x ast.Expr&) Bool {
     match x {
         case ast.Expr.Member(_, _, n) {
-            w := p.names.Text(n)
+            w :~ p.names.Text(n)
             return w == "Fields" or w == "Cases" or w == "Params" or w == "Results"
         }
         case _ { return false }
@@ -2818,16 +2819,16 @@ fn (p mut Parser&) clauses(listOk Bool) Array<ast.Catch&>& ? Fail {
         if p.sees(token.Tok.Colon) {
             # S1b: a one-line body, ending at its line's end (left to the statement the clause is in), at another
             # "catch" or an "else"
-            body = try p.catchLine()
+            body ~ try p.catchLine()
             l.Push(ast.Catch(p.from(at), items.ToArray(), body, gather(p.exprs, from), true, bind, bsp))
             continue
         }
-        if braced: body = try p.block()
+        if braced: body ~ try p.block()
         if p.accept(token.Tok.Default) {
             for {
                 # a default takes the whole expression after it (R9a), as a try does (E24) - one unary in text read as
                 # before 2026-11-15 (Adjacent), where it was
-                d := try p.unary() if p.Adjacent else p.expr()
+                d :~ try p.unary() if p.Adjacent else p.expr()
                 if p.Adjacent: p.TightJoins.Push(d.Span().Start)
                 p.exprs.Push(d)
                 if not listOk or not p.accept(token.Tok.Comma): break
@@ -2835,7 +2836,7 @@ fn (p mut Parser&) clauses(listOk Bool) Array<ast.Catch&>& ? Fail {
         } else if not braced {
             try p.fail(token.Tok.LBrace.Describe())
         }
-        defaults := gather(p.exprs, from)
+        defaults :~ gather(p.exprs, from)
         l.Push(ast.Catch(p.from(at), items.ToArray(), body, defaults, braced, bind, bsp))
     }
     return l.ToArray()
@@ -2855,7 +2856,7 @@ fn (p mut Parser&) catchLine() Array<ast.Stmt&>& ? Fail {
 fn (p mut Parser&) exprList() Array<ast.Expr&>& ? Fail {
     from := p.exprs.Len()
     for {
-        x := try p.expr() catch {
+        x :~ try p.expr() catch {
             p.exprs.Truncate(from)
             error Fail.Syntax
         }
@@ -2868,16 +2869,16 @@ fn (p mut Parser&) exprList() Array<ast.Expr&>& ? Fail {
 # expr: binary [ "if" binary "else" expr ] (E28). Outside brackets an "if" first on its line never continues a
 # conditional: it begins the next statement (L18b, DESIGN.md point 7)
 fn (p mut Parser&) expr() ast.Expr& ? Fail {
-    a := try p.binary(1)
+    a :~ try p.binary(1)
     return try p.condFrom(a)
 }
 
 fn (p mut Parser&) condFrom(a ast.Expr&) ast.Expr& ? Fail {
     if not p.sees(token.Tok.If) or (p.brackets == 0 and p.breakBefore()): return a
     p.advance()
-    c := try p.binary(1)
+    c :~ try p.binary(1)
     try p.want(token.Tok.Else)
-    b := try p.expr()
+    b :~ try p.expr()
     return ast.Expr.Cond(source.Span(a.Span().Start, p.prevEnd), a, c, b)
 }
 
@@ -2928,7 +2929,7 @@ fn isOrdering(k token.Tok) Bool { return k == token.Tok.Lt or k == token.Tok.Le 
 
 # precedence climbing: operators binding at least as tightly as min
 fn (p mut Parser&) binary(min I64) ast.Expr& ? Fail {
-    left := try p.unary()
+    left :~ try p.unary()
     return try p.binaryFrom(left, min)
 }
 
@@ -2947,15 +2948,15 @@ fn (p mut Parser&) binaryFrom(first ast.Expr&, min I64) ast.Expr& ? Fail {
         p.advance()
         if k == token.Tok.Not {
             p.advance()
-            right := try p.binary(pr + 1)
-            left = ast.Expr.NotIn(source.Span(start, p.prevEnd), left, right)
+            right :~ try p.binary(pr + 1)
+            left ~ ast.Expr.NotIn(source.Span(start, p.prevEnd), left, right)
             try p.enter()
             links++
             continue
         }
         # E10d: "is not" is one operator, the negation of "is"
         if k == token.Tok.Is and p.accept(token.Tok.Not): k = token.Tok.IsNot
-        right := try p.binary(pr + 1)
+        right :~ try p.binary(pr + 1)
         if isOrdering(k) and isOrdering(p.peek()) and p.prec(p.peek()) > 0 {
             # a chain: a < b <= c (E30)
             ops mut Vec<token.Tok>& = Vec<token.Tok>()
@@ -2973,19 +2974,22 @@ fn (p mut Parser&) binaryFrom(first ast.Expr&, min I64) ast.Expr& ? Fail {
                 try p.enter()
                 links++
             }
-            left = ast.Expr.Chain(source.Span(start, p.prevEnd), ast.Chain(ops.ToArray(), gather(p.exprs, from)))
+            left ~ ast.Expr.Chain(source.Span(start, p.prevEnd), ast.Chain(ops.ToArray(), gather(p.exprs, from)))
             continue
         }
         # E10c: "x is null" is the null test, one tree with the comparison of x with the null literal, so every pass
         # that reads a null test (S8e's narrowing, the evaluator) reads it as it reads "x == null"
         if (k == token.Tok.Is or k == token.Tok.IsNot) and (nullLit(left) or nullLit(right)) {
             k = token.Tok.EqEq if k == token.Tok.Is else token.Tok.NotEq
+        } else if (k == token.Tok.EqEq or k == token.Tok.NotEq) and (nullLit(left) or nullLit(right)) {
+            # E10c: the null test is written "is null" - "==" compares contents, and null has none
+            p.report(I32(left.Span().End), I32(right.Span().Start), msgs.NullTestEq(k == token.Tok.NotEq))
         }
         if k == token.Tok.Amp or k == token.Tok.Pipe or k == token.Tok.Caret {
             if comparison(left): p.Mixed.Push(left.Span())
             if comparison(right): p.Mixed.Push(right.Span())
         }
-        left = ast.Expr.Binary(source.Span(start, p.prevEnd), k, left, right)
+        left ~ ast.Expr.Binary(source.Span(start, p.prevEnd), k, left, right)
         # each operator applied makes the tree on its left one level deeper, counted once it is built (L21)
         try p.enter()
         links++
@@ -3002,19 +3006,19 @@ fn (p mut Parser&) unary() ast.Expr& ? Fail {
             p.advance()
             try p.enter()
             defer: p.leave()
-            x := try p.binary(4)
+            x :~ try p.binary(4)
             return ast.Expr.Unary(p.from(at), token.Tok.Not, x)
         }
         case token.Tok.Embed {
             # E38: "embed PATH", the path a unary as a prefix operator's operand is
             p.advance()
-            x := try p.unary()
+            x :~ try p.unary()
             return ast.Expr.Unary(p.from(at), token.Tok.Embed, x)
         }
         case token.Tok.Minus, token.Tok.Tilde, token.Tok.Inc, token.Tok.Dec {
             k := p.peek()
             p.advance()
-            x := try p.unary()
+            x :~ try p.unary()
             return ast.Expr.Unary(p.from(at), k, x)
         }
         case token.Tok.StrLit, token.Tok.Dollar {
@@ -3037,17 +3041,17 @@ fn (p mut Parser&) spread() ast.Expr& ? Fail {
     if k == token.Tok.Comma or k == token.Tok.RBrack or k == token.Tok.RParen or k == token.Tok.StmtEnd {
         return ast.Expr.Spread(p.from(at), ast.Expr.Name(p.from(at), p.names.Intern("_")))
     }
-    x := try p.unary()
+    x :~ try p.unary()
     return ast.Expr.Spread(p.from(at), x)
 }
 
 # E5a: a postfix expression raised to a power - "x ** y", tighter than a prefix operator ("-x ** 2" is "-(x ** 2)")
 # and right-associative ("2 ** 3 ** 2" is "2 ** 9"): the exponent a unary, so "2 ** -1" is read too
 fn (p mut Parser&) power() ast.Expr& ? Fail {
-    x := try p.postfix()
+    x :~ try p.postfix()
     if not p.sees(token.Tok.StarStar): return x
     p.advance()
-    y := try p.unary()
+    y :~ try p.unary()
     sp := source.Span(x.Span().Start, p.prevEnd)
     try p.enter()
     p.leave()
@@ -3060,11 +3064,11 @@ fn (p mut Parser&) power() ast.Expr& ? Fail {
 fn (p mut Parser&) adjacent(at I32) ast.Expr& ? Fail {
     # a literal with something else after it is a postfix primary ("a b".Split(" "))
     if p.sees(token.Tok.StrLit) and p.look(1) != token.Tok.StrLit and p.look(1) != token.Tok.Dollar { return try p.postfix() }
-    x := try p.oldPiece()
+    x :~ try p.oldPiece()
     for p.sees(token.Tok.StrLit) or p.sees(token.Tok.Dollar) {
         p.JoinGaps.Push(p.prevEnd)
-        y := try p.oldPiece()
-        x = ast.Expr.Binary(p.from(at), token.Tok.Plus, x, y)
+        y :~ try p.oldPiece()
+        x ~ ast.Expr.Binary(p.from(at), token.Tok.Plus, x, y)
     }
     if x != ast.Expr.Binary: return x
     p.Joins.Push(p.from(at))
@@ -3088,10 +3092,10 @@ fn (p mut Parser&) rendering() ast.Expr& ? Fail {
     if k == token.Tok.Minus or k == token.Tok.Tilde or k == token.Tok.Dollar {
         p.advance()
         inner := p.here()
-        x := try p.postfix()
+        x :~ try p.postfix()
         return ast.Expr.Unary(p.from(at), token.Tok.Dollar, ast.Expr.Unary(p.from(inner), k, x))
     }
-    x := try p.postfix()
+    x :~ try p.postfix()
     return ast.Expr.Unary(p.from(at), token.Tok.Dollar, x)
 }
 
@@ -3099,7 +3103,7 @@ fn (p mut Parser&) rendering() ast.Expr& ? Fail {
 fn (p mut Parser&) postfix() ast.Expr& ? Fail {
     try p.enter()
     defer: p.leave()
-    x := try p.primary()
+    x :~ try p.primary()
     return try p.postfixFrom(x)
 }
 
@@ -3109,49 +3113,49 @@ fn (p mut Parser&) postfixFrom(first ast.Expr&) ast.Expr& ? Fail {
     for {
         match p.peek() {
             case token.Tok.LBrack {
-                x = try p.index(x)
+                x ~ try p.index(x)
             }
             case token.Tok.Dot {
                 if not p.memberNext(): return x
                 p.advance()
                 n := try p.methodName()
-                x = ast.Expr.Member(p.from(start), x, n)
+                x ~ ast.Expr.Member(p.from(start), x, n)
                 # alias.Type<args>(...): a generic type through an import, known to the oracle
                 if p.sees(token.Tok.Lt) and p.isQualifiedType(x) {
-                    targs := try p.typeArgs()
-                    x = ast.Expr.Generic(p.from(start), x, targs)
-                    x = try p.literalAfterType(start, x)
+                    targs :~ try p.typeArgs()
+                    x ~ ast.Expr.Generic(p.from(start), x, targs)
+                    x ~ try p.literalAfterType(start, x)
                 } else if p.sees(token.Tok.Lt) and isPath(x) and p.oracle.fnsQualified.Has(p.src.TextOf(x.Span())) {
                     # alias.big<I64>: a generic function's instance through an import (G12)
-                    targs := try p.typeArgs()
-                    x = ast.Expr.Generic(p.from(start), x, targs)
+                    targs :~ try p.typeArgs()
+                    x ~ ast.Expr.Generic(p.from(start), x, targs)
                 } else if p.typeArgsCall(0) or p.spacedTypeArgs(0) {
                     # x.Narrow<I32>(): a method's type arguments, by C#'s rule (G12) - written with spaces, said
                     if p.spacedTypeArgs(0): p.report(p.here(), p.lookTok(0).End, msgs.TypeArgsSpaced(p.names.Text(n)))
-                    targs := try p.typeArgs()
-                    x = ast.Expr.Generic(p.from(start), x, targs)
+                    targs :~ try p.typeArgs()
+                    x ~ ast.Expr.Generic(p.from(start), x, targs)
                 }
             }
             case token.Tok.LParen {
-                args := try p.args()
-                x = ast.Expr.Call(p.from(start), x, args)
+                args :~ try p.args()
+                x ~ ast.Expr.Call(p.from(start), x, args)
             }
             case token.Tok.Inc, token.Tok.Dec, token.Tok.Bang {
                 k := p.peek()
                 p.advance()
-                x = ast.Expr.Postfix(p.from(start), k, x)
+                x ~ ast.Expr.Postfix(p.from(start), k, x)
             }
             case token.Tok.As {
                 p.advance()
-                t := try p.typeExpr()
-                x = ast.Expr.As(p.from(start), x, t)
+                t :~ try p.typeExpr()
+                x ~ ast.Expr.As(p.from(start), x, t)
             }
             case token.Tok.Amp {
                 if p.half != token.Tok.Eof: return x
                 # alias.Name&[...]: a marked element type through an import, always a literal (point 1)
                 if not isPath(x) or p.look(1) != token.Tok.LBrack: return x
-                nt := try p.exprAsType(x)
-                x = try p.arrayLit(start, p.markers(start, nt))
+                nt :~ try p.exprAsType(x)
+                x ~ try p.arrayLit(start, p.markers(start, nt))
             }
             case _ { return x }
         }
@@ -3190,9 +3194,9 @@ fn (p mut Parser&) index(x ast.Expr&) ast.Expr& ? Fail {
     if p.sees(token.Tok.Colon) or not p.sees(token.Tok.RBrack) {
         lo ast.Expr?& = null
         if not p.sees(token.Tok.Colon) {
-            lo = try p.elem()
+            lo ~ try p.elem()
             if p.comprehends() {
-                elem := try p.exprAsType(x)
+                elem :~ try p.exprAsType(x)
                 return try p.comprehension(start, elem, lo)
             }
             # E19: "Names[k: v, ...]" - a keyed literal of a type the oracle knows, never a slice of it
@@ -3205,7 +3209,7 @@ fn (p mut Parser&) index(x ast.Expr&) ast.Expr& ? Fail {
             }
         }
         p.Subscripts.Push(lb)
-        first := try p.axisItem(p.here() if lo == null else lo.Span().Start, lo)
+        first :~ try p.axisItem(p.here() if lo is null else lo.Span().Start, lo)
         # E16a: one range alone is the one-axis slice
         if p.sees(token.Tok.RBrack) and isAxis(first) {
             p.advance()
@@ -3237,7 +3241,7 @@ fn (p mut Parser&) axisItem(at I32, lo ast.Expr?&) ast.Expr& ? Fail {
     if not p.accept(token.Tok.Colon): return lo!
     hi ast.Expr?& = null
     k := p.peek()
-    if k != token.Tok.RBrack and k != token.Tok.Comma and k != token.Tok.StmtEnd: hi = try p.expr()
+    if k != token.Tok.RBrack and k != token.Tok.Comma and k != token.Tok.StmtEnd: hi ~ try p.expr()
     return ast.Expr.Axis(p.from(at), lo, hi)
 }
 
@@ -3278,15 +3282,15 @@ fn (p mut Parser&) bareLit() ast.Expr& ? Fail {
         p.exprs.Push(ast.Expr.Axis(p.from(cat), null, null))
     } else if not p.sees(token.Tok.RBrack) {
         if p.sees(token.Tok.RParen) or p.sees(token.Tok.RBrace): try p.fail(token.Tok.RBrack.Describe())
-        first := try p.elem()
+        first :~ try p.elem()
         if p.comprehends(): return try p.comprehension(at, null, first)
         keyed := p.sees(token.Tok.Colon)
-        if keyed: first = try p.entry(first)
+        if keyed: first ~ try p.entry(first)
         if keyed and p.comprehends(): return try p.comprehension(at, null, first)
         p.exprs.Push(first)
         for try p.sep(token.Tok.RBrack) {
             x ast.Expr& = try p.elem()
-            if keyed: x = try p.entry(x)
+            if keyed: x ~ try p.entry(x)
             p.exprs.Push(x)
         }
     }
@@ -3323,7 +3327,7 @@ fn (p mut Parser&) args() Array<ast.Expr&>& ? Fail {
                 error Fail.Syntax
             }
             p.advance()
-            x := try p.expr() catch {
+            x :~ try p.expr() catch {
                 p.exprs.Truncate(from)
                 p.brackets--
                 p.skip = wasSkip
@@ -3331,7 +3335,7 @@ fn (p mut Parser&) args() Array<ast.Expr&>& ? Fail {
             }
             p.exprs.Push(ast.Expr.Named(p.from(at), n, x))
         } else {
-            x := try p.expr() catch {
+            x :~ try p.expr() catch {
                 p.exprs.Truncate(from)
                 p.brackets--
                 p.skip = wasSkip
@@ -3340,7 +3344,7 @@ fn (p mut Parser&) args() Array<ast.Expr&>& ? Fail {
             # G37: "T(e for p in T.Params)" - a comprehension standing as arguments, its own item of the list
             if p.comprehends() {
                 at := I32(x.Span().Start)
-                x = try p.comprehension(at, null, x, token.Tok.RParen) catch {
+                x ~ try p.comprehension(at, null, x, token.Tok.RParen) catch {
                     p.exprs.Truncate(from)
                     p.brackets--
                     p.skip = wasSkip
@@ -3386,7 +3390,7 @@ fn (p mut Parser&) primary() ast.Expr& ? Fail {
             wasSkip, wasItem := p.skip, p.item
             p.skip = true
             p.item = false
-            x := try p.expr() catch {
+            x :~ try p.expr() catch {
                 p.brackets--
                 p.skip = wasSkip
                 p.item = wasItem
@@ -3405,7 +3409,7 @@ fn (p mut Parser&) primary() ast.Expr& ? Fail {
         case token.Tok.Comptime {
             # K3: computed while compiling - the whole expression after it, as a try's reach (E24)
             p.advance()
-            x := try p.expr()
+            x :~ try p.expr()
             return ast.Expr.Unary(p.from(at), token.Tok.Comptime, x)
         }
         case token.Tok.Try {
@@ -3413,32 +3417,32 @@ fn (p mut Parser&) primary() ast.Expr& ? Fail {
             # clauses then end the try, and the expression around it goes on (a default is one unary)
             listOk := at == p.listTry
             p.advance()
-            x := try p.expr()
-            cl := try p.clauses(listOk)
+            x :~ try p.expr()
+            cl :~ try p.clauses(listOk)
             return ast.Expr.Try(p.from(at), x, cl)
         }
         case token.Tok.Fn {
             p.advance()
             item := p.item
-            s := try p.sig(true, true)
-            body := try p.lambdaBody(item)
+            s :~ try p.sig(true, true)
+            body :~ try p.lambdaBody(item)
             return ast.Expr.Lambda(p.from(at), ast.Func(p.from(at), null, source.NameId(0), s, body))
         }
         case token.Tok.Match {
-            m := try p.matchBody(true)
+            m :~ try p.matchBody(true)
             return ast.Expr.MatchE(p.from(at), m)
         }
         case token.Tok.Unreachable {
             # S16d: "unreachable [why]" where a value is expected - its message the expression after it on its line
             p.advance()
             msg ast.Expr?& = null
-            if p.messageHere(): msg = try p.expr()
+            if p.messageHere(): msg ~ try p.expr()
             return ast.Expr.Unreachable(p.from(at), msg)
         }
         case token.Tok.Any {
             # an array literal of run-time trait values, its element type written as $ renders it: "any W&[a, b]"
             # (T32, E19) - "any" begins no other expression
-            elem := try p.typeExpr()
+            elem :~ try p.typeExpr()
             return try p.arrayLit(at, elem)
         }
         case token.Tok.Iden {
@@ -3448,7 +3452,7 @@ fn (p mut Parser&) primary() ast.Expr& ? Fail {
             if k2 == token.Tok.Lt and p.oracle.bare.Has(name) {
                 # a generic type applied: Array<I32>(n), Pair<I32, I64>(1, 2), List<String&>[...]
                 p.advance()
-                targs := try p.typeArgs()
+                targs :~ try p.typeArgs()
                 x := ast.Expr.Generic(p.from(at), ast.Expr.Name(p.from(at), name), targs)
                 return try p.literalAfterType(at, x)
             }
@@ -3456,7 +3460,7 @@ fn (p mut Parser&) primary() ast.Expr& ? Fail {
                 # a generic function's instance: big<I64>(x), f := big<I64> (G12)
                 if not p.oracle.fns.Has(name) and p.spacedTypeArgs(1) { p.report(p.lookTok(1).Start, p.lookTok(1).End, msgs.TypeArgsSpaced(p.text(t))) }
                 p.advance()
-                targs := try p.typeArgs()
+                targs :~ try p.typeArgs()
                 return ast.Expr.Generic(p.from(at), ast.Expr.Name(p.from(at), name), targs)
             }
             if k2 == token.Tok.Question and p.look(2) == token.Tok.Amp and p.look(3) == token.Tok.LBrack {
@@ -3475,7 +3479,7 @@ fn (p mut Parser&) primary() ast.Expr& ? Fail {
                                                p.oracle.bare.Has(name)) {
                     p.advance()
                     nt ast.TypeRef& = ast.TypeRef.Named(p.from(at), Array<source.NameId>(1, name), Array<ast.TypeRef&>(0))
-                    elem := p.markers(at, nt)
+                    elem :~ p.markers(at, nt)
                     return try p.arrayLit(at, elem)
                 }
             }
@@ -3504,7 +3508,7 @@ fn (p mut Parser&) literalAfterType(at I32, x ast.Expr&) ast.Expr& ? Fail {
             from := p.ids.Len()
             pathIds(base, p.ids)
             nt ast.TypeRef& = ast.TypeRef.Named(sp, gather(p.ids, from), targs)
-            elem := p.markers(at, nt)
+            elem :~ p.markers(at, nt)
             return try p.arrayLit(at, elem)
         }
         case _ { return x }
@@ -3529,16 +3533,16 @@ fn (p mut Parser&) arrayLit(at I32, elem ast.TypeRef&) ast.Expr& ? Fail {
     from := p.exprs.Len()
     if not p.sees(token.Tok.RBrack) {
         if p.sees(token.Tok.RParen) or p.sees(token.Tok.RBrace): try p.fail(token.Tok.RBrack.Describe())
-        first := try p.elem()
+        first :~ try p.elem()
         if p.comprehends(): return try p.comprehension(at, elem, first)
         # E19: "k: v" - the keyed form, every item an entry, held as a binary ":" no other expression is
         keyed := p.sees(token.Tok.Colon)
-        if keyed: first = try p.entry(first)
+        if keyed: first ~ try p.entry(first)
         if keyed and p.comprehends(): return try p.comprehension(at, elem, first)
         p.exprs.Push(first)
         for try p.sep(token.Tok.RBrack) {
             x ast.Expr& = try p.elem()
-            if keyed: x = try p.entry(x)
+            if keyed: x ~ try p.entry(x)
             p.exprs.Push(x)
         }
     }
@@ -3553,7 +3557,7 @@ fn (p mut Parser&) arrayLit(at I32, elem ast.TypeRef&) ast.Expr& ? Fail {
 # an entry of a keyed literal after its key: ": value" (E19)
 fn (p mut Parser&) entry(k ast.Expr&) ast.Expr& ? Fail {
     try p.want(token.Tok.Colon)
-    v := try p.elem()
+    v :~ try p.elem()
     return ast.Expr.Binary(source.Span(k.Span().Start, v.Span().End), token.Tok.Colon, k, v)
 }
 
@@ -3590,12 +3594,12 @@ fn (p mut Parser&) comprehension(at I32, elem ast.TypeRef?&, value ast.Expr&, cl
             p.exprs.Push(try p.binary(1))
             if not p.accept(token.Tok.Comma): break
         }
-        src = ast.Expr.Range(p.from(rat), gather(p.exprs, from))
+        src ~ ast.Expr.Range(p.from(rat), gather(p.exprs, from))
     } else {
-        src = try p.binary(1)
+        src ~ try p.binary(1)
     }
     filter ast.Expr?& = null
-    if p.accept(token.Tok.If): filter = try p.binary(1)
+    if p.accept(token.Tok.If): filter ~ try p.binary(1)
     if close == token.Tok.RParen { return ast.Expr.Compr(p.from(at), ast.Compr(null, value, key, name, src!, filter, true)) }
     try p.want(token.Tok.RBrack)
     return ast.Expr.Compr(p.from(at), ast.Compr(elem, value, key, name, src!, filter))
@@ -3749,7 +3753,7 @@ fn (p mut Parser&) valueAfterEq(f I64) Bool {
     ls := I64(p.src.LineStart(I32(p.lineAt(f))))
     le := paren
     for le < p.src.Text.Len() and p.src.Text[le] != '\n': le++
-    line := p.src.Text[ls:le]
+    line :~ p.src.Text[ls:le]
     n := line.Len()
     at := paren - ls
     if at <= 0 or at >= n: return false
@@ -3802,7 +3806,7 @@ fn shapeOf(text String&, types String& = "", all Bool = false) String {
     file := diags.AddFile(src.Path, src.Text)
     ts := scan.Tokens.Scan(src.Text)
     p := Parser(src, ts, names, o, diags, file)
-    decls := p.File()
+    decls :~ p.File()
     if all: diags.ChooseAll()
     b := StringBuilder()
     for d in decls {
@@ -3827,7 +3831,7 @@ fn shapeDecl(d ast.Decl&, names source.Names&, text String&) String {
             b.Push("type " + $names.Text(t.Name))
             match t.Body {
                 case ast.TypeBody.Trait(ms, _, _) {
-                    for m in ms: b.Push(" " + $("mut " if m.Recv != null else "") + $names.Text(m.Name))
+                    for m in ms: b.Push(" " + $("mut " if m.Recv is not null else "") + $names.Text(m.Name))
                 }
                 case _ { }
             }
@@ -3842,9 +3846,9 @@ fn shapeStmt(s ast.Stmt&, names source.Names&, text String&) String {
         case ast.Stmt.ExprS(_, x): shapeExpr(x, names, text)
         case ast.Stmt.Return(_, vs): "return" + $(" " + $shapeExpr(vs[0], names, text) if vs.Len() > 0 else "")
         case ast.Stmt.Become(_, x): "become " + $shapeExpr(x, names, text)
-        case ast.Stmt.Var(_, v): "var" + $v.Names.Len() + $(" :=" if v.Infer else "") + $(" typed" if v.Ty != null else "")
-        case ast.Stmt.Multi(_, m): "multi" + $m.Targets.Len() + $(":=" if m.Define else "=") + $m.Values.Len()
-        case ast.Stmt.If(_, i): "if" + $(" else" if i.Else != null else "")
+        case ast.Stmt.Var(_, v): "var" + $v.Names.Len() + $(" :=" if v.Infer else "") + $(" typed" if v.Ty is not null else "")
+        case ast.Stmt.Multi(_, m): "multi" + $m.Targets.Len() + $(":=" if m.Define else "~" if m.Link else "=") + $m.Values.Len()
+        case ast.Stmt.If(_, i): "if" + $(" else" if i.Else is not null else "")
         case _: "stmt"
     }
 }

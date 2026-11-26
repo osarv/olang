@@ -13,15 +13,15 @@ type Hold struct(v I64) {
 type Holder struct() {
     cur mut Hold?&
 }
-fn setN(x mut Node&, h mut Hold&) { h.n = x }
+fn setN(x mut Node&, h mut Hold&) { h.n ~ x }
 fn main() ? {
     s := Holder()
     for i in range 3 {
-        s.cur = Hold(i)
-        o := match i % 2 { case 7: unreachable case _: s.cur }
+        s.cur ~ Hold(i)
+        o :~ match i % 2 { case 7: unreachable case _: s.cur }
         setN(Node(9 + i), o)
         assert s.cur!.n.v == 9 + i
-        p := s.cur
+        p :~ s.cur
         join { spawn setN(Node(20 + i), p!) }
         assert s.cur!.n.v == 20 + i
     }

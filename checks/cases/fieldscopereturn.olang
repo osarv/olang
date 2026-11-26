@@ -50,7 +50,7 @@ fn all() String {
     b := Body("-body")
     s := StringBuilder()
     for i in range 4 {
-        o := c.lowerAs(b, i)
+        o :~ c.lowerAs(b, i)
         t := churn(20)
         s.Push(o.lines[0] + " " + $t + " ")
     }

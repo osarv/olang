@@ -45,7 +45,7 @@ fn (b mut Box&) defaulted(s String&, ok Bool) { b.texts.Push(try maybe(s, ok) ca
 
 fn (b mut Box&) ended(s String&) { b.texts.Push(maybe(s, true)!) }
 
-fn (b mut Box&) kept(s String&) { b.last = $s + "." }
+fn (b mut Box&) kept(s String&) { b.last ~ $s + "." }
 
 # a view of its own text: no allocation's start
 fn trimmed(s String&) String {
@@ -53,11 +53,11 @@ fn trimmed(s String&) String {
     return t.Trim()
 }
 
-fn (b mut Box&) keptCall(s String&) { b.last = made(s) }
+fn (b mut Box&) keptCall(s String&) { b.last ~ made(s) }
 
-fn (b mut Box&) keptTrim(s String&) { b.last = trimmed(s) }
+fn (b mut Box&) keptTrim(s String&) { b.last ~ trimmed(s) }
 
-fn (b mut Box&) keptDefault(s String&, ok Bool) { b.last = try maybe(s, ok) catch default "none" }
+fn (b mut Box&) keptDefault(s String&, ok Bool) { b.last ~ try maybe(s, ok) catch default "none" }
 
 test "a conditional's chosen arm given to a reference" {
     b mut Box& = Box()

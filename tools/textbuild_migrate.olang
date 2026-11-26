@@ -20,10 +20,10 @@ import "std/io"
 import "srcmask"
 
 fn main() ? io.Error {
-    args := os.Args()
+    args :~ os.Args()
     for k in range 1, args.Len() {
-        path := args[k]
-        text := try os.ReadFile(path) catch os.Error {
+        path :~ args[k]
+        text :~ try os.ReadFile(path) catch os.Error {
             try io.PutErrLn("textbuild_migrate: " + $path + ": cannot be read")
             continue
         }
@@ -37,18 +37,18 @@ fn main() ? io.Error {
 # the name a line declares as the String of a new array of characters, and the line rewritten to declare the array -
 # "" and the line as it is for any other
 fn declared(line String&) String, String {
-    t := line.TrimStart()
-    ind := line[:line.Len() - t.Len()]
+    t :~ line.TrimStart()
+    ind :~ line[:line.Len() - t.Len()]
     i := 0
     for i < t.Len() and srcmask.IsWord(t[i]): i++
     if i == 0: return "", $line
-    name := t[:i]
-    rest := t[i:]
+    name :~ t[:i]
+    rest :~ t[i:]
     for pre in Array<String&>[" := String(Array<Char>(", " mut String& = String(Array<Char>(", " String& = String(Array<Char>(", " := String(Array<U8>("
                        " mut String& = String(Array<U8>(", " String& = String(Array<U8>("] {
         if not rest.StartsWith(pre) or not rest.EndsWith("))"): continue
-        args := rest[pre.Len():rest.Len() - 2]
-        el := "U8" if pre.Contains("U8") else "Char"   # (a buffer of bytes C fills stays one)
+        args :~ rest[pre.Len():rest.Len() - 2]
+        el :~ "U8" if pre.Contains("U8") else "Char"   # (a buffer of bytes C fills stays one)
         return $name, $ind + $name + " := Array<" + $el + ">(" + $args + ")"
     }
     return "", $line
@@ -56,10 +56,10 @@ fn declared(line String&) String, String {
 
 # "return NAME" for one of names, with the value made String(NAME); the line as it is otherwise
 fn returned(line String&, names Vec<String&>&) String {
-    t := line.TrimStart()
-    ind := line[:line.Len() - t.Len()]
+    t :~ line.TrimStart()
+    ind :~ line[:line.Len() - t.Len()]
     if not t.StartsWith("return "): return $line
-    v := t[7:].TrimEnd()
+    v :~ t[7:].TrimEnd()
     for n in names {
         if v == n: return $ind + "return String(" + $n + ")"
     }
@@ -70,7 +70,7 @@ fn returned(line String&, names Vec<String&>&) String {
 fn globalAt(text String&, i I64) Bool {
     ls := i
     for ls > 0 and text[ls - 1] != '\n': ls--
-    pre := text[ls:i]
+    pre :~ text[ls:i]
     if pre.Len() < 2 or not pre.EndsWith(" ") or not srcmask.IsIdStart(pre[0]): return false
     for c in pre[:pre.Len() - 1] {
         if not srcmask.IsWord(c): return false
@@ -108,7 +108,7 @@ fn writtenAfter(lines Array<String&>&, i I64, name String&) Bool {
 
 fn migrate(text0 String&) String {
     text := readOnly(text0)
-    lines := text.Split("\n")
+    lines :~ text.Split("\n")
     mask := srcmask.Mask(text, false)
     b := StringBuilder()
     names Vec<String&>
@@ -118,12 +118,12 @@ fn migrate(text0 String&) String {
         at += l.Len() + 1
         if l.StartsWith("fn ") or l.StartsWith("}"): names = Vec<String&>()
         n, nl := declared(l)
-        out := l
+        out :~ l
         if code and n != "" and writtenAfter(lines, i, n) {
             names.Push(n)
-            out = nl
+            out ~ nl
         } else if code {
-            out = returned(l, names)
+            out ~ returned(l, names)
         }
         b.Push(out)
         if i < lines.Len() - 1: b.PushChar('\n')

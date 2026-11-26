@@ -8,7 +8,7 @@ type Vs struct(d mut Array<I64>&) {
     d
 }
 fn (s Vs&) At(i I64) V { return V(s.d, i) }
-fn f(v mut V&) { v.d = Array<I64>(3) }
+fn f(v mut V&) { v.d ~ Array<I64>(3) }
 
 fn main() ? {
     s := Vs(Array<I64>(4))

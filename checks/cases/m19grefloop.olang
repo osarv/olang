@@ -8,7 +8,7 @@ type blk struct(n I64, s String) { n, s }
 fn work(k I64) I64 {
     v := Vec<blk>()
     v.Push(blk(k, $k))
-    r := v.Ref(0)
+    r :~ v.Ref(0)
     for i in range 5000: v.Push(blk(i, $i))
     junk := Vec<blk>()
     for _ in range 5000: junk.Push(blk(-1, "zzzzzzzzzzzzzzzz"))

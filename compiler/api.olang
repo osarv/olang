@@ -34,7 +34,7 @@ type Unread error { Side }
 # the status: 0 where nothing breaks, 1 where something does, 2 where a side could not be read or did not check
 fn Mode(old String&, now String&, path String&, cfg mut build.Config&) I32 {
     d := diag.Diagnostics(diag.ColorWanted())
-    work := try os.MkTemp(prefix = "olang-api-") catch os.Error {
+    work :~ try os.MkTemp(prefix = "olang-api-") catch os.Error {
         say("olang: a scratch directory cannot be made\n")
         return 2
     }
@@ -72,7 +72,7 @@ fn said(d mut diag.Diagnostics&) I32 {
 }
 
 fn rowOf(c change&) String {
-    mark := "breaking" if c.Breaks else "deprecated" if c.Deprecated else "ok      "
+    mark :~ "breaking" if c.Breaks else "deprecated" if c.Deprecated else "ok      "
     if c.Old == "": return $"  " + $mark + "  " + $c.What + ": " + $c.New + "\n"
     if c.New == "": return $"  " + $mark + "  " + $c.What + ": " + $c.Old + "\n"
     return $"  " + $mark + "  " + $c.What + ": " + $c.Old + "\n              now: " + $c.New + "\n"
@@ -112,7 +112,7 @@ fn sources(at String&, rel String&) Vec<String&> {
         if os.Exists(at) and at.EndsWith(".olang"): out.Push(rel)
         return out
     }
-    names := try os.ReadDir(at) catch os.Error default Array<String&>(0)
+    names :~ try os.ReadDir(at) catch os.Error default Array<String&>(0)
     for n in names {
         if n.StartsWith(".") or n == "testdata": continue
         for f in sources(filepath.Join(at, n), filepath.Join(rel, n)): out.Push(f)
@@ -140,9 +140,9 @@ fn entries(root String&, rel String&, scratch String&, cfg mut build.Config&) Ve
         say($"olang: " + $file + " does not check - api compares modules that do\n")
         error Unread.Side
     }
-    text := try os.ReadFile(scratch) catch os.Error { error Unread.Side }
+    text :~ try os.ReadFile(scratch) catch os.Error { error Unread.Side }
     for line in text.Lines() {
-        parts := line.Split("\t")
+        parts :~ line.Split("\t")
         if parts.Len() == 4: out.Push(sig($parts[0], $parts[1], $parts[2], parts[3] == "deprecated"))
     }
     return out
@@ -151,8 +151,8 @@ fn entries(root String&, rel String&, scratch String&, cfg mut build.Config&) Ve
 # in the child: the module checked, its exported items and members written a line each, "key TAB kind TAB line"
 fn writeSigs(file String&, scratch String&, cfg mut build.Config&) I32 {
     d mut diag.Diagnostics& = diag.Diagnostics(false)
-    a := session.Analysis.Analyze(file, cfg, d, Map<String&, String&>())
-    if d.Errors() > 0 or a.C == null or a.Sc == null {
+    a :~ session.Analysis.Analyze(file, cfg, d, Map<String&, String&>())
+    if d.Errors() > 0 or a.C is null or a.Sc is null {
         say(d.Render())
         return 1
     }
@@ -193,7 +193,7 @@ fn pushRequires(b mut StringBuilder&, key String&, it doc.Entry&) {
 fn requiresOf(text String&) Array<String&> {
     out Vec<String&>
     for line in text.Lines() {
-        t := line.TrimStart()
+        t :~ line.TrimStart()
         if t.StartsWith("# requires: "): out.Push($t[12:].Trim())
     }
     return out.ToArray()
@@ -203,7 +203,7 @@ fn requiresOf(text String&) Array<String&> {
 # the function is a value of a function type is the importer's to rely on (T21c)
 fn pushFits(b mut StringBuilder&, key String&, it doc.Entry&) {
     for line in it.Line.Lines() {
-        t := line.TrimStart()
+        t :~ line.TrimStart()
         if not t.StartsWith("# fits: "): continue
         c := try t.Find("   #") catch default t.Len()
         if c < 8: continue
@@ -217,7 +217,7 @@ fn depMark(it doc.Entry&) String { return "deprecated" if doc.Deprecation(it.Doc
 # a doc line's signature: its first line, its comment taken off
 fn sigLine(t String&) String {
     nl := try t.Find("\n") catch default t.Len()
-    s := t[:nl]
+    s :~ t[:nl]
     c := try s.Find("   #") catch default s.Len()
     return $s[:c].Trim()
 }
@@ -314,7 +314,7 @@ fn change.fits(o sig, n sig) change {
 # a function's changed requirements (D17): one it did not have before breaks a caller that met the old ones; only
 # dropping some breaks nothing
 fn change.requires(o sig, n sig) change {
-    was := o.Line.Split("; ")
+    was :~ o.Line.Split("; ")
     for r in n.Line.Split("; ") {
         if not was.Has(r): return change(true, "requirements changed (a call meeting the old ones may now fail)", o.Line, n.Line)
     }
@@ -327,7 +327,7 @@ fn relation(w String&) Bool { return w.StartsWith("keeps ") or w.StartsWith("bor
 # the right: effect words, then "keeps x [in y]" and "borrows x"
 fn wordsOf(text String&) Array<String&> {
     out Vec<String&>
-    toks := text.Split(" ")
+    toks :~ text.Split(" ")
     i := toks.Len() - 1
     for i >= 0 {
         if EffectWords.Has(toks[i]) {
@@ -373,7 +373,7 @@ fn stripWords(s String&, given Bool, out mut Vec<fnType>&) String {
         out.Push(fnType(Array<String&>(0), given))
         b.Push(stripWords(s[open + 1:close], not given, out))
         end := tailEnd(s, close + 1)
-        tail := s[close + 1:end]
+        tail :~ s[close + 1:end]
         ws := wordsOf(tail)
         out[slot] = fnType(ws, given)
         b.Push(")")
@@ -394,7 +394,7 @@ fn stripSig(line String&, out mut Vec<fnType>&) String {
     open = open + (try line[open:].Find("(") catch default line.Len() - open)
     close := matching(line, open)
     if close < 0 or open >= line.Len(): return stripWords(line, false, out)
-    head := line[:open + 1]
+    head :~ line[:open + 1]
     params := stripWords(line[open + 1:close], true, out)
     return $head + $params + $stripWords(line[close:], false, out)
 }
@@ -404,7 +404,7 @@ fn fnTypeAt(s String&, from I64) I64 {
     for i in range from, s.Len() {
         if not s[i:].StartsWith("fn"): continue
         if i > 0 and (Char(s[i - 1]).IsLetter() or Char(s[i - 1]).IsDigit() or s[i - 1] == '_' or s[i - 1] == '.'): continue
-        rest := s[i + 2:]
+        rest :~ s[i + 2:]
         if rest.StartsWith("(") or rest.StartsWith("&(") or rest.StartsWith("?&("): return i
     }
     return -1
@@ -437,7 +437,7 @@ fn tailEnd(s String&, from I64) I64 {
 
 # tail without its trailing words
 fn untilWords(tail String&, ws Array<String&>&) String {
-    toks := tail.Split(" ")
+    toks :~ tail.Split(" ")
     n I64 = 0
     for w in ws: n += w.Split(" ").Len()
     return toks[:toks.Len() - n].Join(" ") if n > 0 else tail

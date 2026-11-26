@@ -76,9 +76,9 @@ Skipped Array<String&> = Array<String&>[
 ]
 
 fn main() {
-    args := os.Args()
+    args :~ os.Args()
     # absolute, since a case is interpreted in a directory of its own
-    olang := try os.RealPath(toolkit.Compiler()) catch os.Error { toolkit.Die("evaldiff: no compiler " + $toolkit.Compiler()) }
+    olang :~ try os.RealPath(toolkit.Compiler()) catch os.Error { toolkit.Die("evaldiff: no compiler " + $toolkit.Compiler()) }
     verbose := false
     part, parts I64 = 0, 0
     files Vec<String&>
@@ -131,13 +131,13 @@ fn result.compare(gold toolkit.Golden&, olang String&, f String&, v Bool) result
         if not e.StartsWith($f + " - "): continue
         r := result()
         r.Known = true
-        r.Row = $f + ": not interpreted - " + $e[f.Len() + 3:] + "\n"
+        r.Row ~ $f + ": not interpreted - " + $e[f.Len() + 3:] + "\n"
         return r
     }
     s0 := toolkit.StoredRun.RunStored(gold, f)
     if not s0.Found {
         r := result()
-        r.Row = $f + ": no stored run in compiler/goldens/run.txt (make rungold)\n"
+        r.Row ~ $f + ": no stored run in compiler/goldens/run.txt (make rungold)\n"
         return r
     }
     return result.program(s0, olang, f) if f.StartsWith("checks/") else result.tests(s0, olang, f, v)
@@ -165,8 +165,8 @@ fn result.tests(s0 toolkit.StoredRun&, olang String&, f String&, v Bool) result 
     rows := StringBuilder()
     diffs, unlisted I64 = 0, 0
     for name in a.Keys() {
-        x := try a.Get(name) catch default ""
-        y := try b.Get(name) catch default "missing"
+        x :~ try a.Get(name) catch default ""
+        y :~ try b.Get(name) catch default "missing"
         if x == y: continue
         diffs++
         k := listed($f + ": " + $name) or listed(f)
@@ -187,13 +187,13 @@ fn result.tests(s0 toolkit.StoredRun&, olang String&, f String&, v Bool) result 
     r.Equal = diffs == 0 and not statusDiffers
     r.Known = not r.Equal and unlisted == 0
     if r.Equal {
-        r.Row = $f + ": same " + $a.Len() + $stale(f) + "\n"
+        r.Row ~ $f + ": same " + $a.Len() + $stale(f) + "\n"
         return r
     }
     s0ok, s0f := counts(a)
     pok, pf := counts(b)
-    why := "" if b.Len() > 0 else " - " + $firstLine($p.Stdout + "\n" + $p.Stderr)
-    r.Row = ($f + ": built " + $s0ok + " ok " + $s0f + " fail (status " + $s0.Status + "); interpreted " + $pok + " ok " + $pf + " fail (status " +
+    why :~ "" if b.Len() > 0 else " - " + $firstLine($p.Stdout + "\n" + $p.Stderr)
+    r.Row ~ ($f + ": built " + $s0ok + " ok " + $s0f + " fail (status " + $s0.Status + "); interpreted " + $pok + " ok " + $pf + " fail (status " +
              $p.Status + "); " + $diffs + " differ" + $(" as listed" if r.Known else "") + $why + "\n" + $rows.ToString())
     return r
 }
@@ -202,12 +202,12 @@ fn result.tests(s0 toolkit.StoredRun&, olang String&, f String&, v Bool) result 
 # output and status held to the stored run's
 fn result.program(s0 toolkit.StoredRun&, olang String&, f String&) result {
     r := result()
-    root := try os.Cwd() catch os.Error { toolkit.Die("evaldiff: no working directory") }
-    name := filepath.Base(f)
+    root :~ try os.Cwd() catch os.Error { toolkit.Die("evaldiff: no working directory") }
+    name :~ filepath.Base(f)
     dir := $root + "/build/evaldiff/" + $name[:name.Len() - 6]
     try os.RemoveAll(dir) catch os.Error { }
     try os.MkDirAll(dir) catch os.Error { toolkit.Die("evaldiff: cannot make " + $dir) }
-    text := toolkit.Read(f)
+    text :~ toolkit.Read(f)
     toolkit.Write($dir + "/" + $name, text)
     args := Vec<String&>()
     for a in Array<String&>["timeout", limit(), "env", "OLANG_EVALUATE=1", olang]: args.Push(a)
@@ -225,13 +225,13 @@ fn result.program(s0 toolkit.StoredRun&, olang String&, f String&) result {
     r.Equal = sameOut and p.Status == s0.Status
     r.Known = not r.Equal and listed(f)
     if r.Equal {
-        r.Row = $f + ": same" + $stale(f) + "\n"
+        r.Row ~ $f + ": same" + $stale(f) + "\n"
         try os.RemoveAll(dir) catch os.Error { }
         return r
     }
-    what := "" if sameOut else ", its output (in " + $dir + ")"
+    what :~ "" if sameOut else ", its output (in " + $dir + ")"
     toolkit.Write($dir + "/interpreted.txt", $out + "\n--- standard error\n" + $p.Stderr)
-    r.Row = ($f + ": differs - status built " + $s0.Status + ", interpreted " + $p.Status + $what + $(" as listed" if r.Known else "") +
+    r.Row ~ ($f + ": differs - status built " + $s0.Status + ", interpreted " + $p.Status + $what + $(" as listed" if r.Known else "") +
              " - " + $firstLine(p.Stderr) + "\n")
     return r
 }

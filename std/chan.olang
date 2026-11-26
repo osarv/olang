@@ -60,7 +60,7 @@ type Chan<T> struct(cap I64) {
 
 # v into the ring, the lock held and a slot free; returns its ticket - how many values were placed before it
 fn place<T>(c mut Chan<T>&, v T) I64 {
-    if c.data.Len() == 0: c.data = Array<T>(c.size, v)
+    if c.data.Len() == 0: c.data ~ Array<T>(c.size, v)
     c.data[c.tail] = v
     c.tail = (c.tail + 1) % c.size
     c.count = c.count + 1
@@ -333,7 +333,7 @@ test "the ring buffer wraps" {
 
 test "a wait with a token returns what is there, and gives up when the deadline passes" {
     c mut Chan<I32>& = Chan<I32>(1)
-    tok := cancel.Token.After(30)
+    tok :~ cancel.Token.After(30)
     try SendUntil(c, 5, tok)
     assert (try RecvUntil(c, tok) catch default -1) == 5
     start := cancel.NowNs()
@@ -392,7 +392,7 @@ fn wakesNow<T>(c mut Chan<T>&) I64 {
 test RecvUntil "a wait blocks until its deadline, without waking on a timer" {
     c mut Chan<I32>& = Chan<I32>(1)
     start := cancel.NowNs()
-    tok := cancel.Token.After(200)
+    tok :~ cancel.Token.After(200)
     assert (try RecvUntil(c, tok) catch cancel.Stopped.TimedOut default -1 catch default -2) == -1
     assert cancel.NowNs() - start >= 200000000
     assert wakesNow(c) <= 2
@@ -546,10 +546,10 @@ test "a channel of capacity 0 is a rendezvous" {
     }
     assert total.v == 4950 and sentAll.v == 1
     # nobody receives, so a send with a deadline gives up - and its value is withdrawn, not left behind
-    tok := cancel.Token.After(20)
+    tok :~ cancel.Token.After(20)
     try SendUntil(c, 7, tok) catch cancel.Stopped.TimedOut { }
     assert c.count == 0
-    tok2 := cancel.Token.After(20)
+    tok2 :~ cancel.Token.After(20)
     assert (try RecvUntil(c, tok2) catch cancel.Stopped.TimedOut default -1 catch default -2) == -1
 }
 
@@ -564,7 +564,7 @@ test "a closed channel gives what it holds, then fails with CLOSED" {
     Close(c)                                 # again: nothing changes
     assert c.IsClosed()
     assert (try Recv(c) catch default -1) == 1
-    tok := cancel.Token.After(1000)
+    tok :~ cancel.Token.After(1000)
     assert (try RecvUntil(c, tok) catch default -1) == 2
     sum := 0
     for v in c { sum += v }                  # the rest, then the loop ends
@@ -604,7 +604,7 @@ test "Close wakes every task waiting to receive, and RecvUntil sees it before it
     c mut Chan<I32>& = Chan<I32>(2)
     seen mut sumBox& = sumBox(0)
     got mut sumBox& = sumBox(0)
-    tok := cancel.Token.After(60000)
+    tok :~ cancel.Token.After(60000)
     start := cancel.NowNs()
     join {
         for _ in range 3: spawn walkCount(c, seen)
@@ -687,7 +687,7 @@ fn (c Chan<T>&) Due() I64 { return 0 }
 
 # the send, without waiting for room: Exhausted while the channel is full, Error.Closed once it is closed
 fn (s mut SendOf<T>&) TryNow() Sent ? Error, Exhausted {
-    c := s.c
+    c :~ s.c
     pthread.pthread_mutex_lock(c.lock)
     try sendOpen(c)
     if c.count == c.size or (c.rendezvous and c.waiting == 0) {
@@ -728,7 +728,7 @@ fn Ready<A, B, C, D>.Select<I Case<A ? E>, J Case<B ? E>, K Case<C ? E>, L Case<
 fn Ready<A, B, C, D>.pick<I Case<A ? E>, J Case<B ? E>, K Case<C ? E>, L Case<D ? E> ? E>(a mut I&, b mut J&, c mut K&
     d mut L&) Ready<A, B, C, D> ? E, Exhausted {
     x := try a.TryNow() catch Exhausted {
-        y := try b.TryNow() catch Exhausted {
+        y :~ try b.TryNow() catch Exhausted {
             z := try c.TryNow() catch Exhausted { return Ready<A, B, C, D>.Fourth(try d.TryNow()) }
             return Ready<A, B, C, D>.Third(z)
         }

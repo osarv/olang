@@ -31,11 +31,11 @@ fn main() ? {
     for _ in range 2 {
         tk := lx.next()
         toks.Push(tk)
-        t := lx.next().text
+        t :~ lx.next().text
         names.Push(t)
         u := lx.next()
         keep(names, u.text)
-        w := lx.next().text
+        w :~ lx.next().text
         assert w.Len() == 3
     }
     churn()

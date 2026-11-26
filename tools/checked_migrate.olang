@@ -107,25 +107,25 @@ fn rewrite(src String&, mask String&, parts Vec<I64>&) String, String {
     end := parts[n - 1]
     last := parts[n - 2]
     if src[last] == '[' {
-        base := src[parts[0]:last]
+        base :~ src[parts[0]:last]
         # T[...] after a type's name is an array literal or a comprehension, no index
         if n == 3 and base[0].IsUpper(): return "", ""
-        inner := srcmask.Strip(src[last + 1:end - 1])
+        inner :~ srcmask.Strip(src[last + 1:end - 1])
         colon := topLevel(src, mask, last + 1, end - 1, ':')
         if colon >= 0 {
-            lo := srcmask.Strip(src[last + 1:colon])
-            hi := srcmask.Strip(src[colon + 1:end - 1])
-            if lo.Len() == 0: lo = "0"
-            if hi.Len() == 0: hi = $base + ".Len()"
+            lo :~ srcmask.Strip(src[last + 1:colon])
+            hi :~ srcmask.Strip(src[colon + 1:end - 1])
+            if lo.Len() == 0: lo ~ "0"
+            if hi.Len() == 0: hi ~ $base + ".Len()"
             return $base + ".SliceOf(" + $lo + ", " + $hi + ")", "ArrayError"
         }
         if topLevel(src, mask, last + 1, end - 1, ',') >= 0 or inner.Len() == 0: return "", ""
         return $base + ".Get(" + $inner + ")", "ArrayError"
     }
     if n == 3 and src[last] == '(' and isNumber(src[parts[0]:last]) {
-        x := srcmask.Strip(src[last + 1:end - 1])
+        x :~ srcmask.Strip(src[last + 1:end - 1])
         if x.Len() == 0 or topLevel(src, mask, last + 1, end - 1, ',') >= 0: return "", ""
-        t := src[parts[0]:last]
+        t :~ src[parts[0]:last]
         if simple(x) and chainCovers(x): return $x + ".Narrow<" + $t + ">()", "NumberError"
         return $"(" + $x + ").Narrow<" + $t + ">()", "NumberError"
     }
@@ -159,7 +159,7 @@ fn checksIn(src String&, mask String&, a I64, b I64, last I64, first I64) Bool {
         }
         if srcmask.IsIdStart(ch) and (k == a or not srcmask.IsWord(src[k - 1])) {
             e := nameEnd(src, k)
-            word := src[k:e]
+            word :~ src[k:e]
             if word == "as": return true
             if isNumber(word) and e < b and src[e] == '(' and k != first: return true
         }
@@ -227,7 +227,7 @@ fn statementEnd(src String&, i I64) I64 {
         e := try src[j:].FindByte('\n') catch default (src.Len() - j)
         j += e
         if j >= src.Len(): return src.Len()
-        rest := srcmask.StripStart(src[j + 1:])
+        rest :~ srcmask.StripStart(src[j + 1:])
         if not rest.StartsWith("catch"): return j
         j++
     }
@@ -293,7 +293,7 @@ fn migrate(path String&, src String&, c mut Result&) String {
             continue
         }
         endOp := parts[parts.Len() - 1]
-        after := srcmask.StripStart(src[endOp:])
+        after :~ srcmask.StripStart(src[endOp:])
         store := (after.StartsWith("=") and not after.StartsWith("==")) or after.StartsWith("+=") or after.StartsWith("-=") or
             after.StartsWith("*=") or after.StartsWith("++") or after.StartsWith("--")
         op, k := rewrite(src, mask, parts)
@@ -362,9 +362,9 @@ fn main() ? {
     check := false
     verbose := false
     paths Vec<String&>
-    args := os.Args()
+    args :~ os.Args()
     for i in range 1, args.Len() {
-        a := args[i]
+        a :~ args[i]
         if a == "--check": check = true
         else if a == "-v": verbose = true
         else: paths.Push($a)
@@ -397,7 +397,7 @@ fn main() ? {
             }
         }
     }
-    verb := "would change " if check else "changed "
+    verb :~ "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files: " + $total.changes + " rewrites")
     for l in total.left: srcmask.Say("by hand: " + $l)
     if check and changed > 0: os.Exit(1)

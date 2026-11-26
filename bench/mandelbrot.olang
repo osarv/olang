@@ -4,7 +4,7 @@ import "std/io"
 import "std/os"
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     n I64 = 200
     if args.Len() > 1: n = try args[1].ParseInt()
     rowBytes I64 = (n + 7) / 8

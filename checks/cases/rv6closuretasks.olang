@@ -16,7 +16,7 @@ fn work(f fn&(i I64) I64, base I64) I64 {
 fn main() ? {
     root Node& = Node(0)
     f := fn(i I64) I64 {
-        n := mk(root, i)
+        n :~ mk(root, i)
         return n.v + n.w
     }
     s1, s2, s3 I64
@@ -24,7 +24,7 @@ fn main() ? {
         spawn s1 = work(f, 0)
         spawn s2 = work(f, 1000000)
         for i in range 50000 {
-            n := mk(root, 2000000 + i)
+            n :~ mk(root, 2000000 + i)
             s3 += n.v + n.w
         }
     }

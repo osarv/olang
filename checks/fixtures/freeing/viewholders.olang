@@ -17,14 +17,14 @@ fn main() {
     }
     t := 0
     for i in range N {
-        r := v[i % 4].a.View()
+        r :~ v[i % 4].a.View()
         f := fn() I64 { return r[1] }
         p := Q()
         p.a = Vec<I64>[i, i]
         v[i % 4] = p
         t += f()
         {
-            s := v[(i + 1) % 4].a.View()
+            s :~ v[(i + 1) % 4].a.View()
             w := Q()
             w.a = Vec<I64>[i, i + 1]
             v[(i + 1) % 4] = w

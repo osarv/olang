@@ -17,7 +17,7 @@ type Box struct(w Wrap&) {
 fn peek(w Wrap&) I64 { return w.a.v }
 fn id<T>(x T) T { return x }
 fn kept<T>(x T) T {
-    y := x
+    y :~ x
     return y
 }
 fn main() ? {
@@ -35,10 +35,10 @@ fn main() ? {
         z := (Wrap(local) if c else Wrap(local)).a.v
         l := Vec<Wrap&>()
         l.Push(Wrap(local))
-        g := id(Wrap(local))
+        g :~ id(Wrap(local))
         id(Wrap(local))
-        h := kept(Wrap(local))
-        m := match k {
+        h :~ kept(Wrap(local))
+        m :~ match k {
             case 42: Wrap(local)
             case _: Wrap(local)
         }

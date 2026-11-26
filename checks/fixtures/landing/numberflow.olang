@@ -12,7 +12,7 @@ fn measure(t String&) I64 { return t.Len() }
 fn Summary.scan(n I64) Summary {
     s := Summary()
     for i in range n {
-        l := line(i)
+        l :~ line(i)
         v := measure(l)
         if v > s.best: s.best = v
     }

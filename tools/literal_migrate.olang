@@ -22,14 +22,14 @@ import "std/filepath"
 import "srcmask"
 
 fn main() {
-    args := os.Args()
+    args :~ os.Args()
     check := false
     verbose := false
     std := $srcmask.RepoRoot() + "/std"
     files Vec<String&>
     k := 1
     for k < args.Len() {
-        a := args[k]
+        a :~ args[k]
         if a == "--check": check = true
         else if a == "-v": verbose = true
         else if a == "--std" and k + 1 < args.Len() {
@@ -74,7 +74,7 @@ fn known.load(std String&) known {
         k.bare.Put($"I" + $i, true)
         k.bare.Put($"U" + $i, true)
     }
-    names := try os.ReadDir($std + "/prelude") catch default Array<String&>(0)
+    names :~ try os.ReadDir($std + "/prelude") catch default Array<String&>(0)
     for n in names {
         if not n.EndsWith(".olang"): continue
         text := try srcmask.ReadText($std + "/prelude/" + $n) catch os.Error { continue }
@@ -107,9 +107,9 @@ fn (k mut known&) makersOf(path String&) Map<String, Bool>& {
 fn fromIterOwners(text String&) Vec<String> {
     out Vec<String>
     for line in text.Split("\n") {
-        t := srcmask.Strip(line)
+        t :~ srcmask.Strip(line)
         if not t.StartsWith("fn ") or not (".FromIter" in t): continue
-        n := word(t, 3)
+        n :~ word(t, 3)
         if n.Len() > 0: out.Push($n)
     }
     return out
@@ -119,10 +119,10 @@ fn fromIterOwners(text String&) Vec<String> {
 fn declaredTypes(text String&) Vec<String> {
     out Vec<String>
     for line in text.Split("\n") {
-        t := srcmask.Strip(line)
-        if t.StartsWith("extern type "): t = t[7:]
+        t :~ srcmask.Strip(line)
+        if t.StartsWith("extern type "): t ~ t[7:]
         if not t.StartsWith("type "): continue
-        n := word(t, 5)
+        n :~ word(t, 5)
         if n.Len() > 0: out.Push($n)
     }
     return out
@@ -150,7 +150,7 @@ fn scope.of(path String&, text String&, mask String&, k mut known&) scope {
     for t in declaredTypes(text): s.own.Put($t, true)
     for n in fromIterOwners(text): s.builders.Put($n, true)
     for line in text.Split("\n") {
-        t := srcmask.Strip(line)
+        t :~ srcmask.Strip(line)
         if t.StartsWith("import "): s.addImport(path, t, k)
         if t.StartsWith("fn ") or t.StartsWith("type ") or t.StartsWith("extern type "): s.addVars(t, k)
     }
@@ -166,11 +166,11 @@ fn (s mut scope&) addImport(path String&, line String&, k mut known&) {
 
 fn importOf(path String&, line String&, std String&) String, String {
     q := try line.FindByte('"') catch { return "", "" }
-    rest := line[q + 1:]
+    rest :~ line[q + 1:]
     e := try rest.FindByte('"') catch { return "", "" }
-    mod := rest[:e]
+    mod :~ rest[:e]
     if mod.EndsWith(".h") or mod.EndsWith(".c"): return "", ""
-    head := srcmask.Strip(line[7:q])
+    head :~ srcmask.Strip(line[7:q])
     alias := $head if head.Len() > 0 else $filepath.Base(mod)
     file := ""
     if mod.StartsWith("std/"): file = $std + "/" + $mod[4:] + ".olang"
@@ -185,7 +185,7 @@ fn (k mut known&) aliasesOf(file String&) Map<String, String>& {
     m Map<String, String>
     text := try srcmask.ReadText(file) catch default ""
     for line in text.Split("\n") {
-        t := srcmask.Strip(line)
+        t :~ srcmask.Strip(line)
         if not t.StartsWith("import "): continue
         alias, f := importOf(file, t, k.std)
         if f.Len() > 0: m.Put(alias, f)
@@ -202,7 +202,7 @@ fn (s mut scope&) addVars(line String&, k known&) {
         if c == '<' { depth++ } else if c == '>' { depth-- }
         if depth <= 0 or not c.IsUpper(): continue
         if i > 0 and (srcmask.IsWord(line[i - 1]) or line[i - 1] == '.'): continue
-        n := word(line, i)
+        n :~ word(line, i)
         if k.bare.Has($n) or s.own.Has($n): continue
         s.vars.Put($n, true)
     }
@@ -233,7 +233,7 @@ fn front.read(text String&, mask String&, i I64) front {
     }
     path Vec<String>
     for {
-        n := word(text, j)
+        n :~ word(text, j)
         if n.Len() == 0: return front.none()
         path.Push($n)
         j += n.Len()
@@ -340,7 +340,7 @@ fn rewrite(text String&, mask String&, s scope&, k mut known&) String {
 # types known (every module's by its base name) and a single capital letter a type variable
 fn migrateMarkdown(text String&, k mut known&) String {
     s := scope()
-    names := try os.ReadDir(k.std) catch default Array<String&>(0)
+    names :~ try os.ReadDir(k.std) catch default Array<String&>(0)
     for n in names {
         if n.EndsWith(".olang"): s.aliases.Put($n[:n.Len() - 6], $k.std + "/" + $n)
     }
@@ -351,7 +351,7 @@ fn migrateMarkdown(text String&, k mut known&) String {
     for line in text.Split("\n") {
         if not first: b.PushChar('\n')
         first = false
-        t := srcmask.Strip(line)
+        t :~ srcmask.Strip(line)
         if t.StartsWith("```") {
             fenced = not fenced
             b.Push(line)
@@ -380,7 +380,7 @@ fn spans(line String&, s scope&, k mut known&) String {
             b.Push(line[start:])
             break
         }
-        code := line[start:start + e]
+        code :~ line[start:start + e]
         b.Push(rewrite(code, srcmask.Mask(code, false), s, k))
         b.PushChar('`')
         i = start + e + 1
@@ -403,7 +403,7 @@ test "old fronts become the array they made; new ones are left as they are" {
 }
 
 test "a type of an import declaring a FromIter, and one declaring none (bulk review 8)" {
-    dir := os.MkTemp(prefix = "litmig")!
+    dir :~ os.MkTemp(prefix = "litmig")!
     os.WriteFile($dir + "/bag.olang", "type Bag struct(N I64) { N }\nfn Bag.FromIter<I Iterator<Bag ? E>, ? E>(it mut I&) Bag ? E { return Bag(0) }\ntype Pt struct(x I64) { x }\n")!
     k := known()
     text := "import bag \"bag\"\nfn main() {\n    a := bag.Bag[bag.Bag(2), bag.Bag(3)]\n    b := bag.Pt[bag.Pt(1)]\n}\n"

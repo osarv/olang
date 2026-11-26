@@ -34,7 +34,7 @@ test "text orders by its bytes with < and the comparisons derived from it" {
     ab, empty, upper, lower := "ab", "", "B", "b"
     assert ab < "abc" and empty < "a" and upper < "a" and not (lower < "B")         # bytewise: upper case first
     assert "a" < "b" < "c" and not ("a" < "c" < "b")                                # chained, as for numbers
-    words := "pear fig apple kiwi banana".Split(" ")
+    words :~ "pear fig apple kiwi banana".Split(" ")
     words.Sort(fn(x, y) { return x < y })
     assert words.Join(" ") == "apple banana fig kiwi pear"
 }
@@ -63,12 +63,12 @@ test "Lines gives each line without its newline, as io.Lines reads a file's" {
     assert bracketed("a\r\nb\r\n") == "[a][b]" and bracketed("a\r") == "[a]" and bracketed("\r\n") == "[]"
     assert bracketed("a\r\r\nb") == "[a\r][b]"                       # only the one carriage return goes
     text String& = "first\nsecond\n\nfourth"
-    kept := linesOf(text)
+    kept :~ linesOf(text)
     assert kept.Len() == 4 and kept[0] == "first" and kept[2] == "" and kept[3] == "fourth"
     n I64 = 0
     it := text.Lines()
     for {
-        line := try it.Next() catch Exhausted { break }
+        line :~ try it.Next() catch Exhausted { break }
         n += line.Len()
     }
     assert n == 17 and (try it.Next() catch default "end") == "end"      # an iterator that has run out stays out
@@ -79,7 +79,7 @@ test "Join puts a separator between the texts of an array" {
     assert Array<String&>["a", "b", "c"].Join(", ") == "a, b, c"
     assert Array<String&>["only"].Join(", ") == "only" and Array<String&>(0).Join(", ") == ""
     assert Array<String&>["", "", ""].Join("-") == "--" and Array<String&>["x", "y"].Join("") == "xy"
-    parts := "2026-10-09".Split("-")
+    parts :~ "2026-10-09".Split("-")
     assert parts.Join("/") == "2026/10/09"
     assert $Array<String&>["a", "b"] == "Array<String&>[\"a\", \"b\"]"                   # $ renders the array as source
 }
@@ -364,8 +364,8 @@ test "text goes to C NUL-terminated and comes back copied (X15)" {
     c := "abc".ToC()
     assert c.Len() == 4 and c[3] == 0 and c[0] == 'a'
     assert "".ToC() == Array<U8>[0]
-    e := strerror(2)
-    assert e != null
+    e :~ strerror(2)
+    assert e is not null
     s := String.FromC(e, 100)
     assert s == "No such file or directory"
     assert String.FromC(e, 2) == "No" and String.FromC(e, 0) == ""

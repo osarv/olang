@@ -6,7 +6,7 @@
 type N struct(v I64) { v }
 fn second(a N&, b N&) N& { return b }
 fn use(f fn&(a N&, b N&) N& borrows a, a N&) I64 {
-    r := f(a, N(2))
+    r :~ f(a, N(2))
     return r.v
 }
 

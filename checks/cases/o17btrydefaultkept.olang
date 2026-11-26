@@ -18,7 +18,7 @@ type BagState struct() {
 type Bag struct() {
     s mut BagState& = BagState()
 }
-fn (b Bag&) Sneak(v I64) { b.s.head = Node(v, b.s.head) }
+fn (b Bag&) Sneak(v I64) { b.s.head ~ Node(v, b.s.head) }
 fn (b Bag&) Keep(l mut Vec<mut BagState&>&) { l.Push(b.s) }
 fn main() ? {
     a := Array<Bag>(1, Bag())
@@ -30,6 +30,6 @@ fn main() ? {
     }
     try churn()
     t := 0
-    for st in kept { if st.head != null { t = t * 10 + st.head!.v } }
+    for st in kept { if st.head is not null { t = t * 10 + st.head!.v } }
     assert kept.Len() == 3 and t == 1, $kept.Len() + " " + $t
 }

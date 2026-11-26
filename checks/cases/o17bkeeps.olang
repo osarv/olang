@@ -8,7 +8,7 @@ type St struct() {
     back mut H?& = null
 }
 type H struct() { s mut St& = St() }
-fn (h mut H&) backlink() { h.s.back = h }
+fn (h mut H&) backlink() { h.s.back ~ h }
 fn main() ? {
     m := Map<I64, H>()
     m.Put(1, H())

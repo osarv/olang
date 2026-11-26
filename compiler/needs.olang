@@ -43,14 +43,14 @@ type walker struct(C mut typecheck.Checker&, F I64, Depth I64) {
 
 fn (w mut walker&) run() {
     owner := generic.FnOwner(w.F)
-    decl := w.C.P.FnDecl(w.F)
+    decl :~ w.C.P.FnDecl(w.F)
     w.file = w.C.P.L.Mods[w.C.P.FnModule(w.F)].File
     for i in range w.C.P.VarCount(owner) {
         w.found.Push(Vec<String&>())
         if not w.C.P.ErrVarAt(owner, i): w.vars.Put(w.C.P.VarAt(owner, i).Name, i)
     }
     if w.vars.Len() == 0: return
-    if decl.Recv != null: w.param(decl.Recv!.Name, decl.Recv!.Ty)
+    if decl.Recv is not null: w.param(decl.Recv!.Name, decl.Recv!.Ty)
     for p in decl.S.Params: w.param(p.Name, p.Ty)
     w.stmts(decl.Body)
 }
@@ -64,7 +64,7 @@ fn (w mut walker&) param(n source.NameId, t ast.TypeRef?&) {
 
 # the variable a written type is, a reference to it or a permission over it included; -1 for none
 fn (w mut walker&) varOf(t ast.TypeRef?&) I64 {
-    if t == null: return -1
+    if t is null: return -1
     match t {
         case ast.TypeRef.Named(_, path, args) {
             if path.Len() != 1 or args.Len() > 0: return -1
@@ -78,10 +78,10 @@ fn (w mut walker&) varOf(t ast.TypeRef?&) I64 {
 
 # the variable a written type holds as its elements - Array<T>, Vec<T> - -1 for none
 fn (w mut walker&) elemOf(t ast.TypeRef?&) I64 {
-    if t == null: return -1
+    if t is null: return -1
     match t {
         case ast.TypeRef.Named(_, path, args) {
-            last := w.C.P.L.Names.Text(path[path.Len() - 1])
+            last :~ w.C.P.L.Names.Text(path[path.Len() - 1])
             if args.Len() != 1 or (last != "Array" and last != "Vec"): return -1
             return w.varOf(args[0])
         }
@@ -93,7 +93,7 @@ fn (w mut walker&) elemOf(t ast.TypeRef?&) I64 {
 
 # the variable an expression's value is of, -1 for none known
 fn (w mut walker&) valOf(x ast.Expr?&) I64 {
-    if x == null: return -1
+    if x is null: return -1
     match x {
         case ast.Expr.Name(_, n) { return try w.vals.Get(n) catch default -1 }
         case ast.Expr.Paren(_, y) { return w.valOf(y) }
@@ -137,8 +137,8 @@ fn (w mut walker&) unpromised(k I64) Vec<String&> {
 # a trait's methods by name as its declaration writes them, and those of the traits it extends
 fn (w mut walker&) traitMethods(tr types.TypeId, out mut Vec<String&>&) {
     if w.C.P.T.KindOf(tr) != types.Kind.Named: return
-    td := w.C.P.TypeDecl(w.C.P.T.DeclOf(tr))
-    if td == null: return
+    td :~ w.C.P.TypeDecl(w.C.P.T.DeclOf(tr))
+    if td is null: return
     match td.Body {
         case ast.TypeBody.Trait(ms, _, _) {
             for m in ms {
@@ -255,13 +255,13 @@ fn (w mut walker&) assign(t ast.Expr&, v ast.Expr&) {
 fn (w mut walker&) ifStmt(i ast.If&) {
     if w.reflects(i.Cond): return
     w.expr(i.Cond)
-    if i.Then != null: w.stmts(i.Then!.Body)
-    if i.Else != null: w.stmt(i.Else!)
+    if i.Then is not null: w.stmts(i.Then!.Body)
+    if i.Else is not null: w.stmt(i.Else!)
 }
 
 # whether a condition reads a type variable's reflected member ("T.Kind == ...")
 fn (w mut walker&) reflects(x ast.Expr?&) Bool {
-    if x == null: return false
+    if x is null: return false
     match x {
         case ast.Expr.Member(_, ast.Expr.Name(_, n), _) { return w.vars.Has(n) }
         case ast.Expr.Member(_, y, _) { return w.reflects(y) }
@@ -308,7 +308,7 @@ fn (w mut walker&) catches(cls Array<ast.Catch&>&) {
 # ---- expressions ----
 
 fn (w mut walker&) expr(x ast.Expr?&) {
-    if x == null: return
+    if x is null: return
     match x {
         case ast.Expr.Unary(_, op, y) {
             if op == token.Tok.Minus: w.need(w.valOf(y), "Neg")
@@ -412,7 +412,7 @@ fn (w mut walker&) through(f ast.Expr&, args Array<ast.Expr&>&) {
     if w.Depth >= 3: return
     g := w.called(f)
     if g < 0 or g == w.F or w.C.P.VarCount(generic.FnOwner(g)) == 0: return
-    ps := w.C.P.FnDecl(g).S.Params
+    ps :~ w.C.P.FnDecl(g).S.Params
     for j in range args.Len() {
         k := w.valOf(args[j])
         if k < 0 or j >= ps.Len(): continue

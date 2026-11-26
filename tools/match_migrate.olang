@@ -210,9 +210,9 @@ fn migrateMarkdown(src String&, hand mut Vec<String&>&, path String&) String {
     out := StringBuilder()
     block := StringBuilder()
     inBlock := false
-    lines := src.Split("\n")
+    lines :~ src.Split("\n")
     for k in range lines.Len() {
-        line := lines[k]
+        line :~ lines[k]
         if inBlock and line.StartsWith("```") {
             out.Push(migrate(block.ToString(), hand, path))
             block.Clear()
@@ -235,9 +235,9 @@ fn main() ? {
     check := false
     verbose := false
     paths Vec<String&>
-    args := os.Args()
+    args :~ os.Args()
     for i in range 1, args.Len() {
-        a := args[i]
+        a :~ args[i]
         if a == "--check": check = true
         else if a == "-v": verbose = true
         else: paths.Push($a)
@@ -270,7 +270,7 @@ fn main() ? {
         }
     }
     for h in hand: srcmask.Say("by hand: " + $h)
-    verb := "would change " if check else "changed "
+    verb :~ "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files")
     if check and changed > 0: os.Exit(1)
 }

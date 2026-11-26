@@ -20,7 +20,7 @@ fn f(n N) N& {
 }
 fn main() ? {
     a := N(5)
-    r := f(a)
+    r :~ f(a)
     a.v = 6
     churn()
     try io.PutLn($r.v + " " + $a.v)

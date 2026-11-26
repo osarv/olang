@@ -23,8 +23,8 @@ type Bag struct(head mut Node&) {
     head
 }
 fn (b Bag&) Str() String {
-    x := b.head
-    x = Node(7, null)
+    x :~ b.head
+    x ~ Node(7, null)
     return $x.v
 }
 fn main() ? {

@@ -8,7 +8,7 @@ type Bag struct() {
     s mut State& = State()
 }
 fn (b mut Bag&) Add(v I64) { b.s.n = b.s.n + v }
-fn (b mut Bag&) Reset() { b.s = State() }
+fn (b mut Bag&) Reset() { b.s ~ State() }
 
 fn main() ? {
     bags := Vec<Bag>()

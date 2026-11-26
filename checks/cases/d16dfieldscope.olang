@@ -16,7 +16,7 @@ type Walk struct(F fn&(id I64) I64) { F }
 type Low struct(L mut Outer&) { L }
 
 fn (ln mut Low&) walk() Walk {
-    lw := ln.L
+    lw :~ ln.L
     return Walk(fn(id I64) I64 { return lw.n + id })
 }
 

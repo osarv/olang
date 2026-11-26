@@ -31,7 +31,7 @@ fn viaPayload(r mut Box&, k I64) {
     if e == E.A {
         n := Node()
         n.v = k
-        e.b.head.next = n
+        e.b.head.next ~ n
     }
 }
 fn main() ? {

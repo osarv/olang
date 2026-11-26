@@ -229,10 +229,12 @@ type JoinS struct(Tried Bool, Body Array<Stmt&>&, Clauses Array<Catch&>&) {
 }
 
 # t1, t2 = v / t1, t2 := v / a, b = b, a (D8c, S4c): the targets, and one value per target or one for all
-type Multi struct(Targets Array<Expr&>&, Define Bool, Values Array<Expr&>&) {
+# a, b = x, y / a, b := x, y / a, b ~ x, y (Link: S4f, each reference target linked, each value target stored)
+type Multi struct(Targets Array<Expr&>&, Define Bool, Values Array<Expr&>&, Link Bool = false) {
     Targets
     Define
     Values
+    Link
 }
 
 type Stmt enum {
@@ -284,11 +286,11 @@ type Func struct(Sp source.Span, Recv Param?&, Name source.NameId, S Sig&, Body 
 }
 
 # D19: whether a function is a builder - declared on a type, "fn Color.FromHex(...)"
-fn (f Func&) IsBuilder() Bool { return f.Owner != null }
+fn (f Func&) IsBuilder() Bool { return f.Owner is not null }
 
 # D19: a builder's owner's name as written, "Color" for "fn Color.FromHex" and "List" for "fn List<T>.Of"; 0 for none
 fn (f Func&) OwnerName() source.NameId {
-    if f.Owner == null: return source.NameId(0)
+    if f.Owner is null: return source.NameId(0)
     match f.Owner! {
         case TypeRef.Named(_, path, _) { return path[path.Len() - 1] }
         case _ { return source.NameId(0) }
@@ -485,13 +487,13 @@ fn (t TypeRef&) FuncSig() Sig?& {
     }
 }
 
-fn (t TypeRef&) IsFunc() Bool { return t.FuncSig() != null }
+fn (t TypeRef&) IsFunc() Bool { return t.FuncSig() is not null }
 
 # T2d: whether t is a weak reference as written - "weak T?&", "weak mut T?&"
 fn (t TypeRef&) IsWeak() Bool {
     return match t {
         case TypeRef.Ref(_, _, _, w): w
-        case TypeRef.Perm(_, of, _): of != null and of.IsWeak()
+        case TypeRef.Perm(_, of, _): of is not null and of.IsWeak()
         case _: false
     }
 }
@@ -500,7 +502,7 @@ fn (t TypeRef&) IsWeak() Bool {
 fn (t TypeRef&) Unweak() TypeRef& {
     return match t {
         case TypeRef.Ref(sp, of, nullable, w): TypeRef.Ref(sp, of, nullable, false) if w else t
-        case TypeRef.Perm(sp, of, w): TypeRef.Perm(sp, of.Unweak(), w) if of != null else t
+        case TypeRef.Perm(sp, of, w): TypeRef.Perm(sp, of.Unweak(), w) if of is not null else t
         case _: t
     }
 }
@@ -540,7 +542,7 @@ fn FirstYield(body Array<Stmt&>&) source.Span {
 }
 
 fn yieldIn(st Stmt?&) source.Span {
-    if st == null: return NoYield
+    if st is null: return NoYield
     return match st {
         case Stmt.Yield(sp, _): sp
         case Stmt.ExprS(_, x): yieldInExpr(x)
@@ -569,7 +571,7 @@ fn yieldOr(a source.Span, b source.Span) source.Span { return a if a.Start >= I3
 
 fn yieldInIf(i If&) source.Span {
     y := yieldInExpr(i.Cond)
-    if y.Start < I32(0) and i.Then != null: y = FirstYield(i.Then!.Body)
+    if y.Start < I32(0) and i.Then is not null: y = FirstYield(i.Then!.Body)
     return yieldOr(y, yieldIn(i.Else))
 }
 
@@ -601,7 +603,7 @@ fn yieldInExprs(xs Array<Expr&>&) source.Span {
 
 # an expression's statements: a try's clauses, a match value's cases
 fn yieldInExpr(x Expr?&) source.Span {
-    if x == null: return NoYield
+    if x is null: return NoYield
     return match x {
         case Expr.Paren(_, y), Expr.Named(_, _, y), Expr.Spread(_, y), Expr.Unary(_, _, y), Expr.Postfix(_, _, y), Expr.Member(_, y, _): yieldInExpr(y)
         case Expr.As(_, y, _), Expr.Generic(_, y, _): yieldInExpr(y)
@@ -638,7 +640,7 @@ fn FindTest(ds Array<Decl&>&, sp source.Span) Decl?& {
             }
             case Decl.If(_, ti) {
                 found := Decl.findTestIf(ti, sp)
-                if found != null: return found
+                if found is not null: return found
             }
             case _ { }
         }
@@ -647,14 +649,14 @@ fn FindTest(ds Array<Decl&>&, sp source.Span) Decl?& {
 }
 
 fn Decl.findTestIf(ti TopIf?&, sp source.Span) Decl?& {
-    if ti == null: return null
-    if ti.Then != null {
-        f := FindTest(ti.Then!.Decls, sp)
-        if f != null: return f
+    if ti is null: return null
+    if ti.Then is not null {
+        f :~ FindTest(ti.Then!.Decls, sp)
+        if f is not null: return f
     }
-    if ti.Else != null {
-        f := FindTest(ti.Else!.Decls, sp)
-        if f != null: return f
+    if ti.Else is not null {
+        f :~ FindTest(ti.Else!.Decls, sp)
+        if f is not null: return f
     }
     return Decl.findTestIf(ti.ElseIf, sp)
 }
@@ -663,7 +665,7 @@ fn Decl.findTestIf(ti TopIf?&, sp source.Span) Decl?& {
 fn TestTarget(d Decl&, names source.Names&) String {
     match d {
         case Decl.Test(_, _, _, target) {
-            if target == null: return ""
+            if target is null: return ""
             b := StringBuilder()
             for i, n in target.Parts {
                 if i > 0: b.PushChar('.')
@@ -679,12 +681,12 @@ fn TestTarget(d Decl&, names source.Names&) String {
 # and a type variable's constraint for a default over one: "Iterator" for "fn (it mut I&) TakeWhile<I Iterator<T>, T>";
 # "" for no receiver or one written otherwise
 fn RecvTarget(f Func&, names source.Names&) String {
-    if f.Recv == null: return ""
-    t := f.Recv!.Ty
-    for t != null {
+    if f.Recv is null: return ""
+    t :~ f.Recv!.Ty
+    for t is not null {
         match t {
-            case TypeRef.Perm(_, of, _) { t = of }
-            case TypeRef.Ref(_, of, _, _) { t = of }
+            case TypeRef.Perm(_, of, _) { t ~ of }
+            case TypeRef.Ref(_, of, _, _) { t ~ of }
             case TypeRef.Named(_, path, _) { return nameOrConstraint(f, path[path.Len() - 1], names) }
             case _ { return "" }
         }
@@ -705,7 +707,7 @@ fn OwnerTarget(f Func&, names source.Names&) String {
 # constrained type variables, "" where its constraint is written otherwise, else n itself
 fn nameOrConstraint(f Func&, n source.NameId, names source.Names&) String {
     for tp in f.TypeParams {
-        if tp.Name != n or tp.Ty == null: continue
+        if tp.Name != n or tp.Ty is null: continue
         return match tp.Ty! {
             case TypeRef.Named(_, cpath, _): $names.Text(cpath[cpath.Len() - 1])
             case _: ""
@@ -718,7 +720,7 @@ fn nameOrConstraint(f Func&, n source.NameId, names source.Names&) String {
 fn TestDesc(d Decl&, text String&) String {
     match d {
         case Decl.Test(_, name, _, _) {
-            s := text[name.Start:name.End]
+            s :~ text[name.Start:name.End]
             if s.Len() >= 2 and s[0] == '"': return $s[1:s.Len() - 1]
             return s
         }
@@ -749,11 +751,11 @@ type Req struct(Sp source.Span, Cond Expr&, Negated Bool) {
 fn Requirements(body Array<Stmt&>&, names source.Names&, text String&, params Array<Param&>&, recv Param?&) Array<Req&>& {
     ps Vec<String&>
     for p in params: ps.Push(names.Text(p.Name))
-    if recv != null: ps.Push(names.Text(recv.Name))
+    if recv is not null: ps.Push(names.Text(recv.Name))
     out mut Vec<Req&>& = Vec<Req&>()
     for st in body {
         r := Req.leading(st, names)
-        if r == null: return out.ToArray()
+        if r is null: return out.ToArray()
         if readsAny(exprText(r.Cond, text), ps): out.Push(r)
     }
     return out.ToArray()
@@ -792,10 +794,10 @@ fn wordAt(t String&, i I64) Bool {
 
 # whether an if is a check (D17): a condition, no else, and a branch raising ArgumentError and doing nothing else
 fn isCheck(i If&, names source.Names&) Bool {
-    if i.Cond == null or i.Else != null or i.Then == null or i.Then!.Body.Len() != 1: return false
+    if i.Cond is null or i.Else is not null or i.Then is null or i.Then!.Body.Len() != 1: return false
     match i.Then!.Body[0] {
         case Stmt.Raise(_, word, _) {
-            if word == null or word.Parts.Len() == 0: return false
+            if word is null or word.Parts.Len() == 0: return false
             return $names.Text(word.Parts[0]) == "ArgumentError"
         }
         case _: return false

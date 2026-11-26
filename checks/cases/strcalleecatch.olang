@@ -30,7 +30,7 @@ fn find(n Node&, k I64) Node& ? {
     return n
 }
 fn pick(n Node&) I64 {
-    x := try find(n, 1) catch default Node(1, null)
+    x :~ try find(n, 1) catch default Node(1, null)
     return x.v
 }
 fn (b Bag&) Str() String {

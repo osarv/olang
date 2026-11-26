@@ -15,7 +15,7 @@ type H struct(k I64) {
 }
 fn Big.mk(n I64) Big { return Big(n) }
 fn set(h mut H&, n I64) {
-    h.r = Big.mk(n).a[0:2]
+    h.r ~ Big.mk(n).a[0:2]
 }
 fn churn() I64 {
     t := 0

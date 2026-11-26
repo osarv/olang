@@ -1,11 +1,11 @@
-# check: fail error[S4e]: 'p' is repointed at a new value: the caller still sees what it passed
-# S4e: after '=' repoints a reference parameter at the callee's own storage (S4a), a field written through it is a
+# check: fail error[S4e]: 'p' is linked to a new value: the caller still sees what it passed
+# S4e: after '~' links a reference parameter to the callee's own storage (S4f), a field written through it is a
 # store too - nothing reads 'p' after it, so the write never reaches the caller
 type P struct() {
     A I64 = 0
 }
 fn setp(p mut P&) {
-    p = P()
+    p ~ P()
     p.A = 5
 }
 fn main() {

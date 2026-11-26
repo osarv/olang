@@ -15,7 +15,7 @@ fn Num(t String&) I64 ? { return try deep.Parse(t) }
 fn Viewed() I64 {
     a Vec<I64>
     a.Push(1)
-    v := a.View()
+    v :~ a.View()
     deep.Touch(a)
     return v[0]
 }
@@ -37,7 +37,7 @@ type Log struct() {
     last String& = ""
 }
 
-fn (l mut Log&) Note(n I64) { l.last = "note " + $n }
+fn (l mut Log&) Note(n I64) { l.last ~ "note " + $n }
 
 fn (l Log&) Last() String& { return l.last }
 

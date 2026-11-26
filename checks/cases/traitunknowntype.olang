@@ -7,7 +7,7 @@ type Shows trait {
 }
 
 fn first<T>(d any Shows?&) T {
-    if d == null: return T(0)
+    if d is null: return T(0)
     match T {
         case F32 {
             v := d.Value()

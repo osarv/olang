@@ -463,7 +463,7 @@ fn (t Table&) PromiseWords(f TypeId) I64 { return t.promiseLists[t.PromisesOf(f)
 
 # the parameters its "borrows" names (empty where it writes none)
 fn (t Table&) BorrowsOf(f TypeId) Array<I64> {
-    p := t.promiseLists[t.PromisesOf(f)]
+    p :~ t.promiseLists[t.PromisesOf(f)]
     out := Array<I64>(p[1])
     for i in range p[1]: out[i] = p[2 + i]
     return out
@@ -472,7 +472,7 @@ fn (t Table&) BorrowsOf(f TypeId) Array<I64> {
 # its "keeps" promises, three numbers each: the kept parameter, the one it is kept in (KeepsHome: the value's home),
 # the field of that (a NameId, 0 none)
 fn (t Table&) KeepsOf(f TypeId) Array<I64> {
-    p := t.promiseLists[t.PromisesOf(f)]
+    p :~ t.promiseLists[t.PromisesOf(f)]
     from := 2 + p[1]
     out := Array<I64>(p.Len() - from)
     for i in range out.Len(): out[i] = p[from + i]
@@ -539,13 +539,13 @@ fn (t Table&) PromiseText(f TypeId) String {
 # one "keeps" promise as source writes it: "keeps b", "keeps b in a", "keeps b in a.f"
 fn (t Table&) KeepsText(f TypeId, kept I64, into I64, field I64) String {
     if into == KeepsHome: return "keeps " + $t.ParamName(f, kept)
-    fs := "." + $t.Names.Text(source.NameId(I32(field))) if field != 0 else ""
+    fs :~ "." + $t.Names.Text(source.NameId(I32(field))) if field != 0 else ""
     return "keeps " + $t.ParamName(f, kept) + " in " + $t.ParamName(f, into) + $fs
 }
 
 # parameter i of a function type by the name it was written with, else by position ("#1" the first)
 fn (t Table&) ParamName(f TypeId, i I64) String {
-    ns := t.NamesOf(f)
+    ns :~ t.NamesOf(f)
     if i < ns.Len(): return t.Names.Text(source.NameId(I32(ns[i])))
     return "#" + $(i + 1)
 }
@@ -615,7 +615,7 @@ fn (t Table&) DefaultsOf(f TypeId) Array<I64>& { return t.nameDflts[t.at(f).E] i
 
 # T21d: parameter i's default row in function type f, 0 for none
 fn (t Table&) DefaultAt(f TypeId, i I64) I64 {
-    ds := t.DefaultsOf(f)
+    ds :~ t.DefaultsOf(f)
     return ds[i] if i >= 0 and i < ds.Len() else 0
 }
 
@@ -645,7 +645,7 @@ fn (t mut Table&) Unnamed(id TypeId) TypeId {
 }
 
 fn (t mut Table&) unnamedList(l ListId) ListId {
-    xs := t.Items(l)
+    xs :~ t.Items(l)
     out := Array<TypeId>(xs.Len())
     same := true
     for i in range xs.Len() {
@@ -839,7 +839,7 @@ fn (t mut Table&) Unspread(id TypeId) TypeId {
 }
 fn (t Table&) SpreadAt(f TypeId) I64 {
     if t.KindOf(f) != Kind.Func: return -1
-    ps := t.Items(t.Params(f))
+    ps :~ t.Items(t.Params(f))
     for i in range ps.Len() {
         if t.IsSpread(ps[i]): return i
     }
@@ -912,7 +912,7 @@ fn (t mut Table&) Scopes(role I64, params Array<I64>&, results Array<I64>&) Scop
 
 # function type f as one of role: its parameters' and results' entries kept (S21's tail scope)
 fn (t mut Table&) WithRole(f TypeId, role I64) TypeId {
-    ps := t.Items(t.Params(f))
+    ps :~ t.Items(t.Params(f))
     shares := Array<I64>(ps.Len())
     for i in range ps.Len(): shares[i] = t.ShareOf(f, i)
     rs := t.Results(f)
@@ -923,19 +923,19 @@ fn (t mut Table&) WithRole(f TypeId, role I64) TypeId {
 
 # what a function type's scopes say: its role, the entry of parameter i, the entry of result k
 fn (t Table&) Role(f TypeId) I64 {
-    s := t.scopes[I64(t.ScopesOf(f))]
+    s :~ t.scopes[I64(t.ScopesOf(f))]
     return s[0] if s.Len() > 0 else RoleFn
 }
 
 # a parameter or result the record has no entry for - a result of a function with none, read as its first - is
 # OwnScope, as every entry of a plain record is (an index past the record read memory beyond it, E16e)
 fn (t Table&) ShareOf(f TypeId, i I64) I64 {
-    s := t.scopes[I64(t.ScopesOf(f))]
+    s :~ t.scopes[I64(t.ScopesOf(f))]
     return s[2 + i] if s.Len() > 0 and i >= 0 and 2 + i < s.Len() else OwnScope
 }
 
 fn (t Table&) ResultFrom(f TypeId, k I64) I64 {
-    s := t.scopes[I64(t.ScopesOf(f))]
+    s :~ t.scopes[I64(t.ScopesOf(f))]
     return s[2 + s[1] + k] if s.Len() > 0 and k >= 0 and 2 + s[1] + k < s.Len() else OwnScope
 }
 
@@ -944,7 +944,7 @@ fn (t Table&) Results(f TypeId) Array<TypeId> {
     r := t.Result(f)
     if r == VoidT: return Array<TypeId>(0)
     if t.KindOf(r) == Kind.Tuple {
-        xs := t.Items(t.Parts(r))
+        xs :~ t.Items(t.Parts(r))
         out := Array<TypeId>(xs.Len())
         for i in range xs.Len(): out[i] = xs[i]
         return out
@@ -956,7 +956,7 @@ fn (t Table&) Results(f TypeId) Array<TypeId> {
 fn (t Table&) Plain(id TypeId) TypeId { return t.plains[I64(id)] }
 
 fn (t mut Table&) PlainList(l ListId) ListId {
-    xs := t.Items(l)
+    xs :~ t.Items(l)
     same := true
     for x in xs: same = same and t.Plain(x) == x
     if same: return l
@@ -1215,7 +1215,7 @@ fn CaseBits(n I64) I64 {
 
 # T13c: a packed struct's fields' bit offsets, in order
 fn (t Table&) BitOffsets(id TypeId) Array<I64> {
-    fs := t.Items(t.Fields(id))
+    fs :~ t.Items(t.Fields(id))
     out := Array<I64>(fs.Len())
     at I64 = 0
     for i in range fs.Len() {
@@ -1354,7 +1354,7 @@ fn (t mut Table&) anchorsInto(id TypeId, at Array<I64>&, out mut Vec<Array<I64>>
     r := t.Repr(id)
     if depth > 8 or t.KindOf(r) != Kind.Named or not t.HasBody(r) or t.DeclKindOf(t.DeclOf(r)) != DeclKind.Struct: error NoOwner
     if t.Destructs(r): error NoOwner
-    fs := t.Items(t.Fields(r))
+    fs :~ t.Items(t.Fields(r))
     for i in range fs.Len() {
         path := Array<I64>(at.Len() + 1)
         for j in range at.Len(): path[j] = at[j]
@@ -1435,7 +1435,7 @@ type codeWalk struct(T Table&, Writes Bool = false, Pure Bool = false) {
 }
 
 fn (w mut codeWalk&) reaches(id TypeId) Bool {
-    t := w.T
+    t :~ w.T
     if t.CFunc(id): return true     # X13a: C's code, which may do anything
     if t.ForeignRef(id) or w.walking.Has(id): return false
     k := t.KindOf(id)
@@ -1454,7 +1454,7 @@ fn (w mut codeWalk&) reaches(id TypeId) Bool {
 }
 
 fn (w mut codeWalk&) named(id TypeId) Bool {
-    t := w.T
+    t :~ w.T
     if not t.HasBody(id): return true
     return match t.DeclKindOf(t.DeclOf(id)) {
         case DeclKind.Struct: w.some(t.Fields(id))
@@ -1521,7 +1521,7 @@ type refWalk struct(T Table&, Into Vec<TypeId>&) {
 }
 
 fn (w mut refWalk&) reaches(id TypeId) Bool {
-    t := w.T
+    t :~ w.T
     if t.ForeignRef(id) or w.walking.Has(id): return false
     k := t.KindOf(id)
     if k == Kind.Func or k == Kind.Var or k == Kind.Any or k == Kind.Unknown: return true
@@ -1539,7 +1539,7 @@ fn (w mut refWalk&) reaches(id TypeId) Bool {
 # whether a reference to a referent of this type may name storage among Into: the same representation, or - an array
 # view - an array of the same elements, whatever its length
 fn (w mut refWalk&) lands(x TypeId) Bool {
-    t := w.T
+    t :~ w.T
     r := t.Repr(x)
     if w.Into.Has(r): return true
     if t.KindOf(r) != Kind.Array: return false
@@ -1551,7 +1551,7 @@ fn (w mut refWalk&) lands(x TypeId) Bool {
 }
 
 fn (w mut refWalk&) named(id TypeId) Bool {
-    t := w.T
+    t :~ w.T
     if not t.HasBody(id): return true
     return match t.DeclKindOf(t.DeclOf(id)) {
         case DeclKind.Struct: w.some(t.Fields(id))
@@ -1598,7 +1598,7 @@ fn (t mut Table&) ScopeVarsOf(f TypeId) Array<I64> {
     role := t.Role(f)
     if role == RoleDtor: return Array<I64>[ClosingVar]
     out Vec<I64>
-    ps := t.Items(t.Params(f))
+    ps :~ t.Items(t.Params(f))
     for i in range ps.Len() {
         if t.ShareOf(f, i) == OwnScope and t.HoldsRefs(ps[i]): out.Push(i)
     }
@@ -1763,7 +1763,7 @@ type DtorWalk struct(T Table&) {
 }
 
 fn (w mut DtorWalk&) Holds(ty TypeId) Bool {
-    t := w.T
+    t :~ w.T
     r := t.Repr(ty)
     if w.seen.Has(r) { return try w.seen.Get(r) catch default false }
     w.seen.Put(r, false)
@@ -2030,7 +2030,7 @@ fn (t mut Table&) structName(id TypeId) String {
 fn (t mut Table&) aggregate(fields ListId) String {
     b := StringBuilder()
     b.Push("{ ")
-    xs := t.Items(fields)
+    xs :~ t.Items(fields)
     for i in range xs.Len() {
         if i > 0: b.Push(", ")
         b.Push(t.Llvm(xs[i]))
@@ -2172,8 +2172,8 @@ fn (t mut Table&) canon(b mut StringBuilder&, id TypeId) {
         }
         case Kind.AnonEnum {
             b.Push("enum{")
-            names := t.ShapeNames(id)
-            cases := t.Items(t.ShapeCases(id))
+            names :~ t.ShapeNames(id)
+            cases :~ t.Items(t.ShapeCases(id))
             for i in range names.Len() {
                 if i > 0: b.PushChar(' ')
                 b.Push(t.Names.Text(names[i]))
@@ -2233,7 +2233,7 @@ fn (t mut Table&) canonFunc(b mut StringBuilder&, id TypeId) {
         t.canon(b, r)
         if fnResult { b.PushChar(')') }
     }
-    errs := t.Items(t.Errors(id))
+    errs :~ t.Items(t.Errors(id))
     if errs.Len() > 0 {
         b.Push(" ?")
         if not (errs.Len() == 1 and errs[0] == DefaultErrT): t.canonErrs(b, errs)
@@ -2246,8 +2246,8 @@ fn (t mut Table&) canonFunc(b mut StringBuilder&, id TypeId) {
     }
     if t.canonNames and d.E != 0 {
         b.PushChar('{')
-        ns := t.nameLists[d.E]
-        ds := t.nameDflts[d.E]
+        ns :~ t.nameLists[d.E]
+        ds :~ t.nameDflts[d.E]
         for i in range ns.Len() {
             if i > 0: b.PushChar(',')
             b.Push(t.Names.Text(source.NameId(I32(ns[i]))))
@@ -2256,7 +2256,7 @@ fn (t mut Table&) canonFunc(b mut StringBuilder&, id TypeId) {
         b.PushChar('}')
     }
     if d.D != 0 {
-        sc := t.scopes[d.D]
+        sc :~ t.scopes[d.D]
         b.Push(" ~[")
         for i in range sc.Len() {
             if i > 0: b.PushChar(',')
@@ -2272,7 +2272,7 @@ fn (t mut Table&) canonNamed(b mut StringBuilder&, id TypeId) {
     b.Push(t.Modules[t.DeclModule(dl)])
     b.PushChar(':')
     b.Push(t.Names.Text(t.DeclName(dl)))
-    args := t.Items(t.Args(id))
+    args :~ t.Items(t.Args(id))
     # G1a: an error-set argument after the types, " ? A + B" - the empty set left out, as "Iterator<I64>" writes it
     n := args.Len()
     if n > 0 and t.KindOf(args[n - 1]) == Kind.ErrSet and t.ErrSetItems(args[n - 1]) == ListId(0): n--
@@ -2295,7 +2295,7 @@ fn (t mut Table&) canonErrs(b mut StringBuilder&, es Array<TypeId>&) {
 }
 
 fn (t mut Table&) joined(b mut StringBuilder&, l ListId) {
-    xs := t.Items(l)
+    xs :~ t.Items(l)
     for i in range xs.Len() {
         if i > 0: b.Push(", ")
         t.canon(b, xs[i])
@@ -2337,10 +2337,10 @@ fn symbolHexValue(ch Char) I64 { return I64(ch - '0') if ch <= '9' else I64(ch -
 # or a digit "_HH"; a long one is its beginning, "_H" and a hash, read back as the beginning and "..."). A symbol that is
 # not one - a C function's, the runtime's - is given as it is
 fn Demangle(sym String&) String {
-    s := sym
+    s :~ sym
     cut := false
     if s.Len() == 122 and s[88:90] == "_H" {
-        s = s[:88]
+        s ~ s[:88]
         cut = true
     }
     b := StringBuilder()

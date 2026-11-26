@@ -12,8 +12,8 @@ Turns mut I64 = 3
 fn narrowed(r Rows?&, n I64) I64 {
     s I64 = 0
     for k in range n {
-        if r != null {
-            x := r.A[k:k + 1]
+        if r is not null {
+            x :~ r.A[k:k + 1]
             s += x[0]
         }
     }

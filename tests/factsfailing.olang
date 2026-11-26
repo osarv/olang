@@ -35,7 +35,7 @@ type Holder<T> struct(n I64) {
     data mut Array<T>& = Array<T>(0)
 }
 
-fn (h mut Holder<T>&) Fill() { h.data = Array<T>(h.n) }
+fn (h mut Holder<T>&) Fill() { h.data ~ Array<T>(h.n) }
 fn (h Holder<T>&) Size() I64 { return h.n }
 
 fn (v Vec2&) Dot(w Vec2&) F64 { return v.X * w.X + v.Y * w.Y }

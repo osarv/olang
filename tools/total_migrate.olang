@@ -32,9 +32,9 @@ fn rewriteAt(text String&, at I64, ty String&) String {
 fn site(row String&) diagedit.Request {
     none := diagedit.Request("", 0, 0, "", "", "")
     if not row.StartsWith("totals: "): return none
-    rest := row[8:]
+    rest :~ row[8:]
     k := try rest.Find(": ") catch { return none }
-    loc := rest[:k].Split(":")
+    loc :~ rest[:k].Split(":")
     if loc.Len() < 3: return none
     line := try loc[loc.Len() - 2].ParseInt() catch default 0
     col := try loc[loc.Len() - 1].ParseInt() catch default 0
@@ -46,7 +46,7 @@ Taken mut I64 = 0
 
 fn compileOne(olang String&, file String&, dir String&) String {
     src := try srcmask.ReadText(file) catch { return "" }
-    mode := "test" if src.Contains("\ntest ") or src.StartsWith("test ") else "compile"
+    mode :~ "test" if src.Contains("\ntest ") or src.StartsWith("test ") else "compile"
     return try srcmask.Capture(Array<String&>["env", "OLANG_TOTALS=1", olang, mode, file], dir, 900000) catch default ""
 }
 
@@ -54,7 +54,7 @@ fn worker(olang String&, files Array<String&>&, dir String&, outputs mut Array<S
     for {
         k := Taken.AtomicAdd(1)
         if k >= files.Len(): break
-        outputs[k] = compileOne(olang, files[k], dir)
+        outputs[k] ~ compileOne(olang, files[k], dir)
     }
 }
 
@@ -62,7 +62,7 @@ fn main() ? {
     olang := srcmask.Compiler()
     jobs I64 = 3
     paths Vec<String&>
-    args := os.Args()
+    args :~ os.Args()
     i I64 = 1
     for i < args.Len() {
         if (args[i] == "--olang" or args[i] == "-j") and i + 1 < args.Len() {
@@ -83,15 +83,15 @@ fn main() ? {
     diagedit.OlangFiles(paths, files)
     allowed Vec<String&>
     for p in paths: allowed.Push(diagedit.RealPathOf(p))
-    tmp := try os.MkTemp("", "total_migrate") catch {
+    tmp :~ try os.MkTemp("", "total_migrate") catch {
         srcmask.SayErr("total_migrate: cannot make a temporary directory")
         os.Exit(1)
         unreachable
     }
     defer: try os.RemoveAll(tmp) catch { }
-    fileArray := files.ToArray()
+    fileArray :~ files.ToArray()
     outputs mut Array<String&>& = Array<String&>(fileArray.Len())
-    for k in range fileArray.Len(): outputs[k] = ""
+    for k in range fileArray.Len(): outputs[k] ~ ""
     join {
         for w in range jobs {
             dir := $tmp + "/w" + $w
@@ -123,7 +123,7 @@ fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
     made I64 = 0
     for path in paths {
         src := try srcmask.ReadText(path) catch { continue }
-        lines := src.Split("\n")
+        lines :~ src.Split("\n")
         mine Vec<diagedit.Request>
         for r in requests {
             if r.Path == path: mine.Push(r)
@@ -138,12 +138,12 @@ fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
             key := $r.Line + ":" + $r.Col
             if key in seen or r.Line - 1 >= lines.Len(): continue
             seen.Push($key)
-            out := rewriteAt(lines[r.Line - 1], r.Col - 1, r.Arg) if r.Arg != "?" else ""
+            out :~ rewriteAt(lines[r.Line - 1], r.Col - 1, r.Arg) if r.Arg != "?" else ""
             if out == "" {
                 left.Push($path + ":" + $r.Line + ":" + $r.Col + ": " + $r.Arg)
                 continue
             }
-            lines[r.Line - 1] = $out
+            lines[r.Line - 1] ~ $out
             changed = true
             made++
         }

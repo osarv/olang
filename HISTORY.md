@@ -44168,3 +44168,66 @@ Tests: tests/assign.olang (a cursor `:~`/`~` along a list, `a :~ list` written t
 contents, links through a field and an element, `~ null`; a baked global and a decided top-level assert); checks cases
 s4flinkvalue, s4flinkfresh, s4fdefinefresh, e10disvalues; isname now fails (`is` is a keyword); the aistudy sieve's
 local `is` renamed `prime`. The language server's completion words and the Neovim syntax have `is` again.
+
+## 2026-11-26: links and contents, stage 2 - the repository migrated, `=` and `==` through references flipped, `== null` refused (S4a, S4f, E10, E10c, E10d; wt-assign)
+
+Stage 1 accepted the new spellings beside the old meanings; stage 2 migrated the repository and changed the meanings.
+
+**The migration.** `tools/assign_migrate` (stage 1's, from the checker's `OLANG_ASSIGNS=1` report) over compiler/, std/,
+tests/, checks/, fuzz/, bench/, examples/ and tools/: 2082 links (`r = x` -> `r ~ x`), 5733 reference locals
+(`r := x` -> `r :~ x`), 61 identity tests (`==` -> `is`), 2165 null tests, in 760 files; a second run found 5 more (a
+generic site whose instances are all references). Six sites it listed `by hand` were `case` patterns (null and a
+struct pattern), not written `==`, and stay. What it could not reach: the prelude, which `oldForm` never noted (16
+sites, found by a build of the stage-1 compiler noting the prelude too, and one in a prelude test helper found by hand);
+parallel and destructuring assignments, which `oldForm` never saw (31 statements, found by a temporary error in the new
+checker over every file - `cells[i].s, k = x, 1`, `at, name = s.namedAt(...)`, `x, pend = c.zeroDecl(...)`), now
+written with `~`; the Markdown (48 null tests). The compiler alone needed 351 links to a **new value** (`p ~
+typed.Lvalue.Deref(...)`, `cl.Word ~ "build"`, `c.data ~ Array<T>(n, v)`): stage 1 refused `~` of a new value
+(`LinkFresh`, the decision's "a fresh value is an error"), and the alternative - a local for each value and a link to it
+- would have doubled each of those statements. So `~` of a new value builds it where the reference is held, as a
+declaration's value is and as the old repoint did (E12c: `n.next ~ Node(2)` puts the node in `n`'s scope); `:~` of one
+stays an error, `:=` declaring it (mine; a reversal of the user's detail with that evidence - a direction question for
+the user).
+
+**Generic bodies.** A site in a generic body means one thing for every `T`: `c.data[c.tail] = v` in a channel of `Node&`
+must store the reference, as it stores an `I64`. So what a type argument stands for is a value of the body
+(`Checker.typeArg`, `argRef`): `=` on such a place stores it (a reference is linked), `:=` declares it, written `==` on
+two such references compares identity, and `~`/`:~` on it are `=`/`:=` - the migration had rewritten some generic sites
+whose instances were all references (std/list's chunks, std/chan's slots, `gather` in parse and check), which then
+failed for an `I64` instance; four were put back to `=`/`:=` by hand, the rest work as written.
+
+**The meanings.** `Checker.assign`: `=` given a reference place (not a type argument's) takes `through`'s place - a
+`typed.Lvalue.Deref` of the reference read - so the store is a value place's: `writeBack`, `notCapture` (T25b: a
+read-only reference refused), `storeLambdaInto`, S4d's old-value copy, and O15's end of the old value all apply
+unchanged, and nothing after the checker changed. A reference that may be null is written through only where a test
+narrowed it (`pathOnly` targets are read again as expressions, which S8e narrows), else `WriteThroughNull`. The
+parallel and destructuring forms (`multi`, `putTarget`) take the same place, or link where the statement is `~`
+(`ast.Multi.Link`, mine: each reference target linked, each value target stored - one statement for a call giving a
+reference and a value). S4e needed nothing: `p = v` is now an `Assign` through `p`, a write the walk keeps, and `p ~ x`
+is the old repoint's tree, so `LostParamWrite` and `FreshParamRepoint` hold for links (messages reworded). `:=` of a
+reference to storage that exists (`declName`, the condition stage 1 noted as `define`) reads through it - a copy of
+what it names, `inferred` and the array fit as for a value; a unique or generational value read so is a reference
+again (T13b's `uniqueRef`, T13d's `genRef`), so `:=` of one never moves it (the hand-off's refusal was not needed); a
+reference that may be null is `ReadMaybeNull`. `Checker.equality` takes `written` (only `binaryOf`'s `==`/`!=`): two
+references to a struct or enum with no `Eq` are compared by `contentsEqual` - each read through (a `Seq` holding both
+and testing for null where either may be null, as E10a's branch for `Eq`) and compared as values; two `any` are
+`EqOfAny`. Internal comparisons (`partsEqual`, `caseCompare`, a pattern's) keep identity for a reference held inside a
+value (E10 says so now: back links and cycles end the walk). The parser refuses `x == null` / `x != null`
+(`NullTestEq`), where the token is still known. `oldForm`, `identityPrim` and `OLANG_ASSIGNS` are gone, and
+assign_migrate keeps only the null tests (it is in `olang fix`'s table, so `olang fix` rewrites the one old spelling that
+is an error now); the evaluator needed nothing - tests/assign.olang's baked global `Written` and its top-level assert
+are decided by it beside the run time, and `OLANG_EVALUATE=1` runs the file.
+
+**Migrating code written before 2026-11-26** (oann, oagent, your own): the old spellings still compile, with new
+meanings, except `== null`. Before building with this compiler, run stage 1's tool, which reads the old meanings with
+the checker's types: check out olang a6d97410b, `make build`, `build/olang build tools/assign_migrate.olang`, then
+`build/tools_assign_migrate --olang build/olang -j 4 DIR...` over the repository (Markdown files named on the command
+line get their null tests); look at the `by hand:` rows (sites a generic body's instances note differently, case
+patterns); then, with today's compiler, a parallel assignment to a reference target is the one form the tool cannot
+see - read the `a, b = ...` statements whose targets are references and write `a, b ~ ...`; `olang fix` rewrites any `==
+null` left.
+
+Tests: tests/assign.olang (a write through a reference into a struct, `==` through two references and through two that
+may be null, `:=` copying, a unique value's destructor run once by a write through a `mut` parameter, a write through a
+list's link read back after an arena churn; `Written` baked); checks cases e10cnulleq, e10deqany, s4fwritenull (fail),
+s4fwritethrough (run), s4flinkfresh and s4fdefinefresh now about `:~`; checks' assign fixture holds null tests only.

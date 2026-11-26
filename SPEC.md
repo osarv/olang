@@ -494,9 +494,9 @@ written `&` or held by value, it is one naming the empty array and the nullable 
 `T&` fits wherever a `T?&` is wanted (E12), and a `T?&` fits a `T&` only where it is known not to be null - narrowed
 by a test (S8e), or unwrapped by `x!` (E35), which ends the program on a null. Through a `T?&` nothing is read or written
 - no field, element, slice, method call or `Len()` - and it is not passed for a `T&` parameter, until it is known not to be
-null; `==` (`== null` among them, E10c), assignment and passing it on as a `T?&` need nothing. So a `T?&` meets no trait (G19): bound to a
+null; `==` (`is null` among them, E10c), assignment and passing it on as a `T?&` need nothing. So a `T?&` meets no trait (G19): bound to a
 type variable a trait constrains (`Map<String?&, V>`, whose key must be `Hashable`), it is a compile-time error at that
-binding naming the type that is never null. `x == null` and `x != null` on a
+binding naming the type that is never null. `x is null` and `x is not null` on a
 reference that is never null are compile-time errors (always false, always true). Where `null` and a `T&` meet - the
 values of a conditional or a match (E28, S12b), a `catch default null` beside a call giving `T&` (R11) - the result is
 `T?&`. A function value follows the same rules where its type is written `fn?&(...)`, and is never null where it is
@@ -505,23 +505,23 @@ first case carries one, a struct whose constructor has no value for one - has no
 
 **An array may be null only where its type says so.** An array written `&` - and an array held by value - is never
 null: its zero value is the empty array. One written `?&` - `Array<T>?&`, `String?&`, `Array<Node&>?&` - may be absent,
-and its null is not the empty array: `x == null` is false of an empty one, a null renders as `null` and an empty one as
+and its null is not the empty array: `x is null` is false of an empty one, a null renders as `null` and an empty one as
 `""` or `Array<I64>[]` (E11a), and a null equals only a null (E10). It follows every rule of a `T?&` above: nothing is read
 through it - no element, slice, `Len()` or method - until it is known not to be null (S8e, or `x!`, E35). Its **zero
 value is null**, as every `?&`'s is (D13): a declaration with no value starts as null - a local, a global, a field, a
 constructor parameter's zero, each element of an `Array<T>(n)` with no fill (written there, since null is not its
 all-zero bits) - where an array written `&`, and one held by value, starts empty. `null` given for an array written `&` is a compile-time error naming its empty array
-(`""` for a `String`, `Array<T>(0)` otherwise) and `?&`, and `x == null` / `x != null` on one is an error naming
+(`""` for a `String`, `Array<T>(0)` otherwise) and `?&`, and `x is null` / `x is not null` on one is an error naming
 `x.Len() == 0` / `x.Len() > 0` and `?&`.
 
 Its representation is **all-zero bits**, at every nullable type but an array. For a single-pointer type that is the null
 pointer; for a function value the pair of words zeroed. An array's all-zero bits are its zero value, the empty array
 `{ 0, null }` — `Len()` (E23) of it is `0` and it reads as genuinely empty - so a null array is the length `-1` with no
-storage, `{ -1, null }`, which `x == null` tests; a null array, text included, renders `null` wherever it stands, an
+storage, `{ -1, null }`, which `x is null` tests; a null array, text included, renders `null` wherever it stands, an
 element of another's rendering too (E11a).
 
 `null` carries **no scope** (§8): there is nothing for it to outlive, so it flows into a target of any
-scope without a containment check. Whether a reference holds none is asked with `p == null` (E10c). A null equals
+scope without a containment check. Whether a reference holds none is asked with `p is null` (E10c). A null equals
 only a null (E10).
 
 **T2b (memory safety).** A reference is null only where its type says it may be (T2c), and the compiler holds every
@@ -797,7 +797,7 @@ compiling (T7c) `Len()` is a constant and an index out of range is a compile-tim
 
 **T11.** **Whether an array is reference-shaped is decided by its reference marker (T24) and by nothing
 else.** `Array<T>` is a value: `==` compares element-wise (E10) and assignment gives the target its own copy
-of the elements. `Array<T>&` is a reference: assignment repoints, and `==` compares the elements it names, as it
+of the elements. `Array<T>&` is a reference: assignment writes the elements it names (S4a), `~` links it (S4f), and `==` compares the elements it names, as it
 does through any array (E10), arrays declaring `Eq` by contents. How an `Array<T>` is stored -
 a length paired with storage elsewhere, or fixed storage laid out in place with its length known while compiling
 (T7d) - is a difference in *representation* only and never in behaviour.
@@ -1299,7 +1299,7 @@ took (R11b), and it is used in these ways and no others:
 - `==` and `!=` with a word (`e == ParseError.Empty`), with an error type or a named set (`e == ParseError`: true
   where it holds a word of that type, or of what the set stands for), and with another error value (the same word and,
   where it carries one, an equal payload - E10, text by its contents);
-  whether it holds no error is `e == null` (`e != null` its negation), the null test (E10c). Each side names something the
+  whether it holds no error is `e is null` (`e is not null` its negation), the null test (E10c). Each side names something the
   other can be, else the test is a compile-time error (it could never hold); two error types or sets are never
   compared. A number, a text or any other value compared with a word or an error type is a compile-time error;
 - narrowing (S8d): where a condition `e == X` holds (an `if`'s block, the right of `and`, after `assert`, after `if e
@@ -1350,7 +1350,7 @@ the function together with whatever a lambda captured (D16c), and §8's rules fo
 before it is read (D13d) - and a `fn?&` value may be, with every rule a `T?&` has (T2c): `null` is its zero value, a
 `fn&` fits wherever a `fn?&` is wanted, a `fn?&` fits a `fn&` only where it is known not to be null - narrowed by a test
 (S8e) or unwrapped by `f!` (E35) - and nothing is called through it before (`f!(x)` calls one, ending the program on a
-null); `f == null` on a `fn&` is a compile-time error (always false). The two are different types of one
+null); `f is null` on a `fn&` is a compile-time error (always false). The two are different types of one
 representation - two words, the code and the environment, a null one's code null. `==` compares by identity: a named function is one value however
 often it is named, and each evaluation of a capturing lambda makes a new one. A **global** of function type is a
 variable like any other, holding a function value: `F(x)` calls the function `F` holds, `F` read is that value, and
@@ -1538,7 +1538,7 @@ reference, itself a local never assigned again) - except in a lambda's body (bel
 error naming T22c. Likewise a
 lambda capturing a local of the body making it, given one value and never assigned again, whose functions capture
 nothing (named functions, lambdas capturing nothing) and do more than the capture's type allows, has that capture
-followed into its body (D16c's copy is never repointed). An argument whose functions its parameter's type covers takes
+followed into its body (D16c's copy is never linked elsewhere). An argument whose functions its parameter's type covers takes
 no part: the callee's one judgment serves it, as before. An error found in a twin is said with a note at the call that
 asked for it. Following stops - the argument then a boundary, its error naming the stop - at a callee in a cycle of
 calls with its caller (but a twin calling its own body with what it was given, judged to its fixed point), at sixteen
@@ -2139,7 +2139,7 @@ table holds for `M`: one indirect call, its arguments, result and error set thos
 instance - an argument left off takes the default `R`'s signature writes (D8a), whatever the instance's own method's
 says. A `mut` method is called only through a `mut any R&` (T31). A default of `R` (M19e) is called the same way,
 through the table, so the instance's type's own method of that name is the one that runs. Nothing else is reached
-through an `any`: no field, no method `R` does not declare, no operator but `==` (T33), no `Len()` or `[i]`. A task
+through an `any`: no field, no method `R` does not declare, no operator (`is`, T33, is no operator of the instance's), no `Len()` or `[i]`. A task
 calls a function or a function value (P1), never through a table: `spawn s.M()` is a compile-time error naming
 `spawn fn() { s.M() }`.
 
@@ -2152,9 +2152,9 @@ so generic code takes an `any` - `fn total<S Shape>(xs Array<S>&) F64` with `S` 
 dispatched through the table. A default of `R` introducing type variables of its own (`Fold<U>`) is instantiated with
 its constrained variable bound to the `any`.
 
-**T33 (identity and text).** `a == b` on two values of one `any` type is **identity**: the same instance, whatever `Eq`
-the instance's type declares (E10's "any other reference"); `s == null` asks whether a nullable one holds none
-(E10c). `$s` renders the instance, as `$` renders a value of its type (E11a) - a `Str` it declares included. An `any`
+**T33 (identity and text).** `a is b` on two values of one `any` type is **identity**: the same instance, whatever `Eq`
+the instance's type declares (E10d); `a == b` is a compile-time error naming `is` - instances of two types have no
+contents in common (E10); `s is null` asks whether a nullable one holds none (E10c). `$s` renders the instance, as `$` renders a value of its type (E11a) - a `Str` it declares included. An `any`
 has no `Hash` (E10b): it is no `Map` key.
 
 **T34 (closed traits: `match` and `as`).** The instance's type of an `any` of a **closed** trait (T31a) may be asked
@@ -2537,7 +2537,7 @@ where something could tell it from the argument (D9, D9h) - a parameter written 
 
 **D9.** A parameter is the callee's own: a by-value parameter is its own copy, which it may assign and write
 without the caller seeing it (a value holding arrays of a run-time length by value, T7a, is copied with them at the
-call), and a reference parameter (T24) its own cursor, which it may repoint (S4a). What a
+call), and a reference parameter (T24) its own cursor, which it may link elsewhere (S4f). What a
 reference parameter names - the **caller's own instance** - may be written only when its type is a writable
 reference, `p mut T&` (T25b), and only a writable argument may be passed to it (T25c). `mut` before a by-value
 parameter's type is a compile-time error: the copy is always the callee's to write, so it would say nothing - though
@@ -2682,7 +2682,7 @@ own type:
   they named, and the lambda lives no longer than that (D16d). Only reading it is ever possible, so nothing is built
   through it: `x := Reading(name, 1.5); m.Update(k, 0.0, fn(v F64) F64 { return v + x.Value })`.
 
-A captured function value is followed into the lambda's body where T22c says - its copy never repointed, what it
+A captured function value is followed into the lambda's body where T22c says - its copy never linked elsewhere, what it
 calls is what it called where the lambda was made.
 
 A lambda's parameters and locals may not reuse the name of a variable it could capture.
@@ -3058,7 +3058,7 @@ allows, since the global is set after the globals its initializer reads; `:=` gl
 other are B5a's cycle, reported as one.
 
 **D15a.** A later assignment may give an `Array<T>` local an array of any length: a value `Array<T>` gets its own
-copy of the new elements (T11b), a reference `Array<T>&` repoints. A local some store gives another length, or a
+copy of the new elements (T11b), a reference `Array<T>&` is linked by `~` (S4f). A local some store gives another length, or a
 length known only at run time, holds its length beside its storage (T7d); one every store gives one known length is
 fixed storage. Neither is ever visible to the program but as speed. Fixed field and element storage is given only
 arrays of its own length (T7d).
@@ -3950,7 +3950,7 @@ compile-time error: one is converted.
 **E7.** `and or xor` require both operands to be `Bool` and produce `Bool`. `and` and `or`
 **short-circuit**: the left operand is evaluated first, and the right one only when the left has not
 already decided the result — `and` stops at a false left operand, `or` at a true one. So
-`p != null and p.x > 0` never reads through a null `p`. `xor` always evaluates both operands, since its
+`p is not null and p.x > 0` never reads through a null `p`. `xor` always evaluates both operands, since its
 result depends on both.
 
 **E7a.** `not-expr ::= "not" binary` (its operand at the precedence of `==` and tighter). `not` requires a
@@ -3992,8 +3992,10 @@ integer type is adapted to (a declared type is entered through its constructor, 
 adaptation and T6b's meeting at the wider) and produce `Bool`; there is no ordering on any non-numeric type.
 
 **E10.** `== !=` accept operands of any single type `T27`-matching pair (subject to T6's own
-numeric-literal adaptation) and produce `Bool`; `a != b` is always `not (a == b)`. They compare what the operands
-**store** - values, never following a reference - except where a type says what it is equal by:
+numeric-literal adaptation) and produce `Bool`; `a != b` is always `not (a == b)`. They compare **contents**: two
+references written as the operands compare what they name, by the rules below for values (a null equal only to another
+null); inside a value - a field, an element, a payload - they compare what it stores, except where a type says what it
+is equal by:
 - a type that **declares `Eq`** (E10a) is compared by it wherever it stands - as a value, as a part of one, or behind a
   reference: `a == b` is `a.Eq(b)`. Through references a null equals another null and nothing else - `Eq` is never
   called with a null. The prelude declares `Eq`, by contents, for every array (`Array<T>`, a declared array type with no
@@ -4002,31 +4004,33 @@ numeric-literal adaptation) and produce `Bool`; `a != b` is always `not (a == b)
   of known, different lengths (T7c) meet at the run-time length both flow into, and are unequal;
 - otherwise, a primitive by value; an enum value by its case first, then its payload's fields by this same rule; a
   struct value field by field by this same rule;
-- any other **reference**: identity - two references are equal exactly when they name the same storage, or are both
-  null. Storage is made afresh by every constructor call and every reference built, so two of them are never the same;
+- a reference held inside a value, to a type with no `Eq`: identity - two are equal exactly when they name the same
+  storage, or are both null (so a back link or a cycle ends the walk); the same where the operands are what a type
+  argument stands for (S4a: `Vec<Node&>`'s elements);
+- two `any` values (T33): a compile-time error - instances of two types have no contents in common; `is` (E10d) asks
+  whether they name one object;
 - a function value: identity (T21).
 
 A reference compared with a value of its referent's type (`r == N(1)`) compares the value it names with that value, by
 the rules above - a value has no storage of its own to be the same as (E12's copy out). A case written as an operand
-(`e == Shape.Circle`) is a test of the case, not a value (E32), and a comparison with the `null` literal is the null
-test (E10c), never a comparison by these rules.
+(`e == Shape.Circle`) is a test of the case, not a value (E32), and a comparison with the `null` literal by `==` or
+`!=` is a compile-time error: the null test is `x is null` (E10c).
 
 The comparison takes no shortcut through identity, and it walks only what these rules say: a value whose parts reach
 values of its own type through what declares `Eq` - a struct holding an array of its own type, `type S struct(xs
 Array<S>&)` - is compared level by level, to whatever depth the data has. Data that holds **itself** that way (an element
 naming the array it is in) is compared without end, as any unbounded recursion runs, until the stack is exhausted; a
 comparison evaluated while compiling (K1), or under the evaluator (B3e), stops with a message instead, each level it descends
-counting as a call does against the evaluator's depth limit. A struct or enum reference with no `Eq` (identity) ends any
-such walk.
+counting as a call does against the evaluator's depth limit. A struct or enum reference with no `Eq` held inside a value
+(identity) ends any such walk.
 
 **E10c (the null test).** `x is null` is the **null test**: whether a reference, or a function value, holds none, or
 whether an error value (T20) holds no error; `x is not null` is its negation, `null is x` and `null is not x` the same
 tests, and `not x is null` the same question (E7a). It stands at precedence 4 (E5) and never calls a type's `Eq` or
-`eq` (E10a): it compares what the operand stores with null, whatever the type declares. (Transition, 2026-11-26: the
-comparison of an operand with the `null` literal by `==` or `!=` is the same test until the repository is migrated by
-`olang fix` (tools/assign_migrate); then `x == null` is refused, its help naming `x is null`.) The null test of an `x` that cannot be null - a number, a `Bool`, a struct or enum
+`eq` (E10a): it compares what the operand stores with null, whatever the type declares. `x is null` and `x is not null`
+are compile-time errors whose help names `x is null` and `x is not null` (`olang fix` rewrites them). The null test of an `x` that cannot be null - a number, a `Bool`, a struct or enum
 value, an array not marked `?&` (T2c), a reference or a function value never null (T2c, T21), an error value a test
-or a word written says holds one (T20) - and `null == null` are compile-time errors. Where it holds, or fails, it
+or a word written says holds one (T20) - and `null is null` are compile-time errors. Where it holds, or fails, it
 narrows a local, a parameter or a field path of one (S8e, S8d).
 
 **E10d (identity, `is`).** `a is b` is whether two references name **one object** - the same storage, or both null -
@@ -4040,10 +4044,6 @@ one object where `==` says they are (T21). `is` and `is not` stand at precedence
 ```
 is-expr ::= expr "is" [ "not" ] expr
 ```
-
-(Transition, 2026-11-26: until the repository is migrated, `==` and `!=` on two references to a type with no `Eq` still
-compare identity, as E10 says; `olang fix` rewrites each as `is` / `is not`, and then `==` compares contents through
-references too.)
 
 **E10a (`Eq`).** A type takes over `==` by declaring the method `Eq`, or `eq` to keep it to its own module (M6b): then
 `==` on it is an error anywhere else, the prelude's `Map` and an array's `Has` included. It takes one parameter, of the
@@ -4264,7 +4264,8 @@ needs no check.
 
 The three directions therefore read the same for every type: **value into value** copies (that is what a
 value type means), **reference into value** copies out (D9a's way for a callee to take its own copy), and
-**value into reference** borrows. A fourth, reference into reference, is neither — it repoints (S4a).
+**value into reference** borrows. A fourth, reference into reference, is neither — it links (S4f). A store `=` into a
+reference place is none of these: it writes what the reference names, value into value (S4a).
 
 ### 5.4 Function calls
 
@@ -4990,7 +4991,7 @@ parameter, or a struct it holds by value (`c.w`), handed on to a read-only refer
 copy), or to a writable one of a callee that itself qualifies (a fixed point over the program's calls, cycles
 included); a handle it holds by value may be handed to a writable parameter using it only through its reference
 (O17b). Any other use says no: a field of the instance's own storage assigned or incremented at any value depth, a
-reference field repointed, the parameter repointed, a value field lent to a writable parameter of a callee that does
+reference field linked, the parameter linked, a value field lent to a writable parameter of a callee that does
 not qualify, sliced or walked, a value field that is neither a number, a `Bool`, an enum with no payload, a function
 value nor a reference read at all (an enum with a payload matched, an inline array's element, a struct rendered), the
 parameter read into a local,
@@ -5448,39 +5449,34 @@ nothing anywhere in the language: a declaration always states a type (`name Type
 
 ### 6.2 Assignment
 
-**S4a.** Assignment to a **reference-shaped** (T24) target overwrites the *reference* — the pointer —
-never the pointed-to value, uniformly and in every position. `a = b` on a local repoints the local;
-`p.x = q.x` on a reference field repoints that field inside whatever instance holds it, which is visible
-to everyone else holding that instance; and `p = q` on a reference **parameter** repoints the function's
-own copy, which is a cursor local to that call and is not visible to the caller. All three are the same
-rule, and the third is useful in its own right — a reference parameter doubles as a mutable cursor
-without needing a separate local declared from it - a cursor over storage that exists: repointing a parameter at a new value
-is refused (S4e).
-
-This is why assignment does *not* copy contents through a reference: `x = y` must imply `x == y`, and
-T26 compares references by identity. Write-through would satisfy neither that nor O15, which runs a value's
-destructors where its one holder lets go precisely so that "which holder ends this" has an answer.
-Copying a reference's contents is written explicitly, field by field.
+**S4a.** `=` given a **reference-shaped** (T24) target writes the whole of what the reference **names**, in every
+position - a local, a field, an element, a parameter: the store a value place gets (S4d), the old value ended as any
+store ends one (O15), and every holder of the same storage sees the new value. A reference that may be null is written
+through only where a test says it is not (S8e) - elsewhere it is a compile-time error naming the test, `!` and `~`; a
+read-only reference is never written through (T25b). What a reference names is changed by **linking** it, `~` (S4f).
+Where the target's type is what a type argument stands for (a generic's `T` given a reference - the slots of
+`Vec<Node&>`), the reference is the value the generic's body stores: `=` stores it, `:=` declares it (S4f) and `==`
+compares it by identity (E10) - one body means one thing for every `T`.
 
 **S4e (a write to a parameter nothing reads).** A **store** to a parameter or a receiver - assigning it (`p = ...`,
-`p += 1`, `p++`), which repoints a reference one (S4a), or storage a value one holds by value (`p.f = ...`, `p[j] =
+`p += 1`, `p++`), linking a reference one (`p ~ ...`, S4f), or storage a value one holds by value (`p.f = ...`, `p[j] =
 ...`, a payload, reached following no reference) - that nothing in the body **reads after it** is a compile-time
-error: it changes the callee's own copy (D9) that no one sees again, or repoints a reference no one follows, and the
+error: it changes the callee's own copy (D9) that no one sees again, or links a reference no one follows, and the
 caller's value is unchanged. Read after it is S9g's, over the function's body: a mention of the name, other than as a
 store's own target, later in the order written, or anywhere inside a loop around the store; a mention in deferred code,
 a task, a `join`'s clauses or a lambda's capture counts as after every store. A write **through** a reference
-parameter (`p.f = 7` where `p` is a `mut T&`) is no store to the name and is kept; a repoint at what another reference
-names (`p = q`) keeps every write through `p` after it, and a repoint at storage the callee gives a value is refused
-outright (below). S9g's loop name keeps the read-after rule: once it is repointed at storage the body gives a value
-(`n = T()`, E12c) on every path to a write through it, that write is a store too, lost unless something reads it after. To change what the caller passed, write its fields through a `mut` reference,
+parameter (`p = v`, `p.f = 7` where `p` is a `mut T&`) is no store to the name and is kept; a link to what another
+reference names (`p ~ q`) keeps every write through `p` after it, and a link to storage the callee gives a value is refused
+outright (below). S9g's loop name keeps the read-after rule: once it is linked to storage the body gives a value
+(`n ~ T()`, E12c) on every path to a write through it, that write is a store too, lost unless something reads it after. To change what the caller passed, write its fields through a `mut` reference,
 or return the new value.
 
-A reference parameter or receiver repointed at **storage the callee gives a value** - an assignment `p = x` where `x`
+A reference parameter or receiver linked to **storage the callee gives a value** - a link `p ~ x` where `x`
 is a value, not a reference, so the storage is built where it is given (E12c): a constructor call, a literal, a call
 returning a value, a copy - is a compile-time error **whatever reads it after**: the caller still sees what it passed,
-and the callee goes on with a value no one else sees (`if not ok: p = S("fallback")` before a read of `p`, or `p =
-S(); p.xs.Push(1)`). A repoint at storage that **exists** - another reference (`p = q`), a field reached through one
-(`p = p.next!`), a call returning a reference - is a cursor and stays allowed. Write the fields through the reference
+and the callee goes on with a value no one else sees (`if not ok: p ~ S("fallback")` before a read of `p`, or `p ~
+S(); p.xs.Push(1)`). A link to storage that **exists** - another reference (`p ~ q`), a field reached through one
+(`p ~ p.next!`), a call returning a reference - is a cursor and stays allowed. Write the fields through the reference
 (`p.f = ...`), return the new value, or give the scratch value a local of its own (`t := S(...)`). S9g's loop names
 keep the rule above (a loop name is the body's own local).
 
@@ -5498,16 +5494,16 @@ link-decl  ::= IDENT ":~" expr STMNT_END
 ```
 
 A **new value** - a literal other than `null`, a constructor's call, a call giving a value, any value with no storage
-of its own (E12c) - after `~` or `:~` is a compile-time error: a reference links only to storage that exists; give the
-value a local, `v := ...`, and link to that. `~` whose left side holds a value (not a reference) is a compile-time error:
-`=` stores into it. The place is evaluated before `x`, as for `=` (S4), and S4e holds for a reference parameter
-linked as it holds for one repointed.
+of its own (E12c) - after `~` is built where the reference is held, as a declaration's value is (E12c, O6): `n.next ~
+Node(2)` links `n.next` to a new node in the scope `n`'s instance lives in. After `:~` it is a compile-time error: `:=`
+declares a value of its own. `~` whose left side holds a value (not a reference) is a compile-time error: `=` stores
+into it. The place is evaluated before `x`, as for `=` (S4), and S4e holds for a reference parameter linked.
 
-(Transition, 2026-11-26: until the repository is migrated by `olang fix` (tools/assign_migrate), `=` on a reference
-still repoints it (S4a), `:=` of storage that exists by a reference still declares a reference local, and `==` on two
-references still compares identity; once migrated, `a = b` assigns contents through a reference too - writing the whole
-referent and ending the old value as a store does - `:=` always declares a value, and the old spellings are refused with
-a hint naming `~`, `:~` and `is`.)
+`:=` (S1) **declares a value**: given a reference to storage that exists - another reference, a field reached through
+one, a call giving a reference - it declares a copy of what the reference names, as `:=` of a value place does (a unique
+value existing elsewhere a reference to it, T13b, and a generational one, T13d, as for a value place); a reference that
+may be null is refused there, as a read through it is (T2c). Several names declared at once (`a, b := ...`, S4b, D8c)
+each take its part's type as it is.
 
 **S4.** `assign-stmnt ::= lvalue assign-op expr STMNT_END`, where `lvalue` is a postfix expression
 (§5.1 E1) whose outermost form is a variable read, an index (`E16`), or a member access (`E17`) —
@@ -5521,8 +5517,8 @@ place is an element reached through `At`/`SetAt` (E31, E31b) the element itself 
 value is computed: an index held while it was in range is the program's index when the access runs, so a value that
 shrinks the collection makes it an out-of-range index (E16e), unchecked.
 
-**S4d.** A **value** place - one an assignment writes over where it is (T11b), not a reference, which `=` repoints
-(S4a) - is written only once the value is built, and a **borrow** (E12c) written in that value of the place itself, or
+**S4d.** A **value** place - one an assignment writes over where it is (T11b), and what a reference names, which `=`
+writes through it (S4a) - is written only once the value is built, and a **borrow** (E12c) written in that value of the place itself, or
 of storage within it (a field, or an element - any element of an array standing for any other, their indexes not
 compared - reached with no reference followed), takes the place's **old value**: what the place held is copied, built
 where a temporary in that position would be (O18a), and the borrow names the copy. It applies where the value's
@@ -5556,13 +5552,15 @@ result) must fit (§5.3 E12) the target's declared type.
 
 ### 6.3 Conditional and looping statements
 
-**S4b.** `destruct-stmnt ::= target "," target { "," target } ( ":=" | "=" ) expr STMNT_END`, where `expr` is
+**S4b.** `destruct-stmnt ::= target "," target { "," target } ( ":=" | "=" | "~" ) expr STMNT_END`, where `expr` is
 a call returning several values (D8c) and there is exactly one `target` per result. With `:=` each target
-is a plain name, declared as by D15 from its result; with `=` each is an lvalue, assigned as by S4. A
+is a plain name, declared as by D15 from its result; with `=` each is an lvalue, assigned as by S4 (a reference target
+written through, S4a); with `~` each reference target is linked to its result (S4f) and each value target assigned as
+by `=` - one statement for a call giving a reference and a value. A
 target written `_` discards its result. The call is evaluated once, before any target is written.
 
-**S4c.** The value side may instead be a list of one value per target, `target "," target ... ( ":=" | "=" ) expr
-"," expr { "," expr }`. With `=`, **every value is evaluated, left to right, before any target is written**, so
+**S4c.** The value side may instead be a list of one value per target, `target "," target ... ( ":=" | "=" | "~" ) expr
+"," expr { "," expr }`. With `=` or `~` (S4b's), **every value is evaluated, left to right, before any target is written**, so
 `a, b = b, a` swaps and `x, y = y, x + y` steps a pair; each target is then assigned as by S4, in order - its place
 evaluated, then the value it was given stored there. So every value comes before every target's place, and within that
 the order is left to right, as S4's is; a destructuring (S4b) composes the same way, its one call first. A target
@@ -5591,7 +5589,7 @@ through anything it evaluates, is a compile-time error. A local's length is read
 (T7d): a condition a local's first, optimistic length would fix, and its settled run-time length does not, is no
 error. (To check a fixed value, `assert` it; an
 `assert` is not an `if`.) A **comparison of two literals** - `==`, `!=`, `<`, `<=`, `>`, `>=` between two `Bool`,
-number (a negated one included), character or text literals (`null == null` is E10c's) - gives one answer on every
+number (a negated one included), character or text literals (`null is null` is E10c's) - gives one answer on every
 build, so it is a compile-time error wherever it is written: an `if`'s or a loop's condition, an `assert`, a
 top-level condition (B9), any expression; the message names the answer, `true` or `false`, to write instead. A lone
 `true` or `false` as a top-level condition switches a branch on or off and is no error; one reading a named or build
@@ -5606,8 +5604,8 @@ wherever it can be read, so a condition reading it reads that value. A parameter
 **S8d (narrowing).** A condition says things of the **paths** it tests - a local or a parameter, and a **field path** of
 one: the local followed by one or more field reads, `x.f`, `x.f.g` (each step a field; a call, an index or a slice
 anywhere in it makes it no path, and a weak field, T2d, is none): `e == Shape.Circle` (a case
-written, E32, `e` on either side) that `e` holds that case; `p != null` that `p` is not null (S8e); an error
-value compared with a word, a type or a set what of its set it holds (R11b, T20). `e != Shape.Circle` and `p == null`
+written, E32, `e` on either side) that `e` holds that case; `p is not null` that `p` is not null (S8e); an error
+value compared with a word, a type or a set what of its set it holds (R11b, T20). `e != Shape.Circle` and `p is null`
 say the same where the condition is false; `not` turns a condition round; `a and b` says what both say where it holds, `a or b` what both
 say where it fails; parentheses change nothing; anything else says nothing. One walk reads every condition for all
 three, so they hold in the same places. What a condition says holds:
@@ -5621,11 +5619,11 @@ three, so they hold in the same places. What a condition says holds:
 - in the first value of `x if c else y` where `c` holds, the second where it fails;
 - in a loop's body when it is its condition (`for e == Tree.Node { }`, the three-clause form's condition), and in its
   post clause where the body assigns the local nowhere;
-- after a loop whose condition it is and which holds no `break`, where it fails (`for p == null { p = next() }`): it is
+- after a loop whose condition it is and which holds no `break`, where it fails (`for p is null { p = next() }`): it is
   left only by that condition failing;
 - and, for null alone, after a statement assigning the path a value never null (`p = Node(1)`, `s.head = Node(1)`, S8e).
 It holds from there until a statement assigns the path or a path it starts with (an assignment, a compound one, an
-increment, a target - `p = p.next` reading `p.next` before the store; `x = y` and `x.f = y` both end what `x.f.g` was
+increment, a target - `p ~ p.next` reading `p.next` before the store; `x = y` and `x.f = y` both end what `x.f.g` was
 known to be, `x.f.g.v = 3` does not), and so inside a loop only up to where the loop assigns it; never inside a lambda
 written there. Deferred code (S19, S19e) runs as its block closes, after the block's later statements: it is checked
 under a narrowing only where no statement after it in its block assigns the path, and never under a field path's.
@@ -5633,8 +5631,8 @@ under a narrowing only where no statement after it in its block assigns the path
 A field path's narrowing ends besides at **any call** after its test - of a function, a method, an operator's method
 (E31), a constructor, a function value, a spawned call (P1) - and at a `yield` (S20), since what is called may write
 the field through another reference; reading through a writable or a read-only reference changes nothing. A call's
-arguments are evaluated before it is made, so they are read under the narrowing (`if r.Ty != null { use(r.Ty) }`); a
-call in a condition after the test (`x.f != null and ready(x)`) leaves nothing said of `x.f` past it; a call in an
+arguments are evaluated before it is made, so they are read under the narrowing (`if r.Ty is not null { use(r.Ty) }`); a
+call in a condition after the test (`x.f is not null and ready(x)`) leaves nothing said of `x.f` past it; a call in an
 `if`'s block is none in its `else`. Inside a loop, a field path narrowed before the loop is known only where nothing
 in the loop - its condition, body and post clause - calls: else a read of it there is a compile-time error, the loop's
 calls coming before its next turn's reads (test it inside the loop, or read it into a local before). A `!` after a
@@ -5755,7 +5753,7 @@ apply as in every loop; `continue` moves to the next value.
 exactly the type the walk gives (S9a, S9b): the element's value - a reference where the element is one. A **store** to
 one of them - assigning it (`x = ...`, `x += 1`, `x++`), or storage it holds by value (`x.f = ...`, `x[j] = ...`,
 a payload, reached following no reference) - that nothing in the turn **reads after it** is a compile-time
-error: it changes a copy no one sees again, or repoints a reference no one follows. Read after it means a mention of
+error: it changes a copy no one sees again, or links a reference no one follows. Read after it means a mention of
 the name, other than as a store's own target, that comes later in the body in the order written - a copy, a borrow, a
 call's argument or receiver, a comparison - or anywhere inside a loop of the body around the store; a mention in
 deferred code (D14), a task (P1), a `join`'s clauses or a lambda's capture (D16c) counts as after every store. It is
@@ -5964,7 +5962,7 @@ expression, which may read them) is evaluated; when it is false the match goes o
 pattern had not matched. A guard is evaluated only for a clause whose pattern matched, at most once per match. A
 guarded clause covers nothing for S13a. What a guard says holds in its clause's body or value, as an `if`'s condition
 does in its block (S8d, S8e): `case Wrap.One(s) if s == Shape.Circle: s.r` reads the payload of the bound `s`, and
-`case _ if p != null: p.v` reads through `p` - the same narrowing walk, so `and`, `or` and `not` combine as they do
+`case _ if p is not null: p.v` reads through `p` - the same narrowing walk, so `and`, `or` and `not` combine as they do
 there. A type match (G13) takes no guard: its arm is chosen while compiling.
 
 **S13g (cases with no values).** A case whose payload holds a value of an enum declaring no case (T18) - by value, or
@@ -7466,7 +7464,7 @@ call's own scope-variable bindings (§8.6) into a relation between the **calling
 to one of the caller's own blocks keeps which block (O2a), so an argument from an inner block does not outlive
 one from an outer — and must then hold under O10a extended with the caller's own obligation set (O10b).
 Obligations run in either direction between a signature's scope variables, and a relation both ways is an
-equality: repointing one reference parameter at another's referent (S4a) obliges callers to pass both from one
+equality: linking one reference parameter to another's referent (S4f) obliges callers to pass both from one
 scope. One that does not hold is a compile-time error at that call, which names the statement in the callee's
 body that required it. Because the function's own scope is
 ordered against every scope variable (O10a) and every chain of calls ends at a body whose bindings are
@@ -7636,7 +7634,7 @@ value where it dangles. Accordingly:
      stored through it, and it determines no scope variable through which something can be stored (O25e, O25g): an
      error there names the assignments whose scopes differ.
 
-  A version is judged by what it holds, never by the local's other versions: `at = at.parent` walks a chain of parents
+  A version is judged by what it holds, never by the local's other versions: `at ~ at.parent` walks a chain of parents
   whatever their scopes. `null` given holds no scope. Storage reached only through a version lives where the reads it
   reaches need it - no longer: a list built through a cursor in a loop and read nowhere after it lives in the loop's
   block, and closes with it.
@@ -8388,7 +8386,7 @@ bare pun, where matching one is the whole point) or with an earlier field's name
   value or anything else lives with the instance, as a bare field does. The constructed value carries these bindings, so a
   short-lived instance may refer into longer-lived storage — a cursor or a view into a structure. A function
   receiving such a value as a parameter reads the field at a derived scope standing for that binding (O23a), which
-  each call resolves, so it may read, walk, relate and repoint through the field, and what it builds into that scope -
+  each call resolves, so it may read, walk, relate and link through the field, and what it builds into that scope -
   directly, or through a callee given the field or a copy of what it refers to (in a local, a `for ... in` element or a
   capture) for a parameter it may build into - goes where the field's referent lives: the scope a call that knows the
   binding passes for it, else the one found from the referent's address while the program runs (O23a);
@@ -9292,7 +9290,7 @@ of it - a generic instantiated with the program's types - is the program's, sinc
 it is used: it is reported at that use, the innermost one in the program's own files, with a note at the library's line
 (`in the standard library's code, here`) and the notes of the uses around it. Where the use names the type argument
 the error is about (a zero value the library needs, D13c), it is reported at that argument, with a note naming the
-reference to hold instead (`'Chan<Ticket&>' holds it by reference, whose zero value == null`).
+reference to hold instead (`'Chan<Ticket&>' holds it by reference, whose zero value is null`).
 Every diagnostic is written to standard output. Colour is used only when standard output is a terminal, and not when
 `NO_COLOR` is set or `TERM` is `dumb`, so a file, a pipe or a program reading the output gets plain text.
 
@@ -9971,7 +9969,7 @@ element given as an out-parameter (`out Array<Db?&>&`, read back as `out[0]`). W
 `List<Db>`) it is a compile-time error naming `Db&`, and so is constructing one (`Db()`): only C makes one. Such a
 reference is never read through and nothing is written through it: it has no fields, no methods unless the program
 declares them (M19), and its permission says nothing - `Db&` and `mut Db&` fit each other. `==` and `!=` compare two
-by identity (E10), and `== null`/`!= null` test one for null; `$` renders one as its type's name, or `null`.
+by identity (E10), and `is null`/`is not null` test one for null; `$` renders one as its type's name, or `null`.
 What it points to belongs to C, never to a scope of the program: such a reference lives in no scope of olang's
 (section 8 takes it, and a value holding only such references, for a value holding none), so it may be stored
 anywhere and outlives everything as far as the scope check is concerned. Whether C has freed what it names - after a
@@ -10055,7 +10053,7 @@ It is plain data that lives in no scope of olang's, as an extern type's referenc
 value may - a local, a global, a field, an element, a parameter, a result, a type argument - and §8 takes it for a value
 holding no reference. It is part of the vocabulary (X2): an `extern-value-type`, so an extern's parameter or result and an
 export fn's, and a field of a plain-data struct (X11), so a struct of function pointers - a callbacks table - crosses
-to C and back with each of them in place. `==` and `!=` compare two by the function they point to, `== null` tests one;
+to C and back with each of them in place. `==` and `!=` compare two by the function they point to, `is null` tests one;
 `$` renders one as its type, or `null`.
 
 It is **called** as a function value is (E13b): `p(x)` through an `extern fn&`, and through an `extern fn?&` once a test

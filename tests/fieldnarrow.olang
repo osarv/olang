@@ -31,26 +31,26 @@ fn twice(x I64) I64 { return x * 2 }
 fn touch(n Node&) I64 { return n.v }
 
 fn second(h Node&) I64 {
-    if h.next == null: return -1
+    if h.next is null: return -1
     return h.next.v
 }
 
 fn third(h Node&) I64 {
-    if h.next != null and h.next.next != null: return h.next.next.v
+    if h.next is not null and h.next.next is not null: return h.next.next.v
     return -1
 }
 
 # a call's arguments are read before it: the narrowing holds in them
 fn passed(h Node&) I64 {
-    if h.next != null: return twice(h.next.v)
+    if h.next is not null: return twice(h.next.v)
     return 0
 }
 
 # after a call, a new test narrows again
 fn retested(h Node&) I64 {
-    if h.next == null: return 0
+    if h.next is null: return 0
     t := touch(h)
-    if h.next == null: return t
+    if h.next is null: return t
     return t + h.next.v
 }
 
@@ -61,25 +61,25 @@ fn ring(b Box&) I64 {
 }
 
 fn deep(b Box&) I64 {
-    if b.inner != null and b.inner.head != null: return b.inner.head.v
+    if b.inner is not null and b.inner.head is not null: return b.inner.head.v
     return -1
 }
 
 fn line(b Box&) I64 {
     if b.e == ReadError.Bad: return b.e.line
-    return 0 if b.e == null else -1
+    return 0 if b.e is null else -1
 }
 
 # "!" on a narrowed path is unneeded, no error
 fn unwrapped(h Node&) I64 {
-    if h.next != null: return h.next!.v
+    if h.next is not null: return h.next!.v
     return 0
 }
 
 # a loop that calls nothing keeps what was said before it
 fn summed(h Node&) I64 {
     t I64 = 0
-    if h.next != null {
+    if h.next is not null {
         for i in range 3: t += h.next.v + i
     }
     return t
@@ -88,9 +88,9 @@ fn summed(h Node&) I64 {
 # a loop's own condition on the path, re-tested every turn, holds in its body after its calls
 fn walked(h Node&) I64 {
     t I64 = 0
-    at := h
-    for at.next != null {
-        at = at.next
+    at :~ h
+    for at.next is not null {
+        at ~ at.next
         t += touch(at)
     }
     return t
@@ -98,13 +98,13 @@ fn walked(h Node&) I64 {
 
 # a store of a value never null makes the path known not to be null
 fn stored(h mut Node&) I64 {
-    h.next = Node(7, null)
+    h.next ~ Node(7, null)
     return h.next.v
 }
 
 # a call in the block is none in the else
 fn branched(h Node&, b Bool) I64 {
-    if h.next != null {
+    if h.next is not null {
         if b { return touch(h) } else { return h.next.v }
     }
     return 0
@@ -143,14 +143,14 @@ test "a field path narrows through loops, stores and an else" {
     list := Node(1, Node(2, Node(3, null)))
     assert summed(list) == 9 and walked(list) == 5 and walked(Node(1, null)) == 0
     m := Node(1, null)
-    assert stored(m) == 7 and m.next != null and m.next.v == 7
+    assert stored(m) == 7 and m.next is not null and m.next.v == 7
     assert branched(list, true) == 1 and branched(list, false) == 2
     # an assert narrows what follows it
-    assert list.next != null
+    assert list.next is not null
     assert list.next.v == 2
     # what the path is read after its store is the new value - an arena churn between
     for k in range 100 {
-        list.next = Node(k, null)
+        list.next ~ Node(k, null)
         assert list.next.v == k
     }
 }

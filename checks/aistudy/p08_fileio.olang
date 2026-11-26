@@ -2,7 +2,7 @@
 import "std/os"
 
 fn countFile(path String&) I64, I64 ? os.Error {
-    text := try os.ReadFile(path)
+    text :~ try os.ReadFile(path)
     lines := 0
     words := 0
     for line in text.Lines() {
@@ -13,10 +13,10 @@ fn countFile(path String&) I64, I64 ? os.Error {
 }
 
 fn main() ? {
-    dir := try os.MkTemp()
+    dir :~ try os.MkTemp()
     path := $dir + "/a.txt"
     try os.WriteFile(path, "hello world\nsecond line here\n")
-    old := try os.ReadFile(path)
+    old :~ try os.ReadFile(path)
     try os.WriteFile(path, $old + "third\n")
     l, w := try countFile(path)
     Println("lines " + $l + " words " + $w)

@@ -11,7 +11,7 @@ type N struct(v I64) {
 fn self(a mut N&) mut N& { return a }
 fn keep(f fn&(a mut N&) N&, out mut N&, i I64) {
     t := N(i)
-    out.next = f(t)
+    out.next ~ f(t)
 }
 
 # storage made and let go many times, so a value kept in a scope already closed would read another's

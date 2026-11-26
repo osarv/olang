@@ -63,13 +63,13 @@ fn CommentColumn(line String&) I64 {
 
 # whether line holds a line comment and nothing else; a block comment's "##" is no line comment
 fn commentOnly(line String&) Bool {
-    t := line.TrimStart()
+    t :~ line.TrimStart()
     return t.StartsWith("#") and not t.StartsWith("##")
 }
 
 # a comment line's text: past its '#' and one space
 fn commentText(line String&) String {
-    t := line.TrimStart()[1:]
+    t :~ line.TrimStart()[1:]
     if t.StartsWith(" "): return $t[1:].TrimEnd()
     return $t.TrimEnd()
 }
@@ -81,7 +81,7 @@ fn Above(t String&, at I64) String {
     pos := LineStart(t, at)
     for pos > 0 {
         from := LineStart(t, pos - 1)
-        line := t[from:pos - 1]
+        line :~ t[from:pos - 1]
         if not commentOnly(line): break
         if from == 0 and line.StartsWith("#!"): break
         starts.Push(from)
@@ -91,11 +91,11 @@ fn Above(t String&, at I64) String {
     # the lines run bottom to top in starts; pos is the topmost's start
     k := starts.Len() - 1
     if pos > 0 {
-        before := t[LineStart(t, pos - 1):pos - 1]
+        before :~ t[LineStart(t, pos - 1):pos - 1]
         col := CommentColumn(before)
         if col >= 0 and before[:col].Trim().Len() > 0 {
             for k >= 0 {
-                line := t[starts[k]:LineEnd(t, starts[k])]
+                line :~ t[starts[k]:LineEnd(t, starts[k])]
                 if line.Len() - line.TrimStart().Len() != col: break
                 k--
             }
@@ -114,7 +114,7 @@ fn Above(t String&, at I64) String {
 fn Trailing(t String&, at I64) String {
     from := LineStart(t, at)
     end := LineEnd(t, from)
-    line := t[from:end]
+    line :~ t[from:end]
     col := CommentColumn(line)
     if col < 0 or line[:col].Trim().Len() == 0: return ""
     b := StringBuilder()
@@ -122,7 +122,7 @@ fn Trailing(t String&, at I64) String {
     next := end + 1
     for next < t.Len() {
         e := LineEnd(t, next)
-        l := t[next:e]
+        l :~ t[next:e]
         if not commentOnly(l) or l.Len() - l.TrimStart().Len() != col: break
         b.PushChar('\n')
         b.Push(commentText(l))
@@ -151,7 +151,7 @@ fn ModuleDoc(t String&) String {
     }
     if pos == first: return ""
     if pos < t.Len() {
-        next := t[pos:LineEnd(t, pos)].Trim()
+        next :~ t[pos:LineEnd(t, pos)].Trim()
         if next != "" and not next.StartsWith("import ") and not next.StartsWith("import\""): return ""
     }
     b := StringBuilder()
@@ -216,10 +216,10 @@ fn DeprecatedNames(t String&) Vec<String&> {
             if commentText(line).StartsWith("Deprecated:"): marked = true
             continue
         }
-        code := line
+        code :~ line
         col := CommentColumn(line)
         trailing := col >= 0 and commentText(line[col:]).StartsWith("Deprecated:")
-        if col >= 0: code = $line[:col]
+        if col >= 0: code ~ $line[:col]
         if (marked or trailing) and code.Trim() != "" {
             for w in wordsOf(code): out.Push(w)
         }
@@ -261,11 +261,11 @@ fn Exported(name String&) Bool { return name.Len() > 0 and name[0].IsUpper() }
 # module mi of a checked program: its documentation and its items in the order the file declares them - only the
 # exported ones where all is false, every one where it is true
 fn Module.Of(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, all Bool) Module {
-    m := c.P.L.Mods[mi]
-    text := m.Src!.Text
+    m :~ c.P.L.Mods[mi]
+    text :~ m.Src!.Text
     md := Module($m.Identity, $m.Path, ModuleDoc(text))
-    nm := c.P.L.Names
-    tab := c.P.R.Tables[mi]
+    nm :~ c.P.L.Names
+    tab :~ c.P.R.Tables[mi]
     order Vec<I64>
     for ei in range tab.Entries.Len(): order.Push(ei)
     order.Sort(fn(a I64, b I64) Bool { return tab.Entries[a].Sp.Start < tab.Entries[b].Sp.Start })
@@ -276,7 +276,7 @@ fn Module.Of(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi 
         if name.Contains("$") { continue }          # an error type's hidden payload enum (T19b), shown with its words
         if e.Kind == names.What.Func {
             f := c.P.FnNamed(mi, e.Name)
-            if f < 0 or c.P.FnDecl(f).Recv != null: continue
+            if f < 0 or c.P.FnDecl(f).Recv is not null: continue
         } else if e.Kind != names.What.Global and e.Kind != names.What.Type {
             continue
         }
@@ -286,7 +286,7 @@ fn Module.Of(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi 
     # methods of types declared elsewhere - a built-in type's, in the prelude (M19d): each an item of its own
     c.P.AllFns()
     for f in range c.P.FnCount() {
-        decl := c.P.FnDecl(f)
+        decl :~ c.P.FnDecl(f)
         if decl.IsBuilder() and c.P.FnModule(f) == mi and explain.BuilderOf(c, f) < types.DeclId(0) {
             # D19: a builder of a built-in type or a trait's default builder - an item of its own
             bname := $nm.Text(decl.Member)
@@ -294,11 +294,11 @@ fn Module.Of(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi 
             bit := Entry(firstLines(explain.FnText(c, sc, f)), Above(text, I64(decl.Sp.Start)), bname)
             bit.File = m.File
             bit.At = I64(decl.Sp.Start)
-            bit.Target = $ast.OwnerTarget(decl, nm) + "." + $bname
+            bit.Target ~ $ast.OwnerTarget(decl, nm) + "." + $bname
             md.Items.Push(bit)
             continue
         }
-        if c.P.FnModule(f) != mi or decl.Recv == null: continue
+        if c.P.FnModule(f) != mi or decl.Recv is null: continue
         name := $nm.Text(decl.Name)
         if not all and not Exported(name): continue
         if receiverModule(c, f) == mi: continue
@@ -306,7 +306,7 @@ fn Module.Of(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi 
         it := Entry(line, Above(text, I64(decl.Sp.Start)), name)
         it.File = m.File
         it.At = I64(decl.Sp.Start)
-        it.Target = $ReceiverName(c, f) + "." + $name
+        it.Target ~ $ReceiverName(c, f) + "." + $name
         md.Items.Push(it)
     }
     members(c, mi, md, all)
@@ -317,8 +317,8 @@ fn Module.Of(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi 
 # D4a: the type members module mi declares naming a type, each an item of its own as its declaration writes it ("type
 # U8.Accumulator = U64"); one declared in place is a type of the module's, listed as any other
 fn members(c mut typecheck.Checker&, mi I64, md mut Module&, all Bool) {
-    m := c.P.L.Mods[mi]
-    text := m.Src!.Text
+    m :~ c.P.L.Mods[mi]
+    text :~ m.Src!.Text
     for k in range c.P.MemberCount() {
         if c.P.MemberModule(k) != mi or c.P.MemberInPlace(k): continue
         name := $c.P.L.Names.Text(c.P.MemberName(k))
@@ -328,7 +328,7 @@ fn members(c mut typecheck.Checker&, mi I64, md mut Module&, all Bool) {
         it := Entry($text[I64(sp.Start):I64(sp.End)], Above(text, I64(sp.Start)), name)
         it.File = m.File
         it.At = I64(sp.Start)
-        it.Target = $text[I64(osp.Start):I64(osp.End)] + "." + name
+        it.Target ~ $text[I64(osp.Start):I64(osp.End)] + "." + name
         md.Items.Push(it)
     }
 }
@@ -347,7 +347,7 @@ fn ReceiverName(c mut typecheck.Checker&, f I64) String {
 # Parent.Member
 fn attached(c mut typecheck.Checker&, mi I64, e Entry, parent String&) Entry {
     r := e
-    if r.Target == "" { r.Target = $r.Name if parent == "" else $parent + "." + $r.Name }
+    if r.Target == "" { r.Target ~ $r.Name if parent == "" else $parent + "." + $r.Name }
     if r.Name != "": r.Examples = ExamplesOf(c, mi, r.Target)
     ms := Vec<Entry>()
     for m in e.Members { ms.Push(attached(c, mi, m, r.Target if parent == "" else "")) }
@@ -358,8 +358,8 @@ fn attached(c mut typecheck.Checker&, mi I64, e Entry, parent String&) Entry {
 # B7a: the tests of module mi naming target, in the order the file has them
 fn ExamplesOf(c mut typecheck.Checker&, mi I64, target String&) Vec<Example> {
     out := Vec<Example>()
-    m := c.P.L.Mods[mi]
-    text := m.Src!.Text
+    m :~ c.P.L.Mods[mi]
+    text :~ m.Src!.Text
     examplesIn(c, m.Decls, text, target, out)
     return out
 }
@@ -372,8 +372,8 @@ fn examplesIn(c mut typecheck.Checker&, ds Array<ast.Decl&>&, text String&, targ
                 out.Push(Example(ast.TestDesc(d, text), bodyText(text, body)))
             }
             case ast.Decl.If(_, ti) {
-                if ti.Then != null: examplesIn(c, ti.Then!.Decls, text, target, out)
-                if ti.Else != null: examplesIn(c, ti.Else!.Decls, text, target, out)
+                if ti.Then is not null: examplesIn(c, ti.Then!.Decls, text, target, out)
+                if ti.Else is not null: examplesIn(c, ti.Else!.Decls, text, target, out)
             }
             case _ { }
         }
@@ -429,15 +429,15 @@ fn firstLines(text String&) String {
 # the item name of module mi (a top-level name, or "Type.Method"), documented: what explain gives it, each member with
 # its doc comment - every member where all is true, else the exported ones
 fn Entry.item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi I64, name String&, all Bool) Entry ? explain.Missing {
-    m := c.P.L.Mods[mi]
-    text := m.Src!.Text
-    nm := c.P.L.Names
+    m :~ c.P.L.Mods[mi]
+    text :~ m.Src!.Text
+    nm :~ c.P.L.Names
     full := try explain.Item(c, sc, x, mi, name)
-    lines := full.TrimEnd().Split("\n")
+    lines :~ full.TrimEnd().Split("\n")
     at := declAt(c, mi, name)
     isFn := lines[0].StartsWith("fn ") or lines[0].StartsWith("extern fn ")
     e := Entry(firstLines(full) if isFn else $lines[0], "", name)
-    if at >= 0: e.Doc = Comment(text, at, true)
+    if at >= 0: e.Doc ~ Comment(text, at, true)
     e.File = m.File
     e.At = at
     if lines[0].StartsWith("fn ") or lines[0].StartsWith("extern fn ") or lines.Len() == 1: return e
@@ -450,18 +450,18 @@ fn Entry.item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi
             pushed = true
             pushBuilders(c, sc, x, mi, e, builders, all)
         }
-        line := lines[k].TrimStart()
+        line :~ lines[k].TrimStart()
         # explain's builder lines (no receiver) are pushed above, with their documentation
         if line.StartsWith("fn ") and not line.StartsWith("fn ("): continue
         # A2.3: a method's effects, the line explain writes under it, are part of its entry
         # T13d: a type's own "# generational: ..." line, before its members, is part of its entry's line
         if line.StartsWith("#") and e.Members.Len() == 0 {
-            e.Line = $e.Line + "\n    " + $line
+            e.Line ~ $e.Line + "\n    " + $line
             continue
         }
         if line.StartsWith("#") {
             last := e.Members.Len() - 1
-            e.Members[last].Line = $e.Members[last].Line + "\n    " + $line
+            e.Members[last].Line ~ $e.Members[last].Line + "\n    " + $line
             continue
         }
         if line.StartsWith("meets ") {
@@ -475,8 +475,8 @@ fn Entry.item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi
             if d >= types.DeclId(0) {
                 f := c.P.MethodOf(c.P.SelfType(d), nm.Intern(mname))
                 if f >= 0 {
-                    ft := c.P.L.Mods[c.P.FnModule(f)]
-                    me.Doc = Above(ft.Src!.Text, I64(c.P.FnDecl(f).Sp.Start))
+                    ft :~ c.P.L.Mods[c.P.FnModule(f)]
+                    me.Doc ~ Above(ft.Src!.Text, I64(c.P.FnDecl(f).Sp.Start))
                     me.File = ft.File
                     me.At = I64(c.P.FnDecl(f).Sp.Start)
                 }
@@ -490,7 +490,7 @@ fn Entry.item(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, mi
         mat := memberAt(c, mi, d, mname)
         if mat >= 0 {
             # a member written on its declaration's own line has the declaration's comments, none of its own
-            if at < 0 or LineStart(text, mat) != LineStart(text, at): me.Doc = Comment(text, mat, true)
+            if at < 0 or LineStart(text, mat) != LineStart(text, at): me.Doc ~ Comment(text, mat, true)
             me.File = m.File
             me.At = mat
         }
@@ -505,7 +505,7 @@ fn pushBuilders(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, 
         name := $c.P.L.Names.Text(c.P.FnDecl(f).Name)
         bi := try Entry.item(c, sc, x, mi, name, all) catch explain.Missing { continue }
         bi.Builder = true
-        bi.Target = $ast.OwnerTarget(c.P.FnDecl(f), c.P.L.Names) + "." + $c.P.L.Names.Text(c.P.FnDecl(f).Member)   # B7a: its tests
+        bi.Target ~ $ast.OwnerTarget(c.P.FnDecl(f), c.P.L.Names) + "." + $c.P.L.Names.Text(c.P.FnDecl(f).Member)   # B7a: its tests
         e.Members.Push(bi)
     }
 }
@@ -513,7 +513,7 @@ fn pushBuilders(c mut typecheck.Checker&, sc scope.Scoper&, x mut interp.Exec&, 
 # a method's name in its line, "fn (r R&) Name<...>(...)"
 fn methodName(line String&) String {
     close := try line.Find(") ") catch default -1
-    rest := line[close + 2:] if close >= 0 else line[3:]
+    rest :~ line[close + 2:] if close >= 0 else line[3:]
     i I64 = 0
     for i < rest.Len() and (rest[i].IsLetter() or rest[i].IsDigit() or rest[i] == '_'): i++
     return $rest[:i]
@@ -555,9 +555,9 @@ fn declAt(c mut typecheck.Checker&, mi I64, name String&) I64 {
 # where a member of the type d (of module mi) is written: a field's name, a case, an error word, a trait method
 fn memberAt(c mut typecheck.Checker&, mi I64, d types.DeclId, name String&) I64 {
     if d < types.DeclId(0): return -1
-    nm := c.P.L.Names
+    nm :~ c.P.L.Names
     id := nm.Intern(name)
-    text := c.P.L.Mods[mi].Src!.Text
+    text :~ c.P.L.Mods[mi].Src!.Text
     if c.P.T.DeclKindOf(d) == types.DeclKind.Error {
         # an error type's words have no spans of their own: the first word so spelled after the declaration's name
         from := declAt(c, mi, $nm.Text(c.P.T.DeclName(d)))
@@ -566,8 +566,8 @@ fn memberAt(c mut typecheck.Checker&, mi I64, d types.DeclId, name String&) I64 
         if open < 0: return -1
         return WordIn(text, from + open, name)
     }
-    td := c.P.TypeDecl(d)
-    if td == null or td.Body == null: return -1
+    td :~ c.P.TypeDecl(d)
+    if td is null or td.Body is null: return -1
     match td.Body {
         case ast.TypeBody.Enum(cases, _) {
             for cd in cases {
@@ -645,7 +645,7 @@ fn (md Module&) Text() String {
 }
 
 fn entryText(b mut StringBuilder&, e Entry&, indent String&) {
-    mark := "   # deprecated" if Deprecation(e.Doc) != "" else ""
+    mark :~ "   # deprecated" if Deprecation(e.Doc) != "" else ""
     first := true
     for line in e.Line.Lines() {
         b.Push($indent + $line + $(mark if first else "") + "\n")
@@ -735,7 +735,7 @@ fn docHtml(b mut StringBuilder&, doc String&) {
 
 fn entryHtml(b mut StringBuilder&, e Entry&, member Bool) {
     if member: b.Push("<div class=\"member\">")
-    id := e.Name
+    id :~ e.Name
     dep := Deprecation(e.Doc) != ""
     b.Push($"<pre id=\"" + $Escape(id) + "\"" + $(" class=\"dep\"" if dep else "") + ">" + $Escape(e.Line) + "</pre>\n")
     docHtml(b, e.Doc)
@@ -760,7 +760,7 @@ fn (md Module&) Html() String {
     if md.Items.Len() > 0 {
         b.Push("<h2>Index</h2>\n<ul>\n")
         for e in md.Items {
-            cls := " class=\"dep\"" if Deprecation(e.Doc) != "" else ""
+            cls :~ " class=\"dep\"" if Deprecation(e.Doc) != "" else ""
             b.Push($"<li><a href=\"#" + $Escape(e.Name) + "\"><code" + $cls + ">" + $Escape(e.Name) + "</code></a></li>\n")
         }
         b.Push("</ul>\n<h2>Items</h2>\n")

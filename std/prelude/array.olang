@@ -241,7 +241,7 @@ fn sortByPositions<T ? E>(a mut Array<T>&, less fn&(x T, y T) Bool ? E) ? E {
     for lo < n {
         hi I64 = lo + sortBlock
         if hi > n: hi = n
-        p := pos[:hi - lo]
+        p :~ pos[:hi - lo]
         for k in range hi - lo: p[k] = lo + k
         try sortMergeBuffered(p, fn(i I64, j I64) Bool { return try less(a[i], a[j]) })
         sortPermute(a, lo, p)
@@ -527,7 +527,7 @@ fn (a mut Array<T>&) Chunks(size ChunkSize) mut Array<mut Array<T>&>& {
     for k in range pieces.Len() {
         start I64 = k * n
         end I64 = start + n if a.Len() - start > n else a.Len()
-        pieces[k] = a[start:end]
+        pieces[k] ~ a[start:end]
     }
     return pieces
 }
@@ -556,7 +556,7 @@ fn (a Array<T>&) Windows(size ChunkSize) mut Array<Array<T>&>& {
     n := I64(size)
     count := a.Len() - n + 1 if a.Len() >= n else 0
     views mut Array<Array<T>&>& = Array<Array<T>&>(count, a)   # each view written below
-    for k in range count: views[k] = a[k:k + n]
+    for k in range count: views[k] ~ a[k:k + n]
     return views
 }
 
@@ -701,11 +701,11 @@ fn (a Array<T>&) ChunkBy<? E>(same fn&(x T, y T) Bool ? E) Array<Array<T>&>& ? E
     from I64 = 0
     for i in range 1, a.Len() {
         if not cuts[i]: continue
-        runs[k] = a[from:i]
+        runs[k] ~ a[from:i]
         k++
         from = i
     }
-    runs[k] = a[from:]
+    runs[k] ~ a[from:]
     return runs
 }
 

@@ -12,8 +12,8 @@ type Res unique struct(n mut Node&, k I64) {
     n
     k
 } destruct {
-    if n.next != null: Log = Log * 100 + n.next!.v
-    n.next = Node(k)
+    if n.next is not null: Log = Log * 100 + n.next!.v
+    n.next ~ Node(k)
     for j in range 20 {
         t := Node(j)
         assert t.v == j

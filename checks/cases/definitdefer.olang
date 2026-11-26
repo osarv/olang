@@ -5,7 +5,7 @@ type N struct(v I64) { v }
 fn a() I64 {
     w N&
     defer { assert w.v > 0 }
-    w = N(1)
+    w ~ N(1)
     return w.v
 }
 fn main() { a() }

@@ -39,20 +39,20 @@ type edit struct(Path String, Line I64, Col I64, Kind String, Name String, Type 
 # a report row "handles: PATH:LINE:COL: KIND NAME|TYPE|ROOT" as an edit, failing with NoRow for any other
 fn edit.reportRow(row String&) edit ? NoRow {
     if not row.StartsWith("handles: "): error NoRow
-    rest := row[9:]
+    rest :~ row[9:]
     # the place's end: ": " before the kind
     at := try rest.Find(": ") catch { error NoRow }
     for {
-        tail := rest[at + 2:]
+        tail :~ rest[at + 2:]
         if tail.StartsWith("ref ") or tail.StartsWith("mut ") or tail.StartsWith("kept ") or tail.StartsWith("call ") or tail.StartsWith("view ") or tail.StartsWith("param "): break
         next := try rest[at + 1:].Find(": ") catch { error NoRow }
         at += next + 1
     }
-    loc := rest[:at]
-    words := rest[at + 2:]
+    loc :~ rest[:at]
+    words :~ rest[at + 2:]
     sp := try words.Find(" ") catch { error NoRow }
-    kind := words[:sp]
-    parts := words[sp + 1:].Split("|")
+    kind :~ words[:sp]
+    parts :~ words[sp + 1:].Split("|")
     if parts.Len() != 3: error NoRow
     c2 := try loc.FindLast(":") catch { error NoRow }
     c1 := try loc[:c2].FindLast(":") catch { error NoRow }
@@ -65,7 +65,7 @@ fn edit.reportRow(row String&) edit ? NoRow {
 fn edit.cloneRow(row String&) edit ? NoRow {
     r := try diagedit.Row.Parse(row) catch { error NoRow }
     if not r.IsError or not r.Msg.EndsWith(" has no method 'Clone'"): error NoRow
-    ty := r.Msg[:r.Msg.Len() - 22]
+    ty :~ r.Msg[:r.Msg.Len() - 22]
     return edit($r.Path, r.Line, r.Col, "clone", "", $ty, "")
 }
 
@@ -109,10 +109,10 @@ fn declAfter(line String&, col I64, name String&) I64 {
 fn reassigned(lines Vec<String&>&, k I64, place String&) Bool {
     if place.Len() == 0: return false
     for i in range k + 1, lines.Len() {
-        l := lines[i]
+        l :~ lines[i]
         if l.StartsWith("fn ") or l.StartsWith("test ") or l.StartsWith("type "): return false
-        t := srcmask.StripStart(l)
-        if t.StartsWith("defer "): t = srcmask.StripStart(t[6:])
+        t :~ srcmask.StripStart(l)
+        if t.StartsWith("defer "): t ~ srcmask.StripStart(t[6:])
         if t.StartsWith(place) and t[place.Len():].StartsWith(" = "): return true
     }
     return false
@@ -122,7 +122,7 @@ fn reassigned(lines Vec<String&>&, k I64, place String&) Bool {
 fn declValue(line String&, e edit&) String {
     j := declAfter(line, e.Col, e.Name)
     if j == 0: return ""
-    rhs := line[j + 2:]
+    rhs :~ line[j + 2:]
     h := try rhs.Find(" #") catch default -1
     return $srcmask.Strip(rhs[:h] if h >= 0 else rhs)
 }
@@ -131,22 +131,22 @@ fn declValue(line String&, e edit&) String {
 fn asReference(line String&, e edit&) String ? NoEdit {
     j := declAfter(line, e.Col, e.Name)
     if j == 0 or e.Root == "": error NoEdit
-    perm := "mut " if e.Kind == "mut" else ""
+    perm :~ "mut " if e.Kind == "mut" else ""
     return $line[:e.Col - 1 + e.Name.Len()] + " " + $perm + $e.Type + "&" + $e.Root + " =" + $line[j + 2:]
 }
 
 # the line with an element or a value read where its collection holds it: "x := a[i]" or "x := a.At(i)" as
 # "x := a.RefMut(i)", "x := try m.Get(k)" as "x := try m.RefMut(k)"
 fn asRef(line String&, e edit&) String ? NoEdit {
-    m := ".Ref(" if e.Kind == "view" else ".RefMut("
+    m :~ ".Ref(" if e.Kind == "view" else ".RefMut("
     j := declAfter(line, e.Col, e.Name)
     if j == 0: error NoEdit
-    rhs := line[j + 2:]
+    rhs :~ line[j + 2:]
     note := ""
     h := try rhs.Find(" #") catch default -1
     if h >= 0 {
         note = rhs[h:]
-        rhs = rhs[:h]
+        rhs ~ rhs[:h]
     }
     if e.Root == "Get" {
         g := try rhs.Find(".Get(") catch { error NoEdit }
@@ -155,7 +155,7 @@ fn asRef(line String&, e edit&) String ? NoEdit {
     if e.Root != "At": error NoEdit
     a := try rhs.Find(".At(") catch {
         # "a[i]": the index's opening bracket, the last at depth 0
-        t := srcmask.StripEnd(rhs)
+        t :~ srcmask.StripEnd(rhs)
         if t.Len() == 0 or t[t.Len() - 1] != ']': error NoEdit
         d := 0
         k := t.Len() - 1
@@ -192,7 +192,7 @@ fn asLent(line String&, e edit&) String ? NoEdit {
         if ch == ',' and d == 0: break
         k++
     }
-    ty := srcmask.StripEnd(line[t0:k])
+    ty :~ srcmask.StripEnd(line[t0:k])
     if ty.EndsWith("&") or ty.StartsWith("mut "): error NoEdit
     return $line[:t0] + "mut " + $ty + "&" + $line[t0 + ty.Len():]
 }
@@ -257,7 +257,7 @@ fn apply(eds Vec<edit>&, left mut Vec<String&>&, cloned mut Vec<String>&) I64 {
 
 fn applyFile(path String&, eds Vec<edit>&, left mut Vec<String&>&, cloned mut Vec<String>&) I64 {
     src := try srcmask.ReadText(path) catch { return 0 }
-    lines := src.Split("\n").ToVec()
+    lines :~ src.Split("\n").ToVec()
     mine Vec<edit>
     for e in eds {
         if e.Path == path: mine.Push(e)
@@ -269,7 +269,7 @@ fn applyFile(path String&, eds Vec<edit>&, left mut Vec<String&>&, cloned mut Ve
         key := e.Line * 100000 + e.Col
         if key == last or e.Line < 1 or e.Line > lines.Len(): continue
         last = key
-        line := lines[e.Line - 1]
+        line :~ lines[e.Line - 1]
         at := $path + ":" + $e.Line
         # (a line whose Clone was left out keeps its copy: a later round's report of it is no handle's copy)
         if e.Kind != "clone" and cloned.Has(at): continue
@@ -306,7 +306,7 @@ fn changed(line String&, e edit&) String ? NoEdit {
 # what compiling a file prints with the report on (test for a file with tests, compile otherwise)
 fn compileOne(olang String&, file String&, dir String&) String {
     src := try srcmask.ReadText(file) catch { return "" }
-    mode := "test" if src.Contains("TestBuild") or src.Contains("\ntest ") or src.StartsWith("test ") else "compile"
+    mode :~ "test" if src.Contains("TestBuild") or src.Contains("\ntest ") or src.StartsWith("test ") else "compile"
     out := try os.Output.ExecUntil(cancel.Token.After(900000), "env", "OLANG_HANDLES=1", olang, mode, file, dir = dir) catch { return "" }
     return $out.Stdout + $out.Stderr
 }
@@ -315,7 +315,7 @@ fn worker(olang String&, files Array<String&>&, dir String&, outputs mut Array<S
     for {
         k := Taken.AtomicAdd(1)
         if k >= files.Len(): break
-        outputs[k] = compileOne(olang, files[k], dir)
+        outputs[k] ~ compileOne(olang, files[k], dir)
     }
 }
 
@@ -333,7 +333,7 @@ fn main() ? {
     jobs I64 = 3
     paths Vec<String&>
     via Vec<String&>
-    args := os.Args()
+    args :~ os.Args()
     i I64 = 1
     for i < args.Len() {
         if (args[i] == "--olang" or args[i] == "-j" or args[i] == "--via") and i + 1 < args.Len() {
@@ -359,7 +359,7 @@ fn main() ? {
     diagedit.OlangFiles(via if via.Len() > 0 else paths, files)
     allowed Vec<String&>
     for p in paths: allowed.Push(diagedit.RealPathOf(p))
-    tmp := try os.MkTemp("", "handles_migrate")
+    tmp :~ try os.MkTemp("", "handles_migrate")
     defer: try os.RemoveAll(tmp) catch { }
     work Vec<String&>
     for k in range jobs.Max(1) {
@@ -369,9 +369,9 @@ fn main() ? {
     total I64 = 0
     left Vec<String&>
     cloned Vec<String>
-    fileArray := files.ToArray()
+    fileArray :~ files.ToArray()
     for round in range 1, 6 {
-        outputs := compileAll(olang, fileArray, work.View())
+        outputs :~ compileAll(olang, fileArray, work.View())
         eds Vec<edit>
         for k in range outputs.Len() {
             expected Vec<String&>
@@ -408,7 +408,7 @@ test asReference "a copy of a place made a reference to it" {
 }
 
 test reassigned "a copy kept as the old value" {
-    ls := Array<String&>["fn f() {", "    saved := c.out", "    c.out = Map<I64, I64>()", "    defer c.out = saved", "}"].ToVec()
+    ls :~ Array<String&>["fn f() {", "    saved := c.out", "    c.out = Map<I64, I64>()", "    defer c.out = saved", "}"].ToVec()
     assert reassigned(ls, 1, "c.out") and not reassigned(ls, 1, "c.in")
     e := edit("f", 1, 5, "ref", "saved", "", "c")
     assert declValue("    saved := c.out  # x", e) == "c.out"

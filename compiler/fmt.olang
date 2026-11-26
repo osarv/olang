@@ -190,7 +190,7 @@ fn (f mut formatter&) run() {
 # what stands between two tokens, from offset a to b: spaces, line ends and comments; next is the real index of the
 # token after it, -1 at the end of the file
 fn (f mut formatter&) gap(a I64, b I64, next I64) {
-    t := f.text
+    t :~ f.text
     i := a
     for i < b {
         c := t[i]
@@ -335,7 +335,7 @@ fn (f mut formatter&) token(r I64) {
         f.codes.Push(f.space(f.lastTok, j, r))
     }
     # a type bracket ">" written together with the "=" after it (">=", ">>="): the brackets, then the "=" apart
-    t := f.tokText(j)
+    t :~ f.tokText(j)
     if f.closes[j] > 0 and f.closes[j] < t.Len() and t[f.closes[j]:] == "=" {
         f.codes.Push(t[:f.closes[j]])
         f.codes.Push(" =")
@@ -621,7 +621,7 @@ fn (f formatter&) writeLine(out mut StringBuilder&, codes String&, l I64, col I6
         out.PushChar('\n')
         return
     }
-    code := codes[f.lCodeS[l]:f.lCodeE[l]]
+    code :~ codes[f.lCodeS[l]:f.lCodeE[l]]
     if code.Len() > 0 or f.lComS[l] >= 0 {
         for _ in range f.lIndent[l]: out.Push("    ")
     }
@@ -656,7 +656,7 @@ fn FileLayout(given source.Source&, std String&, prelude String&, color Bool, sa
         d.Error(diag.Where.Span(file, I64(x.Start), I64(x.End)), diagmsg.Msg(msgs.Diag.UnknownChar, x.Rule(), x.Message(), x.Note(), x.Help()))
     }
     p := parse.Parser(src, ts, names, o, d, file)
-    decls := p.File()
+    decls :~ p.File()
     if ts.Diags.Len() > 0 or d.AllSaid().Len() > 0 {
         said.Push(d.Render())
         error Unparsable.Syntax
@@ -739,7 +739,7 @@ fn (l mut loader&) prelude() String {
     b := StringBuilder()
     b.PushChar(' ')
     dir := filepath.Join(l.std, "prelude")
-    names := try os.ReadDir(dir) catch os.Error { return " " }
+    names :~ try os.ReadDir(dir) catch os.Error { return " " }
     for n in names {
         if not n.EndsWith(".olang"): continue
         m := l.load(filepath.Join(dir, n))
@@ -750,9 +750,9 @@ fn (l mut loader&) prelude() String {
 
 # an import's file: "std/x" under std, a remote one (its first part holds a dot) none, anything else beside the importer
 fn (l loader&) target(importer String&, ipath String&) String {
-    first := ipath
+    first :~ ipath
     slash := try ipath.FindByte('/') catch default -1
-    if slash >= 0: first = ipath[:slash]
+    if slash >= 0: first ~ ipath[:slash]
     if (first.Contains(".") and first != "." and first != ".."): return ""
     if ipath.StartsWith("std/"): return $filepath.Join(l.std, ipath[4:]) + ".olang"
     return $filepath.Join(filepath.Dir(importer), ipath) + ".olang"
@@ -760,7 +760,7 @@ fn (l loader&) target(importer String&, ipath String&) String {
 
 # the module at path, loaded once, its imports with it; -1 where there is no such file
 fn (l mut loader&) load(path String&) I64 {
-    real := try os.RealPath(path) catch os.Error { return -1 }
+    real :~ try os.RealPath(path) catch os.Error { return -1 }
     for i in range l.paths.Len() {
         if l.paths[i] == real: return i
     }
@@ -772,7 +772,7 @@ fn (l mut loader&) load(path String&) I64 {
     b.PushChar(' ')
     aliases Vec<String&>
     paths Vec<String&>
-    toks := ts.Toks
+    toks :~ ts.Toks
     n := toks.Len()
     for i in range n {
         k := toks[i].Kind
@@ -791,12 +791,12 @@ fn (l mut loader&) load(path String&) I64 {
             j := i + 1
             alias String& = ""
             if j < n and toks[j].Kind == token.Tok.Iden {
-                alias = $src.Text[toks[j].Start:toks[j].End]
+                alias ~ $src.Text[toks[j].Start:toks[j].End]
                 j++
             }
             if j < n and toks[j].Kind == token.Tok.StrLit {
                 ip := scan.LiteralText(src.Text[toks[j].Start:toks[j].End])
-                if alias == "": alias = $filepath.Base(ip)
+                if alias == "": alias ~ $filepath.Base(ip)
                 aliases.Push(alias)
                 paths.Push(ip)
             }

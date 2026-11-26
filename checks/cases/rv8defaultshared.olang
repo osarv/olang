@@ -31,8 +31,8 @@ fn churn() I64 {
 }
 fn main() ? {
     a Node& = Node(0)
-    x := pickd(a)
-    y := boxd(a)
+    x :~ pickd(a)
+    y :~ boxd(a)
     kept := Vec<Node&>()
     for i in range 3 {
         if i >= 0: kept.Push(pickd(a))

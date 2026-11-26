@@ -87,7 +87,7 @@ fn tryBefore(code String&, off I64) I64 {
 
 # a condition written after "assert not": parenthesized where an operator binding looser than "not" stands in it
 fn negated(c String&) String {
-    t := c.Trim()
+    t :~ c.Trim()
     if t.StartsWith("not ") and wordAt(codeOf(t[4:]), "and", 0) < 0 and wordAt(codeOf(t[4:]), "or", 0) < 0 {
         return $t[4:]
     }
@@ -136,7 +136,7 @@ fn migrateLine(l String&, inTest Bool, inMain Bool, where String&, left mut Vec<
         }
     }
     # "if C { fail }" on a line of its own
-    t := code.Trim()
+    t :~ code.Trim()
     if t.StartsWith("if ") and t.EndsWith(" { fail }") and (try t[3:].Find("{") catch default -1) == t.Len() - 11 {
         ind := code.Len() - code.TrimStart().Len()
         s := ind + 3
@@ -172,7 +172,7 @@ fn migrateLine(l String&, inTest Bool, inMain Bool, where String&, left mut Vec<
 
 # one file migrated; how many lines changed
 fn migrate(file String&, left mut Vec<String&>&) I64 ? {
-    text := try os.ReadFile(file)
+    text :~ try os.ReadFile(file)
     b := StringBuilder()
     changed I64 = 0
     depth I64 = 0
@@ -183,7 +183,7 @@ fn migrate(file String&, left mut Vec<String&>&) I64 ? {
     for l in text.Lines() {
         if not first: b.PushChar('\n')
         first = false
-        tl := l.Trim()
+        tl :~ l.Trim()
         if testAt < 0 and tl.StartsWith("test \""): testAt = depth
         if mainAt < 0 and tl.StartsWith("fn main()"): mainAt = depth
         m := migrateLine(l, testAt >= 0, mainAt >= 0, $file + ":" + $n, left)
@@ -216,7 +216,7 @@ fn filesOf(paths Array<String&>&) Vec<String&> ? {
 }
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     if args.Len() < 2 {
         try io.PutErrLn("usage: donefail_migrate PATH...")
         os.Exit(2)

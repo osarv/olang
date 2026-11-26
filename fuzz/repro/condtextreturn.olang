@@ -7,7 +7,7 @@ fn churn(n I64) String& {
 }
 fn wrap(k I64) String& {
     c String& = lit(k)
-    j := churn(50)
+    j :~ churn(50)
     return "(" + $c + " != " + $j.Len() + ")"
 }
 run mut I64 = 1

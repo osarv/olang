@@ -9,7 +9,7 @@ fn main() ? io.Error {
     outer mut Array<Node&>& = Array<Node&>(1, Node(0))
     for i in range 3 {
         inner mut Array<Node&>& = Array<Node&>(1, Node(0))
-        arr := outer if i < 10 else inner
+        arr :~ outer if i < 10 else inner
         join { spawn arr[0] = Node.mkNode(i + 50) }
     }
     try io.PutLn($outer[0].v)

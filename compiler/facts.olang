@@ -34,7 +34,7 @@ fn (t mut Table&) Decide(name String&, value String&, carried Bool) {
         return
     }
     if had == value or had.Split(",").Some(fn(v String&) Bool { return v == value }): return
-    vs := had.Split(",").ToVec()
+    vs :~ had.Split(",").ToVec()
     vs.Push(value)
     vs.Sort(fn(a String&, b String&) Bool { return a < b })
     t.values.Put(name, vs.Join(","))
@@ -87,10 +87,10 @@ fn (t Table&) RecordLines(reader I64, own Bool, tokens Map<String, String>?& = n
     lines Vec<String>
     for rk in t.reads.Keys() {
         if not rk.StartsWith(at): continue
-        k := rk[at.Len():]
+        k :~ rk[at.Len():]
         if not own and not t.carried.Has(k): continue
         v := try t.values.Get(k) catch default ""
-        tok := (try tokens.Get(k) catch default Token(v)) if tokens != null else Token(v)
+        tok := (try tokens.Get(k) catch default Token(v)) if tokens is not null else Token(v)
         lines.Push($"read " + $tok + " " + $k)
     }
     lines.Sort(fn(a String, b String) Bool { return a < b })
@@ -110,7 +110,7 @@ fn (t Table&) Holds(lines Array<String&>&) Bool {
     for line in lines {
         if not line.StartsWith("read "): return false
         sp := try line[5:].Find(" ") catch { return false }
-        name := line[5 + sp + 1:]
+        name :~ line[5 + sp + 1:]
         v := try t.values.Get(name) catch { return false }
         if Token(v) != line[5:5 + sp]: return false
     }

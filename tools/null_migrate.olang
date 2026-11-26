@@ -38,7 +38,7 @@ fn quoted(msg String&) String {
 # what an array message says to write: the text between "write '" and the next "'"
 fn written(msg String&) String {
     at := try msg.Find("write '") catch { return "" }
-    rest := msg[at + 7:]
+    rest :~ msg[at + 7:]
     end := try rest.Find("'") catch { return "" }
     return $rest[:end]
 }
@@ -88,7 +88,7 @@ fn diagsFrom(output String&, allowed Vec<String&>&, edits mut Vec<diagedit.Reque
                 continue
             }
             if rule.Contains("T2c") and msg.StartsWith("an array written '&' is never null") {
-                kind := "empty" if msg.Contains("for an empty") else "isempty"
+                kind :~ "empty" if msg.Contains("for an empty") else "isempty"
                 if diagedit.Allowed(full, allowed) { edits.Push(diagedit.Request($full, line, col, kind, written(msg), $row)) }
                 answered = true
                 continue
@@ -130,7 +130,7 @@ fn apply(requests Vec<diagedit.Request>&, kind String&) I64 {
         }
         expect Vec<String&>
         diagedit.ExpectedTexts(src, expect)
-        lines := src.Split("\n")
+        lines :~ src.Split("\n")
         mine Vec<diagedit.Request>
         for r in requests {
             if r.Path == path and r.Kind == kind: mine.Push(r)
@@ -169,18 +169,18 @@ fn apply(requests Vec<diagedit.Request>&, kind String&) I64 {
                 } else {
                     # "X is null" / "X is not null", the error at "is", rewritten as the test the message writes
                     neg := r.Arg.EndsWith("> 0")
-                    x := r.Arg[:r.Arg.Len() - (10 if neg else 11)]
+                    x :~ r.Arg[:r.Arg.Len() - (10 if neg else 11)]
                     old := $x + $(" is not null" if neg else " is null")
                     from := at - x.Len() - 1
                     if from < 0 or not text[from:].StartsWith(old): continue
                     # "x is null or x.Len() == 0", written for an array that was nullable, is the length test once
-                    rest := text[from + old.Len():]
+                    rest :~ text[from + old.Len():]
                     dup := $(" and " if neg else " or ") + $r.Arg
-                    if rest.StartsWith(dup): rest = rest[dup.Len():]
+                    if rest.StartsWith(dup): rest ~ rest[dup.Len():]
                     replaced = $text[:from] + $r.Arg + $rest
                     delta = replaced.Len() - text.Len()
                 }
-                lines[idx] = $replaced
+                lines[idx] ~ $replaced
                 diagedit.Realign(lines, idx, delta, at)
                 shLine.Push(r.Line)
                 shAt.Push(at)
@@ -201,14 +201,14 @@ fn apply(requests Vec<diagedit.Request>&, kind String&) I64 {
                 }
                 if postfixChain(r.Arg) {
                     replaced = $text[:e] + "!" + $text[e:]
-                    lines[idx] = $replaced
+                    lines[idx] ~ $replaced
                     diagedit.Realign(lines, idx, 1, e)
                     shLine.Push(r.Line)
                     shAt.Push(e)
                     shDelta.Push(1)
                 } else {
                     replaced = $text[:at] + "(" + $text[at:e] + ")!" + $text[e:]
-                    lines[idx] = $replaced
+                    lines[idx] ~ $replaced
                     diagedit.Realign(lines, idx, 3, e)
                     shLine.Push(r.Line)
                     shAt.Push(at)
@@ -217,7 +217,7 @@ fn apply(requests Vec<diagedit.Request>&, kind String&) I64 {
                 made++
                 continue
             }
-            lines[idx] = $replaced
+            lines[idx] ~ $replaced
             diagedit.Realign(lines, idx, 1, at)
             shLine.Push(r.Line)
             shAt.Push(at)
@@ -237,7 +237,7 @@ fn main() ? {
     olang := srcmask.Compiler()
     jobs I64 = 3
     paths Vec<String&>
-    args := os.Args()
+    args :~ os.Args()
     i I64 = 1
     for i < args.Len() {
         if args[i] == "--olang" or args[i] == "-j" {
@@ -274,7 +274,7 @@ fn main() ? {
     allowed Vec<String&>
     for p in paths: allowed.Push(diagedit.RealPathOf(p))
 
-    tmp := try os.MkTemp("", "null_migrate") catch {
+    tmp :~ try os.MkTemp("", "null_migrate") catch {
         srcmask.SayErr("null_migrate: cannot make a temporary directory")
         os.Exit(1)
         unreachable
@@ -282,7 +282,7 @@ fn main() ? {
     defer: try os.RemoveAll(tmp) catch { }
     work mut Array<String&>& = Array<String&>(jobs)
     for k in range jobs {
-        work[k] = $tmp + "/w" + $k
+        work[k] ~ $tmp + "/w" + $k
         try os.MkDirAll(work[k]) catch {
             srcmask.SayErr("null_migrate: cannot make " + $work[k])
             os.Exit(1)
@@ -291,9 +291,9 @@ fn main() ? {
     totalNullable I64 = 0
     totalBang I64 = 0
     unanswered Vec<diagedit.Request>
-    fileArray := files.ToArray()
+    fileArray :~ files.ToArray()
     for round in range 1, 25 {
-        outputs := diagedit.CompileAll(olang, fileArray, work, true)
+        outputs :~ diagedit.CompileAll(olang, fileArray, work, true)
         requests Vec<diagedit.Request>
         unanswered = Vec<diagedit.Request>()
         for o in outputs: diagsFrom(o, allowed, requests, unanswered)

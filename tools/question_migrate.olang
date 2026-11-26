@@ -33,7 +33,7 @@ fn lineStarts(src String&) Vec<I64> {
 
 # whether a declaration of a function or a type begins at offset at, at the start of its line
 fn declares(src String&, at I64) Bool {
-    t := src[at:]
+    t :~ src[at:]
     return t.StartsWith("fn ") or t.StartsWith("type ")
 }
 
@@ -63,12 +63,12 @@ fn bodyAt(src String&, line I64) I64 ? Unfixable {
 # src with '?' written before the body of the declaration the line stands in
 fn withQuestion(src String&, line I64) String ? Unfixable {
     at := try bodyAt(src, line)
-    gap := "" if at > 0 and src[at - 1] == ' ' else " "
+    gap :~ "" if at > 0 and src[at - 1] == ' ' else " "
     return $src[:at] + $gap + "? " + $src[at:]
 }
 
 fn main() {
-    args := os.Args()
+    args :~ os.Args()
     olang := "build/olang"
     jobs I64 = 3
     paths Vec<String&>
@@ -94,7 +94,7 @@ fn main() {
     diagedit.OlangFiles(paths, files)
     allowed Vec<String&>
     for p in paths: allowed.Push(diagedit.RealPathOf(p))
-    tmp := try os.MkTemp("", "question_migrate") catch {
+    tmp :~ try os.MkTemp("", "question_migrate") catch {
         srcmask.SayErr("question_migrate: cannot make a temporary directory")
         os.Exit(1)
         unreachable
@@ -102,7 +102,7 @@ fn main() {
     defer: try os.RemoveAll(tmp) catch { }
     work mut Array<String&>& = Array<String&>(jobs.Max(1))
     for k in range work.Len() {
-        work[k] = $tmp + "/w" + $k
+        work[k] ~ $tmp + "/w" + $k
         try os.MkDirAll(work[k]) catch {
             srcmask.SayErr("question_migrate: cannot make " + $work[k])
             os.Exit(1)
@@ -110,7 +110,7 @@ fn main() {
     }
     total I64 = 0
     left Vec<String&>
-    fileArray := files.ToArray()
+    fileArray :~ files.ToArray()
     for round in range 1, 20 {
         requests Vec<diagedit.Request>
         for o in diagedit.CompileAll(olang, fileArray, work, true) {

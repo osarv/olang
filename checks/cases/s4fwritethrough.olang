@@ -1,0 +1,17 @@
+# check: run
+# S4f: "=" given a reference writes the whole of what it names (a null-tested one too), and ":=" of a reference copies
+# what it names - the copy a value of its own
+type Pt struct(x I64, y I64) {
+    x, y
+}
+
+fn main() {
+    p := Pt(1, 2)
+    r mut Pt?& = null
+    if p.x > 0: r ~ p
+    if r is not null: r = Pt(3, 4)
+    q :~ p
+    c := q
+    c.x = 9
+    assert p.x == 3 and p.y == 4 and c.x == 9 and q == Pt(3, 4)
+}

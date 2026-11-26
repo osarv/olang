@@ -571,9 +571,9 @@ fn (g migration&) bareText(occs Vec<occ>&, lo I64, hi I64) String {
 fn (g migration&) bareInPlace(o occ&) String {
     s := g.v[o.open].start
     e := g.v[o.end - 1].end
-    name := g.src[g.v[o.name].start:g.v[o.name].end]
-    left := " " if s > 0 and srcmask.IsWord(g.src[s - 1]) else ""
-    right := " " if e < g.src.Len() and srcmask.IsWord(g.src[e]) else ""
+    name :~ g.src[g.v[o.name].start:g.v[o.name].end]
+    left :~ " " if s > 0 and srcmask.IsWord(g.src[s - 1]) else ""
+    right :~ " " if e < g.src.Len() and srcmask.IsWord(g.src[e]) else ""
     return $left + $name + $right
 }
 
@@ -586,7 +586,7 @@ fn (g mut migration&) typeList(lo I64, hi I64, at I64, recvLo I64, recvHi I64, c
     names Vec<String&>
     entries Vec<String&>
     for o in occs {
-        name := g.src[g.v[o.name].start:g.v[o.name].end]
+        name :~ g.src[g.v[o.name].start:g.v[o.name].end]
         if o.parent < 0: g.edit(g.v[o.open].start, g.v[o.end - 1].end, g.bareInPlace(o))
         prev := g.v[o.open - 1].k
         inRecv := o.open > recvLo and o.open < recvHi and o.parent < 0
@@ -650,7 +650,7 @@ fn (g mut migration&) typeLists() {
 
 fn (g migration&) applied() String {
     reps Vec<String&>& = g.reps
-    sorted := g.edits.ToArray()
+    sorted :~ g.edits.ToArray()
     sorted.Sort(fn(a Edit, b Edit) Bool {
         if a.start != b.start: return a.start < b.start
         ai := a.end == a.start
@@ -674,7 +674,7 @@ fn (g migration&) applied() String {
 fn migrate(src String&, old Bool, path String&, total mut Counts&, report mut Vec<String&>&) String {
     g := migration(src, old, path)
     g.v = vtokens(src)
-    g.m = matches(g.v)
+    g.m ~ matches(g.v)
     g.listing()
     g.errorSets()
     g.typeLists()
@@ -687,11 +687,11 @@ fn migrate(src String&, old Bool, path String&, total mut Counts&, report mut Ve
 # a Markdown text with its "```olang" blocks migrated
 fn migrateMarkdown(src String&, old Bool, path String&, total mut Counts&, report mut Vec<String&>&) String {
     out := StringBuilder()
-    lines := src.Split("\n")
+    lines :~ src.Split("\n")
     inBlock := false
     block := StringBuilder()
     for k in range lines.Len() {
-        line := lines[k]
+        line :~ lines[k]
         last := k == lines.Len() - 1
         if inBlock and line.StartsWith("```") {
             out.Push(migrate(block.ToString(), old, path, total, report))
@@ -716,9 +716,9 @@ fn main() ? {
     verbose := false
     old := false
     paths Vec<String&>
-    args := os.Args()
+    args :~ os.Args()
     for i in range 1, args.Len() {
-        a := args[i]
+        a :~ args[i]
         if a == "--check": check = true
         else if a == "-v": verbose = true
         else if a == "--old": old = true
@@ -751,7 +751,7 @@ fn main() ? {
         }
     }
     for r in report: srcmask.Say(r)
-    verb := "would change " if check else "changed "
+    verb :~ "would change " if check else "changed "
     srcmask.Say($verb + $changedFiles + " files: " + $total.Describe())
     if check and changedFiles > 0: os.Exit(1)
 }

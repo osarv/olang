@@ -11,12 +11,12 @@ fn grow(v mut ColumnVec<P>&) {
 fn main() {
     v := ColumnVec<P>()
     v.Push(P(1, 2))
-    xs := v.X
+    xs :~ v.X
     grow(v)
     xs[0] = 99
-    ys := v.Y
+    ys :~ v.Y
     v.Push(P(5, 5))
     assert ys[0] == 2
-    zs := v.X
+    zs :~ v.X
     assert zs[0] == 1   # taken after the growth: no error
 }

@@ -11,7 +11,7 @@ fn main() ? {
         r[0] = r[0] + 1
         return r.Len()
     }
-    d := v.View()
+    d :~ v.View()
     n := f() + callIt(f)
     try io.PutLn($d[0] + " " + $n)
 }

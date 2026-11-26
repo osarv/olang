@@ -16,9 +16,9 @@ fn churn() I64 {
     return t
 }
 fn work() {
-    x := G
+    x :~ G
     Fns.Push(fn() I64 {
-        x.next = Node(x.v + 41)
+        x.next ~ Node(x.v + 41)
         return x.next!.v
     })
 }

@@ -17,30 +17,30 @@ fn twice(x I64) I64 { return x * 2 }
 
 fn length(c Cell?&) I64 {
     n I64 = 0
-    at := c
-    for at != null {
+    at :~ c
+    for at is not null {
         n++
-        at = at.next
+        at ~ at.next
     }
     return n
 }
 
 fn first(c Cell?&) I64 {
-    if c == null: return -1
+    if c is null: return -1
     return c.v
 }
 
 fn second(c Cell?&) I64 {
-    if c == null: return -1
-    n := c.next
-    return n.v if n != null else -1
+    if c is null: return -1
+    n :~ c.next
+    return n.v if n is not null else -1
 }
 
-fn notNull(c Cell?&) Bool { return not (null == c) }
+fn notNull(c Cell?&) Bool { return not (null is c) }
 
-fn held(e Missing) I64 { return 0 if e == null else 1 }
+fn held(e Missing) I64 { return 0 if e is null else 1 }
 
-fn called(f fn?&(x I64) I64) I64 { return f(5) if null != f else 0 }
+fn called(f fn?&(x I64) I64) I64 { return f(5) if null is not f else 0 }
 
 fn score() I64 {
     list := Cell(1, Cell(2, Cell(3, null)))
@@ -61,22 +61,22 @@ assert score() == 1111213
 test "the null test is '== null' and '!= null', never Eq, at run time and while compiling" {
     assert score() == 1111213 and Baked == score()
     a Cell?& = Cell(4, null)
-    assert a != null
+    assert a is not null
     c Cell?& = null
-    assert c == null and null == c
+    assert c is null and null is c
 }
 
 test "a test that holds narrows: after an assert, a leaving if, inside and/or, through a loop" {
     c Cell?& = Cell(7, null)
-    assert c != null
+    assert c is not null
     assert c.v == 7
     d Cell?& = c.next
-    if d == null or d.v > 0: assert d == null or d.v > 0
+    if d is null or d.v > 0: assert d is null or d.v > 0
     walked := 0
     at Cell?& = c
-    for at != null {
+    for at is not null {
         walked += at.v
-        at = at.next
+        at ~ at.next
     }
     assert walked == 7
 }

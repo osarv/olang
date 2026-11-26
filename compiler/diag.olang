@@ -142,7 +142,7 @@ fn (d mut Diagnostics&) shown(file I64, line I64) String, I64 {
 fn (d mut Diagnostics&) lineOf(file I64, at I64) I64, I64 {
     if d.startsFrom[file] < 0 {
         d.startsFrom[file] = d.starts.Len()
-        made := source.LineStarts(d.texts[file])
+        made :~ source.LineStarts(d.texts[file])
         for s in made: d.starts.Push(I64(s))
         d.startsLen[file] = made.Len()
     }
@@ -279,10 +279,10 @@ fn (d mut Diagnostics&) Yield(rec I64) {
 fn (d mut Diagnostics&) Fatal(at Where, m diagmsg.Msg) {
     d.fatal = true
     d.fatalAt = at
-    d.fatalRule = m.Rule
-    d.fatalText = m.Text
-    d.fatalNote = m.Note
-    d.fatalHelp = m.Help
+    d.fatalRule ~ m.Rule
+    d.fatalText ~ m.Text
+    d.fatalNote ~ m.Note
+    d.fatalHelp ~ m.Help
 }
 
 # the rules about where something lives: a statement reports the first error of these (B11) - a scope found wrong is
@@ -543,10 +543,10 @@ fn (d mut Diagnostics&) SetFrom(o Diagnostics&) {
     for n in o.yielding: d.yielding.Push(n)
     for n in o.alone: d.alone.Push(n)
     d.fatalAt = o.fatalAt
-    d.fatalRule = $o.fatalRule
-    d.fatalText = $o.fatalText
-    d.fatalNote = $o.fatalNote
-    d.fatalHelp = $o.fatalHelp
+    d.fatalRule ~ $o.fatalRule
+    d.fatalText ~ $o.fatalText
+    d.fatalNote ~ $o.fatalNote
+    d.fatalHelp ~ $o.fatalHelp
     d.fatal = o.fatal
     d.Quiet = o.Quiet
     d.Lenient = o.Lenient
@@ -577,7 +577,7 @@ fn (d mut Diagnostics&) Reopen(g I64) { d.held.Push(g) }
 # an error held by no group, whatever groups are open: what ends more than the branch it is met in (a nesting limit, a
 # block left open) is reported whichever branch is taken
 fn (d mut Diagnostics&) ErrorUnheld(at Where, m diagmsg.Msg) I64 {
-    saved := d.held.ToArray()
+    saved :~ d.held.ToArray()
     d.held.Clear()
     rec := d.report(at, m, false)
     for g in saved: d.held.Push(g)
@@ -640,7 +640,7 @@ fn ColorWanted() Bool {
 }
 
 fn termAllowsColor() Bool {
-    term := try os.Env("TERM") catch { return false }
+    term :~ try os.Env("TERM") catch { return false }
     return term != "dumb"
 }
 
@@ -718,7 +718,7 @@ fn (d mut Diagnostics&) written() Array<I64> {
             next++
         }
     }
-    order := keep.ToArray()
+    order :~ keep.ToArray()
     order.Sort(fn(a I64, b I64) Bool {
         if rank[file[a] + 1] != rank[file[b] + 1]: return rank[file[a] + 1] < rank[file[b] + 1]
         if line[a] != line[b]: return line[a] < line[b]
@@ -933,7 +933,7 @@ fn (d mut Diagnostics&) putExcerpt(b mut StringBuilder&, at Where) {
         }
         case _ { return }
     }
-    text := d.texts[f]
+    text :~ d.texts[f]
     line, lineStart := d.lineOf(f, start)
     lineEnd := start
     for lineEnd < text.Len() and text[lineEnd] != '\n': lineEnd++
@@ -976,7 +976,7 @@ fn (d mut Diagnostics&) putExcerpt(b mut StringBuilder&, at Where) {
 
 # the specification beside the compiler - found from where the compiler itself is, as the standard library is (B3)
 fn SpecPath() String& {
-    exe := try os.ReadLink("/proc/self/exe") catch { return "SPEC.md" }
+    exe :~ try os.ReadLink("/proc/self/exe") catch { return "SPEC.md" }
     slash := try exe.FindLast("/") catch { return "SPEC.md" }
     return $exe[:slash] + "/../SPEC.md"
 }
@@ -991,7 +991,7 @@ fn section() String {
 
 # the rule a line defines - "**B1.**", "- **O25a.**", "**T6b (a title).**" - or "" when it defines none
 fn ruleIdAt(line String&) String& {
-    l := line[2:] if line.StartsWith("- ") else line[:]
+    l :~ line[2:] if line.StartsWith("- ") else line[:]
     if l.Len() < 4 or not l.StartsWith("**") or not l[2].IsUpper() or not l[3].IsDigit(): return line[0:0]
     p I64 = 3
     for p < l.Len() and l[p].IsDigit(): p++
@@ -1013,19 +1013,19 @@ fn Explain(spec String&, rule String&) String ? {
     for i, c in rule { want.PushChar(c.ToUpper() if i == 0 else c) }
     wanted := want.ToString()
     out := StringBuilder()
-    heading := spec[0:0]
+    heading :~ spec[0:0]
     inside, found := false, false
     blanks I64 = 0
-    rest := spec[:]
+    rest :~ spec[:]
     for rest.Len() > 0 {
         nl := try rest.FindByte('\n') catch default (rest.Len() - 1)
-        line := rest[:nl + 1]
-        rest = rest[nl + 1:]
-        id := ruleIdAt(line)
+        line :~ rest[:nl + 1]
+        rest ~ rest[nl + 1:]
+        id :~ ruleIdAt(line)
         head := line[0] == '#'
         if inside and (id.Len() > 0 or head): break
         if head {
-            heading = line
+            heading ~ line
             continue
         }
         if not inside and id == wanted {

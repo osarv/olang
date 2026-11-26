@@ -15,7 +15,7 @@ fn mk(n I64) Vec<I64> {
 }
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     if args.Len() > 1 and args[1] == "fresh" {
         p := P(mk(4000000))
         try io.PutLn($p.toks.Len())

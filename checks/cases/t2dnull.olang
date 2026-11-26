@@ -11,12 +11,12 @@ type Node struct(v I64) {
 Head mut Node?& = null
 fn main() ? io.Error {
     a := Node(1)
-    Head = a
+    Head ~ a
     b := Node(2)
-    b.back = a
+    b.back ~ a
     try io.PutLn($b.back!.v)
-    Head = null
-    try io.PutLn($(b.back == null))
-    b.next = a
+    Head ~ null
+    try io.PutLn($(b.back is null))
+    b.next ~ a
     try io.PutLn($b.back!.v)
 }

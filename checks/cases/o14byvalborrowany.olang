@@ -22,7 +22,7 @@ fn (p aPt&) Name() String { return "pt " + $p.x }
 fn bor(p aPt) any aNamed& { return p }
 fn main() ? {
     q := aPt(5, 6)
-    n := bor(q)
+    n :~ bor(q)
     q.x = 0
     churn()
     try io.PutLn(n.Name())

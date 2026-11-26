@@ -12,7 +12,7 @@ fn main() ? {
     m.Put(1, H())
     for _ in range 3 {
         c := try m.Get(1)
-        r := c.me()
+        r :~ c.me()
         r.s.x++
     }
 }

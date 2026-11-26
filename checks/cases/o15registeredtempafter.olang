@@ -17,14 +17,14 @@ type Grip unique struct(id I64) {
     id
     held Lamp?& = null
 } destruct {
-    if held != null {
+    if held is not null {
         assert held!.alive, "a Grip read its Lamp ended"
         held!.log.n += held!.id * 10
     }
 }
 
 fn one() I64 { return 1 }
-fn hold(k I64, g mut Grip&, l Lamp&) { g.held = l }
+fn hold(k I64, g mut Grip&, l Lamp&) { g.held ~ l }
 
 fn run(t mut Tally&) {
     l Lamp = Lamp(2, t)

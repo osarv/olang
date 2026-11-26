@@ -19,8 +19,8 @@ fn release() {
     head mut Deep?& = null
     for i in range 300000 {
         n mut Deep& = Deep(i)
-        n.next = head
-        head = n
+        n.next ~ head
+        head ~ n
     }
 }
 fn main() ? {

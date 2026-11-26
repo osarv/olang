@@ -54,9 +54,9 @@ type Node struct(v I64, next Node?&) { v, next }
 
 # a guard's null test narrows too
 fn second(n Node&) I64 {
-    p := n.next
+    p :~ n.next
     return match n.v {
-        case _ if p != null: p.v
+        case _ if p is not null: p.v
         case _: -1
     }
 }

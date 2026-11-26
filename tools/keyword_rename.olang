@@ -20,10 +20,10 @@ Words Array<String&> = Array<String&>["any", "unique", "immut", "packed", "commu
 DeclWords Array<String&> = Array<String&>["unique", "immut", "packed"]
 
 fn main() ? io.Error {
-    args := os.Args()
+    args :~ os.Args()
     for k in range 1, args.Len() {
-        path := args[k]
-        text := try os.ReadFile(path) catch os.Error {
+        path :~ args[k]
+        text :~ try os.ReadFile(path) catch os.Error {
             try io.PutErrLn("keyword_rename: " + $path + ": cannot be read")
             continue
         }
@@ -60,10 +60,10 @@ fn migrate(text String&) String {
 
 # whether the word at [i, j) in code is a keyword standing as a name
 fn renamed(text String&, i I64, j I64) Bool {
-    w := text[i:j]
+    w :~ text[i:j]
     if w not in Words or (i > 0 and text[i - 1] == '.'): return false
     ls := lineStart(text, i)
-    before := text[ls:i]
+    before :~ text[ls:i]
     if methodNamePlace(before): return false
     if w == "any" or w == "weak": return not anyPlace(text, j) and not fieldAt(text, w, before)
     if w in DeclWords: return not declPlace(before)
@@ -74,7 +74,7 @@ fn renamed(text String&, i I64, j I64) Bool {
 
 # a method's name, right after its declaration's receiver clause (L9a): `fn (w mut writer&) any<T>(...)`
 fn methodNamePlace(before String&) Bool {
-    t := srcmask.StripStart(before)
+    t :~ srcmask.StripStart(before)
     if not t.StartsWith("fn (") or not t.EndsWith(") "): return false
     close := try t.Find(")") catch { return false }
     return close == t.Len() - 2
@@ -104,15 +104,15 @@ fn anyPlace(text String&, j I64) Bool {
 # `unique`, `immut`, `packed` right after `type NAME` (and its parameters) and the other such words: `before` is the
 # line's text up to the word
 fn declPlace(before String&) Bool {
-    t := srcmask.Strip(before)
+    t :~ srcmask.Strip(before)
     if not t.StartsWith("type "): return false
-    rest := srcmask.StripStart(t[5:])
+    rest :~ srcmask.StripStart(t[5:])
     k I64 = 0
     for k < rest.Len() and srcmask.IsWord(rest[k]): k++
-    rest = rest[k:]
+    rest ~ rest[k:]
     if rest.StartsWith("<") {
         close := try rest.Find(">") catch { return false }
-        rest = rest[close + 1:]
+        rest ~ rest[close + 1:]
     }
     return onlyDeclWords(srcmask.Strip(rest))
 }

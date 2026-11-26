@@ -11,7 +11,7 @@ fn ca(g fn&(x mut Node&), n mut Node&, c I64) {
     g(n)
 }
 fn cb(n mut Node&, c I64) {
-    ca(fn(x mut Node&) { x.next = Node(x.v + 1) }, n, c)
+    ca(fn(x mut Node&) { x.next ~ Node(x.v + 1) }, n, c)
 }
 fn cc(n mut Node&) { ca(fn(x mut Node&) { }, n, 400) }
 fn main() ? {

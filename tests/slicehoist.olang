@@ -10,7 +10,7 @@ type Tile struct() {
 # groups of four added into a tile in place - the shape of oann's INT8 micro-kernel, a comptime for inside
 fn accumulate(a Array<I64>&, t mut Tile&, n I64) {
     for p in range n {
-        x := a[4 * p:4 * p + 4]
+        x :~ a[4 * p:4 * p + 4]
         comptime for i in range 2 {
             t.V[i * 4:i * 4 + 4] += x
         }
@@ -35,7 +35,7 @@ fn pairs(a Array<I64>&, n I64, stop I64) I64 {
     s I64 = 0
     for p in range n {
         if p == stop: break
-        x := a[p:p + 2]
+        x :~ a[p:p + 2]
         s += x[0] + x[1]
     }
     return s
@@ -46,7 +46,7 @@ fn stepped(a Array<I64>&, hi I64) I64 {
     s I64 = 0
     for p in range 2, hi, 3 {
         q := p - 2
-        y := a[q:q + 2]
+        y :~ a[q:q + 2]
         s += y[1] - y[0]
     }
     return s
@@ -60,8 +60,8 @@ type Rows struct(A Array<I64>) {
 fn narrowed(r Rows?&, n I64) I64 {
     s I64 = 0
     for k in range n {
-        if r != null {
-            x := r.A[k:k + 1]
+        if r is not null {
+            x :~ r.A[k:k + 1]
             s += x[0]
         }
     }

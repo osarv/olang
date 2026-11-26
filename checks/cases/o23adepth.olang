@@ -26,7 +26,7 @@ fn main() ? {
     for i in range 3 {
         inner mut Node& = Node(i)
         v := View(inner)
-        keep = v.n
+        keep ~ v.n
     }
     churn()
     assert $base != ""

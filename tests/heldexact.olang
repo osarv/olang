@@ -19,7 +19,7 @@ type Lw struct() {
 }
 
 fn (lw mut Lw&) Lower(id I64) Out& {
-    b := lw.Bodies[id]
+    b :~ lw.Bodies[id]
     b.v += 1
     return Out(b.v * 10)
 }
@@ -41,7 +41,7 @@ fn lowered(k I64) I64 {
     lw.Bodies.Push(N())
     outs := Vec<Out&>()
     for i in range k {
-        o := lw.Lower(i % 2)
+        o :~ lw.Lower(i % 2)
         outs.Push(o)
     }
     churn()
@@ -57,7 +57,7 @@ fn keptOut(k I64) I64 {
     {
         bs := Vec<mut N&>()
         bs.Push(N())
-        b := bs[0]
+        b :~ bs[0]
         b.v = k
         keep.Push(b)
     }
@@ -72,10 +72,10 @@ fn linkedOut(k I64) I64 {
     {
         inner := Vec<mut N&>()
         inner.Push(N())
-        b := outer[0]
-        c := inner[0]
+        b :~ outer[0]
+        c :~ inner[0]
         c.v = k
-        b.next = c
+        b.next ~ c
     }
     churn()
     return outer[0].next!.v
@@ -86,7 +86,7 @@ fn nestedPush(k I64) I64 {
     vs := Vec<mut Vec<mut N&>&>()
     vs.Push(Vec<mut N&>())
     {
-        inner := vs[0]
+        inner :~ vs[0]
         n := N()
         n.v = k
         inner.Push(n)
@@ -99,7 +99,7 @@ fn nestedPush(k I64) I64 {
 fn captured(k I64) I64 {
     bs := Vec<mut N&>()
     bs.Push(N())
-    b := bs[0]
+    b :~ bs[0]
     f := fn(d I64) { b.v += d }
     f(k)
     f(1)
@@ -116,7 +116,7 @@ fn bump(n mut N&, d I64) I64 {
 fn tasked(k I64) I64 {
     bs := Vec<mut N&>()
     bs.Push(N())
-    b := bs[0]
+    b :~ bs[0]
     r := 0
     join {
         spawn r = bump(b, k)

@@ -10,7 +10,7 @@ type Pass struct(C mut Node&) {
     C
 }
 
-fn (p mut Pass&) link(x mut Node&) { p.C.next = x }
+fn (p mut Pass&) link(x mut Node&) { p.C.next ~ x }
 
 fn keep(ps mut Vec<Pass>&, root mut Node&) { ps.Push(Pass(root)) }
 

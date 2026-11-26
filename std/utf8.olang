@@ -191,14 +191,14 @@ test "code points are written and read back" {
 
 test "what is not UTF-8 is refused, and walked as replacement characters" {
     bad := Array<String&>(8)
-    bad[0] = bytes(Array<U8>[0x80])
-    bad[1] = bytes(Array<U8>[0xC0, 0x80])                  # overlong
-    bad[2] = bytes(Array<U8>[0xC3])                        # cut short
-    bad[3] = bytes(Array<U8>[0xE0, 0x80, 0x80])            # overlong
-    bad[4] = bytes(Array<U8>[0xED, 0xA0, 0x80])            # a surrogate
-    bad[5] = bytes(Array<U8>[0xF4, 0x90, 0x80, 0x80])      # past U+10FFFF
-    bad[6] = bytes(Array<U8>[0xFF])
-    bad[7] = bytes(Array<U8>[0x61, 0xC3, 0x28])
+    bad[0] ~ bytes(Array<U8>[0x80])
+    bad[1] ~ bytes(Array<U8>[0xC0, 0x80])                  # overlong
+    bad[2] ~ bytes(Array<U8>[0xC3])                        # cut short
+    bad[3] ~ bytes(Array<U8>[0xE0, 0x80, 0x80])            # overlong
+    bad[4] ~ bytes(Array<U8>[0xED, 0xA0, 0x80])            # a surrogate
+    bad[5] ~ bytes(Array<U8>[0xF4, 0x90, 0x80, 0x80])      # past U+10FFFF
+    bad[6] ~ bytes(Array<U8>[0xFF])
+    bad[7] ~ bytes(Array<U8>[0x61, 0xC3, 0x28])
     for b in bad {
         assert not Valid(b)
         try Count(b) catch Error.Invalid { continue }

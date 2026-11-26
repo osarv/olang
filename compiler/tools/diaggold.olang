@@ -23,14 +23,14 @@ type golden struct(name String&, text String&) {
 # the golden file, split into cases
 fn cases(all String&) Vec<golden> {
     out Vec<golden>
-    rest := all[:]
+    rest :~ all[:]
     for rest.StartsWith("=== ") {
         nl := try rest.FindByte('\n') catch default rest.Len()
-        name := rest[4:nl]
-        body := rest[nl + 1:]
+        name :~ rest[4:nl]
+        body :~ rest[nl + 1:]
         end := try body.Find("\n=== ") catch default (body.Len() - 1)
         out.Push(golden(name, body[:end + 1]))
-        rest = body[end + 1:]
+        rest ~ body[end + 1:]
     }
     return out
 }
@@ -58,7 +58,7 @@ fn isExcerpt(row String&) Bool {
 # where a row's location says: the path, then the line and column when they are written
 fn (g mut goldenRun&) where(loc String&) diag.Where {
     if loc == "olang": return diag.Where.Nowhere
-    parts := loc.Split(":")
+    parts :~ loc.Split(":")
     f := g.file(parts[0])
     if parts.Len() == 1: return diag.Where.File(f)
     line := try parts[1].ParseInt() catch default 0
@@ -82,7 +82,7 @@ fn (g mut goldenRun&) file(path String&) I64 {
     }
     real := "checks/cases/" + $path
     if path.StartsWith("$ROOT/"): real = $(path[6:])
-    text := try os.ReadFile(real) catch default ""
+    text :~ try os.ReadFile(real) catch default ""
     g.paths.Push($path)
     g.texts.Push(text)
     return g.d.AddFile(path, text)
@@ -116,11 +116,11 @@ type goldRow struct(kind String&, where diag.Where, rule String&, text String&, 
 # a case's rows, and its last row's "compilation failed ..." line
 fn readRows(g mut goldenRun&, c golden&) Vec<goldRow>, String& {
     out Vec<goldRow>
-    rows := c.text.Split("\n")
+    rows :~ c.text.Split("\n")
     summary := ""
     i I64 = 0
     for i < rows.Len() {
-        line := rows[i]
+        line :~ rows[i]
         i++
         if line.Len() == 0: continue
         if line.StartsWith("compilation failed") or line.StartsWith("compilation successful") {
@@ -143,15 +143,15 @@ fn readRows(g mut goldenRun&, c golden&) Vec<goldRow>, String& {
         }
         where := g.where(line[:at])
         rule := ""
-        text := line[at + 8:]
+        text :~ line[at + 8:]
         if kind == "error" {
-            rest := line[at + 7:]
+            rest :~ line[at + 7:]
             if rest.StartsWith("[") {
                 close := try rest.Find("]: ") catch default 0
                 rule = rest[1:close]
-                text = rest[close + 3:]
+                text ~ rest[close + 3:]
             } else {
-                text = rest[2:]
+                text ~ rest[2:]
             }
         }
         # the excerpt under it gives the span's end
@@ -192,8 +192,8 @@ fn check(c golden&) String {
     got := $g.d.Render() + $(g.d.Summary() if summary.Len() > 0 else "")
     if got == c.text: return ""
     # the first row that differs
-    want := c.text.Split("\n")
-    have := got.Split("\n")
+    want :~ c.text.Split("\n")
+    have :~ got.Split("\n")
     for k in range want.Len() {
         if k >= have.Len(): return "line " + $(k + 1) + ": missing '" + $(want[k]) + "'"
         if have[k] != want[k]: return "line " + $(k + 1) + ": want '" + $(want[k]) + "', got '" + $(have[k]) + "'"
@@ -202,7 +202,7 @@ fn check(c golden&) String {
 }
 
 test "diag renders stage 0's diagnostics on every checks/cases program byte for byte" {
-    all := try os.ReadFile("compiler/goldens/diag.txt") catch default ""
+    all :~ try os.ReadFile("compiler/goldens/diag.txt") catch default ""
     assert all.Len() > 0, "no compiler/goldens/diag.txt - run make diaggold"
     bad := 0
     count := 0
@@ -221,14 +221,14 @@ test "diag renders stage 0's diagnostics on every checks/cases program byte for 
 # every rule msgs.olang's messages name, each once
 fn rules(src String&) Vec<String&> {
     out Vec<String&>
-    rest := src[:]
+    rest :~ src[:]
     for {
         at := try rest.Find("Msg(Diag.") catch { break }
-        rest = rest[at:]
+        rest ~ rest[at:]
         q := try rest.Find(", \"") catch { break }
-        rest = rest[q + 3:]
+        rest ~ rest[q + 3:]
         close := try rest.FindByte('"') catch { break }
-        names := rest[:close]
+        names :~ rest[:close]
         for r in names.Split(", ") {
             if r.Len() > 0 and not out.Has(r): out.Push($r)
         }
@@ -237,17 +237,17 @@ fn rules(src String&) Vec<String&> {
 }
 
 test "-e prints each rule a message names as stage 0 does" {
-    spec := try os.ReadFile("SPEC.md") catch default ""
-    src := try os.ReadFile("compiler/msgs.olang") catch default ""
+    spec :~ try os.ReadFile("SPEC.md") catch default ""
+    src :~ try os.ReadFile("compiler/msgs.olang") catch default ""
     # the compiler $OLANG names, else the one make bootstrap installs
-    olang := try os.Env("OLANG") catch default "build/olang"
-    out := try os.MkTemp() catch default "/tmp"
+    olang :~ try os.Env("OLANG") catch default "build/olang"
+    out :~ try os.MkTemp() catch default "/tmp"
     bad := 0
     count := 0
     for r in rules(src) {
         count++
         os.Run($os.Quote(olang) + " explain " + $r + " > " + $os.Quote($out + "/e.txt") + " 2>&1")
-        want := try os.ReadFile($out + "/e.txt") catch default ""
+        want :~ try os.ReadFile($out + "/e.txt") catch default ""
         got := try diag.Explain(spec, r) catch default "(none)"
         if got != want {
             try io.PutErrLn("-e " + $r + ": differs") catch io.Error { }

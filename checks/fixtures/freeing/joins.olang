@@ -7,7 +7,7 @@ import "std/os"
 N I64 = 20000
 
 fn resident() I64 {
-    stat := try os.ReadFile("/proc/self/statm") catch default ""
+    stat :~ try os.ReadFile("/proc/self/statm") catch default ""
     return try stat.Split(" ")[1].ParseInt(10) catch default 0
 }
 

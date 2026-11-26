@@ -124,7 +124,7 @@ type holder struct(d mut Array<F32>&) {
     d
 }
 
-fn keepPart(h mut holder&, m mt&) { h.d = m.Data }
+fn keepPart(h mut holder&, m mt&) { h.d ~ m.Data }
 
 fn keptDeep(h mut holder&) {
     acc := Array<F32>(8)
@@ -132,7 +132,7 @@ fn keptDeep(h mut holder&) {
     keepPart(h, from)
 }
 
-fn copyOut(h mut holder&, m mt) { h.d = m.Data }
+fn copyOut(h mut holder&, m mt) { h.d ~ m.Data }
 
 fn keptCopy(h mut holder&) {
     acc := Array<F32>(8)
@@ -186,8 +186,8 @@ type rholder struct(d Array<F32>&) {
     d
 }
 
-fn keepW(h mut holder&, x mut Array<F32>&) { h.d = x }
-fn keepR(h mut rholder&, x Array<F32>&) { h.d = x }
+fn keepW(h mut holder&, x mut Array<F32>&) { h.d ~ x }
+fn keepR(h mut rholder&, x Array<F32>&) { h.d ~ x }
 
 fn condAlias(h mut holder&, x mut Array<F32>&, c Bool) F32 {
     a := Array<F32>(8)
@@ -245,10 +245,10 @@ fn (w mut wspace&) panel(n I64) mut Array<F32>& {
 fn fillPanel(q mut Array<F32>&, x F32) { q[0] = x }
 
 fn usePanels(w mut wspace&, n I64) {
-    p := w.panel(n)
+    p :~ w.panel(n)
     join {
         for t in range 2 {
-            q := p[t * n:(t + 1) * n]
+            q :~ p[t * n:(t + 1) * n]
             spawn fillPanel(q, F32(t))
         }
     }
@@ -277,7 +277,7 @@ type jobHolder struct(j wjob&) {
     j
 }
 
-fn holdJob(h mut jobHolder&, j wjob&) { h.j = j }
+fn holdJob(h mut jobHolder&, j wjob&) { h.j ~ j }
 
 fn keepJob(h mut jobHolder&, ps mut Vec<mut wspace&>&) {
     j := wjob(ps)

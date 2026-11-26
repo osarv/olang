@@ -65,3 +65,86 @@ test "a link through a field and an element, and a reference unlinked with null"
     rs[1] ~ x
     assert rs[1] is x and rs[0] is null
 }
+
+# "=" through a reference writes the whole of what it names (S4f): the store a value place gets, the old value ended as
+# any store ends it; "==" between two references compares what they name (E10d); ":=" of a reference declares a copy
+type Pt struct(x I64, y I64) {
+    x, y
+}
+
+fn writes() I64 {
+    p := Pt(1, 2)
+    r :~ p
+    r = Pt(3, 4)
+    q := Pt(3, 4)
+    s :~ q
+    t I64 = 0
+    if p.x == 3 and p.y == 4: t += 1
+    if r == s: t += 10
+    if r is not s: t += 100
+    c := r
+    c.x = 9
+    if p.x == 3 and c.x == 9: t += 1000
+    return t
+}
+
+Written I64 = writes()
+
+assert writes() == 1111
+
+test "'=' through a reference writes what it names, '==' compares contents, ':=' copies - at run time and while compiling" {
+    assert writes() == 1111 and Written == writes()
+}
+
+test "'==' through references that may be null: a null equals only a null" {
+    a Pt?& = null
+    b Pt?& = null
+    assert a == b
+    p := Pt(1, 2)
+    a ~ p
+    assert a != b and b != a
+    q := Pt(1, 2)
+    b ~ q
+    assert a == b and a is not b
+}
+
+type Log struct() {
+    seen := Vec<I64>()
+}
+
+type Res unique struct(id I64, log mut Log&) {
+    id, log
+} destruct { log.seen.Push(id) }
+
+type Box struct(r Res) {
+    r
+}
+
+fn replace(b mut Res&, log mut Log&, id I64) { b = Res(id, log) }
+
+test "a write through a reference ends the old value once, and the new one where its holder lets go" {
+    log := Log()
+    if log.seen.Len() == 0 {
+        b := Box(Res(1, log))
+        replace(b.r, log, 2)
+        assert log.seen.Len() == 1 and log.seen[0] == 1 and b.r.id == 2
+    }
+    assert log.seen.Len() == 2 and log.seen[1] == 2
+}
+
+type Cell struct(v I64, next mut Cell?&) {
+    v
+    next
+}
+
+fn fill(n mut Cell&, v I64) { n = Cell(v, Cell(v + 1, null)) }
+
+test "a write through a reference into a list, read back after an arena churn" {
+    h := Cell(1, Cell(2, null))
+    fill(h.next!, 7)
+    for i in range 1000 {
+        junk := Cell(i, Cell(i, null))
+        assert junk.next!.v == i
+    }
+    assert h.next!.v == 7 and h.next!.next!.v == 8
+}

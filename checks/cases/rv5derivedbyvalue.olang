@@ -19,15 +19,15 @@ fn churn() I64 {
     }
     return t
 }
-fn growv(b Box) { b.head.next = Node(44) }
+fn growv(b Box) { b.head.next ~ Node(44) }
 fn f(h Holder&) { growv(h.b) }
 fn rd(n Node&) I64 {
-    if n.next == null: return 0
+    if n.next is null: return 0
     return n.next!.v
 }
 fn main() ? {
     outer mut Box& = Box()
-    k := outer.head
+    k :~ outer.head
     {
         h := Holder(outer)
         f(h)

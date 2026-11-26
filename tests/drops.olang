@@ -766,17 +766,17 @@ type Grip unique struct(id I64) {
     id
     held Lamp?& = null
 } destruct {
-    if held != null: held!.log.seen.Push(id * 10 + (1 if held!.open else 0))
+    if held is not null: held!.log.seen.Push(id * 10 + (1 if held!.open else 0))
 }
 
-fn (g mut Grip&) Hold(l Lamp&) { g.held = l }
+fn (g mut Grip&) Hold(l Lamp&) { g.held ~ l }
 
 # holds a reference to a shelf, which holds references to Lamps: at its end it reads each
 type Rack unique struct(id I64) {
     id
     shelf Lamps?& = null
 } destruct {
-    if shelf == null: return
+    if shelf is null: return
     for l in shelf!.items { l.log.seen.Push(id * 10 + (1 if l.open else 0)) }
 }
 
@@ -789,7 +789,7 @@ type Hook unique struct(id I64) {
     id
     then fn?&() = null
 } destruct {
-    if then != null: then!()
+    if then is not null: then!()
 }
 
 # can hold no reference at all: given beside a Lamp, it holds none
@@ -804,7 +804,7 @@ fn holders() String {
     {
         g Grip = Grip(1)
         l Lamp = Lamp(2, t)
-        g.held = l
+        g.held ~ l
     }
     {
         g Grip = Grip(3)
@@ -815,12 +815,12 @@ fn holders() String {
         g Grip = Grip(5)
         defer: t.seen.Push(9)
         l Lamp = Lamp(6, t)
-        g.held = l
+        g.held ~ l
     }
     {
         k Rack = Rack(7)
         s := Lamps()
-        k.shelf = s
+        k.shelf ~ s
         l Lamp = Lamp(8, t)
         s.items.Push(l)
     }
@@ -832,7 +832,7 @@ fn holders() String {
     {
         l Lamp = Lamp(4, t)
         g Grip = Grip(5)
-        g.held = l
+        g.held ~ l
     }
     {
         s Stone = Stone(6, t)
@@ -862,19 +862,19 @@ fn gripsHeld() String {
         gs Vec<Grip> = Vec<Grip>()
         gs.Push(Grip(1))
         l Lamp = Lamp(2, t)
-        gs[0].held = l
+        gs[0].held ~ l
     }
     {
         ms Map<I64, Grip> = Map<I64, Grip>()
         ms.Put(1, Grip(3))
         l Lamp = Lamp(4, t)
-        ms.RefMut(1)!.held = l
+        ms.RefMut(1)!.held ~ l
     }
     {
         gs Vec<Grip> = Vec<Grip>()
         gs.Push(Grip(5))
         l Lamp = Lamp(6, t)
-        set := fn(x mut Vec<Grip>&, y Lamp&) { x.RefMut(0).held = y }
+        set := fn(x mut Vec<Grip>&, y Lamp&) { x.RefMut(0).held ~ y }
         set(gs, l)
     }
     return t.Listed()
@@ -894,7 +894,7 @@ fn registeredHeld() String {
     {
         l := Lamp(8, t)
         g := Grip(7)
-        g.held = l
+        g.held ~ l
     }
     return t.Listed()
 }

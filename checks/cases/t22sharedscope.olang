@@ -7,7 +7,7 @@ type N struct(v I64) {
     v
     next N?& = null
 }
-fn link(a mut N&, b N&) { a.next = b }
+fn link(a mut N&, b N&) { a.next ~ b }
 fn put(f fn&(a mut N&, b N&), a mut N&, i I64) { f(a, N(i)) }
 
 # storage made and let go many times, so a value kept in a scope already closed would read another's

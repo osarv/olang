@@ -44,7 +44,7 @@ fn keepIf(v mut Vec<Token>&, t Token, keep Bool) I64 {
 }
 
 fn names(f mut Token&) I64 {
-    w := f # a reference to f, never a copy
+    w :~ f # a reference to f, never a copy
     w.Use()
     w.Use()
     return f.uses

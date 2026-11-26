@@ -13,7 +13,7 @@ type Box struct() {
 fn copyOut(src Box&) {
     d := Box()
     d = src
-    d.head.next = Node()
+    d.head.next ~ Node()
 }
 fn main() ? {
     b := Box()

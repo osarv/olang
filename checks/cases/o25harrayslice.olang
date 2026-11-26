@@ -3,7 +3,7 @@
 # for its elements too - the copy returned refers to storage that outlives the return. It used to be an error (O26)
 fn mk(n I64) Array<String&> {
     a := Array<String&>(2)
-    a[0] = $n + $n
+    a[0] ~ $n + $n
     return a[0:1]
 }
 fn main() ? {

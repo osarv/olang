@@ -23,7 +23,7 @@ type client struct(Shell zmtp.Socket, Control zmtp.Socket, IOPub zmtp.Socket, Be
 }
 
 fn main() ? {
-    olang := os.Args()[1]
+    olang :~ os.Args()[1]
     ports := Array<I64>[freePort() for _ in range 5]
     conn := $"{\"transport\":\"tcp\",\"ip\":\"127.0.0.1\",\"key\":\"" + $Key + "\",\"signature_scheme\":\"hmac-sha256\"," + $
         "\"shell_port\":" + $ports[0] + ",\"control_port\":" + $ports[1] + ",\"stdin_port\":" + $ports[2] + ",\"iopub_port\":" + $
@@ -118,7 +118,7 @@ fn (c mut client&) published(id String&) ? {
         m := try message.Parse(try c.IOPub.Recv())
         if try m.parent["msg_id"].AsStr() != id: continue
         if m.kind == "status" {
-            state := try m.content["execution_state"].AsStr()
+            state :~ try m.content["execution_state"].AsStr()
             if state == "idle": return
             continue
         }
@@ -150,6 +150,6 @@ fn message.Parse(frames Array<String>&) message ? {
         if f == Delimiter: d = i
     }
     if sign(frames[d + 2], frames[d + 3], frames[d + 4], frames[d + 5]) != frames[d + 1]: error BadMessage.Unsigned
-    h := try json.Json.Parse(frames[d + 2])
+    h :~ try json.Json.Parse(frames[d + 2])
     return message($(try h["msg_type"].AsStr()), try json.Json.Parse(frames[d + 3]), try json.Json.Parse(frames[d + 5]))
 }

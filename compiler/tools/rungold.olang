@@ -17,10 +17,10 @@ import "toolkit"
 Workers I64 = 4
 
 fn main() {
-    args := os.Args()
+    args :~ os.Args()
     given := $args[1] if args.Len() > 1 else toolkit.Compiler()
-    root := try os.Cwd() catch os.Error { toolkit.Die("rungold: no working directory") }
-    dir := try os.RealPath(filepath.Dir(given)) catch os.Error { toolkit.Die("rungold: no " + $given) }
+    root :~ try os.Cwd() catch os.Error { toolkit.Die("rungold: no working directory") }
+    dir :~ try os.RealPath(filepath.Dir(given)) catch os.Error { toolkit.Die("rungold: no " + $given) }
     olang := $dir + "/" + $filepath.Base(given)
     golden := toolkit.Env("RUNGOLD_OUT", "compiler/goldens/run.txt")
     out := StringBuilder()
@@ -32,13 +32,13 @@ fn main() {
     work := $root + "/build/rungold"
     try os.RemoveAll(work) catch os.Error { }
     try os.MkDirAll(work) catch os.Error { toolkit.Die("rungold: cannot make " + $work) }
-    cases := RunCases().ToArray()
+    cases :~ RunCases().ToArray()
     join {
         for w in range Workers: spawn capture(olang, work, cases, w)
     }
     unstable I64 = 0
     for f in cases {
-        name := filepath.Base(f)
+        name :~ filepath.Base(f)
         cdir := $work + "/" + $name[0:name.Len() - 6]
         body := read($cdir + "/run.txt")
         if body == "": toolkit.Die("rungold: " + $name + " was not run")
@@ -97,8 +97,8 @@ fn binaryOf(base String&, flags String&) String {
 # every Workers'th case from number w: built in a directory of its own, run twice, its run.txt written there
 fn capture(olang String&, work String&, cases Array<String&>&, w I64) {
     for k in range w, cases.Len(), Workers {
-        name := filepath.Base(cases[k])
-        base := name[0:name.Len() - 6]
+        name :~ filepath.Base(cases[k])
+        base :~ name[0:name.Len() - 6]
         dir := $work + "/" + $base
         try os.MkDirAll(dir) catch os.Error { continue }
         text := read(cases[k])
@@ -112,12 +112,12 @@ fn capture(olang String&, work String&, cases Array<String&>&, w I64) {
         b := try os.Output.Exec(...args.ToArray(), dir = dir) catch os.Error { continue }
         body String& = ""
         if b.Status != 0 {
-            body = toolkit.RunBody(-1, false, $"did not build\n" + $b.Stdout)
+            body ~ toolkit.RunBody(-1, false, $"did not build\n" + $b.Stdout)
         } else {
             exe := $dir + "/build/" + $binaryOf(base, flags)
             one := try os.Output.Exec("timeout", "600", exe, dir = dir) catch os.Error { continue }
             two := try os.Output.Exec("timeout", "600", exe, dir = dir) catch os.Error { continue }
-            body = toolkit.RunBody(one.Status, one.Stdout != two.Stdout or one.Status != two.Status, one.Stdout)
+            body ~ toolkit.RunBody(one.Status, one.Stdout != two.Stdout or one.Status != two.Status, one.Stdout)
         }
         try os.WriteFile($dir + "/run.txt", body) catch os.Error { }
     }

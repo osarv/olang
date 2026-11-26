@@ -110,8 +110,8 @@ fn (d mut Deque<T>&) Clear() {
 fn (d Deque<T>&) ToArray() mut Array<T>& {
     out mut Array<T>& = Array<T>(0)
     if d.n == 0: return out
-    out = Array<T>(d.n, d.buf[d.head])
-    for i in range d.n: out[i] = d.buf[(d.head + i) % d.buf.Len()]
+    out ~ Array<T>(d.n, d.buf[d.head])
+    for i in range d.n: out[i] ~ d.buf[(d.head + i) % d.buf.Len()]
     return out
 }
 
@@ -178,7 +178,7 @@ test "a Deque used as a ring wraps and grows in order" {
         assert d.PopFront()! >= 0
     }
     assert d.Len() == 50
-    a := d.ToArray()
+    a :~ d.ToArray()
     for i in range a.Len() - 1: assert a[i] != a[i + 1]
     c := d                                          # a copy: a deque of its own
     c.PushBack(5)

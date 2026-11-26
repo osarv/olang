@@ -217,8 +217,8 @@ fn (e Editor&) status() String {
 fn (e mut Editor&) draw() {
     if e.row > 0: e.Out.Push($"\x1b[" + $e.row + "A")
     e.Out.Push("\r\x1b[J")
-    lines := e.Text.Split("\n")
-    painted := (paint.Source(e.Text) if e.Colour else $e.Text).Split("\n")
+    lines :~ e.Text.Split("\n")
+    painted :~ (paint.Source(e.Text) if e.Colour else $e.Text).Split("\n")
     w := e.Width if e.Width > 0 else I64.Max
     top I64 = 0
     start I64 = 0
@@ -226,7 +226,7 @@ fn (e mut Editor&) draw() {
     curCol I64 = 0
     c I64 = 0
     for i in range lines.Len() {
-        p := e.promptOf(i)
+        p :~ e.promptOf(i)
         if i > 0: top += (c - 1) / w + 1
         if i > 0: e.Out.Push("\r\n")
         e.Out.Push($p + $painted[i])
@@ -261,7 +261,7 @@ fn (e mut Editor&) Begin() {
 }
 
 fn (e mut Editor&) reset() {
-    e.Text = ""
+    e.Text ~ ""
     e.At = 0
     e.row = 0
     e.walk = e.History.Len()
@@ -278,7 +278,7 @@ fn (e mut Editor&) Accept() String& {
     e.At = e.Text.Len()
     e.draw()
     e.Out.Push("\r\n")
-    t := e.Text
+    t :~ e.Text
     e.Remember(t)
     return t
 }
@@ -310,7 +310,7 @@ fn (e mut Editor&) Feed(b U8) Event {
 # the input paused: an ESC read alone is the Esc key - vi's normal mode, or the end of a search
 fn (e mut Editor&) Idle() {
     if e.esc != "\x1b": return
-    e.esc = ""
+    e.esc ~ ""
     if e.searching: e.acceptSearch()
     if e.Vi and not e.searching: e.toNormal()
     e.draw()
@@ -319,7 +319,7 @@ fn (e mut Editor&) Idle() {
 fn (e mut Editor&) step(c Char) Event {
     if e.esc != "": return e.escape(c)
     if c == 27 {
-        e.esc = "\x1b"
+        e.esc ~ "\x1b"
         return Event.Editing
     }
     if e.pasting: return e.pasted(c)
@@ -331,17 +331,17 @@ fn (e mut Editor&) step(c Char) Event {
 # a byte of an escape sequence: ESC [ ... final, ESC O final; or ESC and a key - Alt and it, or in vi the Esc key and it
 fn (e mut Editor&) escape(c Char) Event {
     if e.esc == "\x1b" and c != '[' and c != 'O' {
-        e.esc = ""
+        e.esc ~ ""
         return e.meta(c)
     }
-    e.esc = $e.esc + $one(c)
+    e.esc ~ $e.esc + $one(c)
     if e.esc.Len() <= 2 or c < 0x40 or c > 0x7E: return Event.Editing
     if e.esc.Len() > 16 {
-        e.esc = ""
+        e.esc ~ ""
         return Event.Editing
     }
-    seq := e.esc
-    e.esc = ""
+    seq :~ e.esc
+    e.esc ~ ""
     if e.searching: e.acceptSearch()
     return e.sequence(seq)
 }
@@ -360,7 +360,7 @@ fn (e mut Editor&) meta(c Char) Event {
 # a finished escape sequence: the arrows (with Ctrl or Alt, by words), Home, End, Delete
 fn (e mut Editor&) sequence(seq String&) Event {
     final := seq[seq.Len() - 1]
-    params := seq[2:seq.Len() - 1]
+    params :~ seq[2:seq.Len() - 1]
     if final == '~' and (params == "200" or params == "201"): return e.bracket(params == "200")
     if e.pasting: return Event.Editing
     words := params.Len() > 0 and params[params.Len() - 1] != '1' and final != '~'
@@ -382,7 +382,7 @@ fn (e mut Editor&) bracket(begins Bool) Event {
     e.quiet = begins
     if begins: return Event.Editing
     for e.Text.EndsWith("\n") {
-        e.Text = e.Text[:e.Text.Len() - 1]
+        e.Text ~ e.Text[:e.Text.Len() - 1]
         if e.At > e.Text.Len(): e.At = e.Text.Len()
     }
     if e.Vi: e.Normal = false
@@ -413,7 +413,7 @@ fn (e mut Editor&) key(c Char) Event {
 }
 
 fn (e mut Editor&) control(c Char) {
-    t := e.Text
+    t :~ e.Text
     if c == 1: e.At = lineStart(t, e.At)
     if c == 5: e.At = lineEnd(t, e.At)
     if c == 2: e.At = e.left()
@@ -451,7 +451,7 @@ fn (e Editor&) right() I64 { return nextAt(e.Text, e.At) if e.At < lineEnd(e.Tex
 
 # Up: the line above in the entry, at the same column; on the first line, the entry before in the history
 fn (e mut Editor&) up() {
-    t := e.Text
+    t :~ e.Text
     ls := lineStart(t, e.At)
     if ls == 0 {
         e.older()
@@ -462,7 +462,7 @@ fn (e mut Editor&) up() {
 
 # Down: the line below, at the same column; on the last line, the entry after in the history
 fn (e mut Editor&) down() {
-    t := e.Text
+    t :~ e.Text
     le := lineEnd(t, e.At)
     if le == t.Len() {
         e.newer()
@@ -473,16 +473,16 @@ fn (e mut Editor&) down() {
 
 fn (e mut Editor&) older() {
     if e.walk == 0: return
-    if e.walk == e.History.Len(): e.draft = e.Text
+    if e.walk == e.History.Len(): e.draft ~ e.Text
     e.walk--
-    e.Text = e.History[e.walk]
+    e.Text ~ e.History[e.walk]
     e.At = e.Text.Len()
 }
 
 fn (e mut Editor&) newer() {
     if e.walk >= e.History.Len(): return
     e.walk++
-    e.Text = e.draft if e.walk == e.History.Len() else e.History[e.walk]
+    e.Text ~ e.draft if e.walk == e.History.Len() else e.History[e.walk]
     e.At = e.Text.Len() if e.walk == e.History.Len() else lineEnd(e.Text, 0)
 }
 
@@ -495,7 +495,7 @@ fn (e mut Editor&) save(kind I64) {
 
 fn (e mut Editor&) undo() {
     s := try e.undos.Pop() catch { return }
-    e.Text = s.Text
+    e.Text ~ s.Text
     e.At = s.At
 }
 
@@ -503,7 +503,7 @@ fn (e mut Editor&) insert(s String&) {
     if s == "": return
     e.save(1 if s.Len() == 1 else 2)
     e.inserted = true
-    e.Text = $e.Text[:e.At] + $s + $e.Text[e.At:]
+    e.Text ~ $e.Text[:e.At] + $s + $e.Text[e.At:]
     e.At += s.Len()
 }
 
@@ -511,8 +511,8 @@ fn (e mut Editor&) insert(s String&) {
 fn (e mut Editor&) remove(a I64, b I64, kill Bool = false) {
     if b <= a: return
     e.save(2)
-    if kill: e.killed = $e.Text[a:b]
-    e.Text = $e.Text[:a] + $e.Text[b:]
+    if kill: e.killed ~ $e.Text[a:b]
+    e.Text ~ $e.Text[:a] + $e.Text[b:]
     e.At = a
 }
 
@@ -522,9 +522,9 @@ fn (e mut Editor&) beginSearch(back Bool = true, vi Bool = false) {
     e.searching = true
     e.viSearch = vi
     e.back = back
-    e.query = ""
+    e.query ~ ""
     e.failed = false
-    e.kept, e.keptAt, e.keptWalk = e.Text, e.At, e.walk
+    e.kept, e.keptAt, e.keptWalk ~ e.Text, e.At, e.walk
     e.found = e.walk
 }
 
@@ -535,7 +535,7 @@ fn (e mut Editor&) find(from I64) {
         at := indexOf(e.History[i], e.query)
         if at >= 0 {
             e.found, e.walk = i, i
-            e.Text = e.History[i]
+            e.Text ~ e.History[i]
             e.At = at
             e.failed = false
             return
@@ -548,18 +548,18 @@ fn (e mut Editor&) find(from I64) {
 fn (e mut Editor&) searchKey(c Char) Event {
     if c == 7 or c == 3 {
         e.searching = false
-        e.Text, e.At, e.walk = e.kept, e.keptAt, e.keptWalk
+        e.Text, e.At, e.walk ~ e.kept, e.keptAt, e.keptWalk
         return Event.Editing
     }
     if c == 18: e.find(e.found + (-1 if e.back else 1))
     if c == 18: return Event.Editing
     if c == 8 or c == 127 {
-        e.query = e.query[:prevAt(e.query, e.query.Len())]
+        e.query ~ e.query[:prevAt(e.query, e.query.Len())]
         e.find(e.keptWalk + (-1 if e.back else 1))
         return Event.Editing
     }
     if c >= 32 {
-        e.query = $e.query + $one(c)
+        e.query ~ $e.query + $one(c)
         e.find(e.found if e.found < e.History.Len() else e.found - 1)
         return Event.Editing
     }
@@ -571,7 +571,7 @@ fn (e mut Editor&) searchKey(c Char) Event {
 
 fn (e mut Editor&) acceptSearch() {
     e.searching = false
-    if e.query != "": e.lastQuery = e.query
+    if e.query != "": e.lastQuery ~ e.query
     if e.Normal: e.clamp()
 }
 
@@ -579,7 +579,7 @@ fn (e mut Editor&) acceptSearch() {
 fn (e mut Editor&) again(same Bool) {
     if e.lastQuery == "": return
     back := e.back == same
-    e.query = e.lastQuery
+    e.query ~ e.lastQuery
     e.back = back
     e.find(e.walk + (-1 if back else 1))
     e.back = e.back == same
@@ -602,7 +602,7 @@ fn (e mut Editor&) clamp() {
 
 # where a motion goes from at; NotMotion where c is none
 fn (e Editor&) target(c Char, at I64) I64 ? NotMotion {
-    t := e.Text
+    t :~ e.Text
     if c == 'h': return prevAt(t, at) if at > lineStart(t, at) else at
     if c == 'l': return nextAt(t, at) if at < lineEnd(t, at) else at
     if c == 'w': return wordNext(t, at)
@@ -673,7 +673,7 @@ fn (e mut Editor&) operate(c Char, n I64) Event {
 }
 
 fn (e mut Editor&) wholeLine(o Char) Event {
-    t := e.Text
+    t :~ e.Text
     ls := lineStart(t, e.At)
     le := lineEnd(t, e.At)
     if o == 'c' {
@@ -681,18 +681,18 @@ fn (e mut Editor&) wholeLine(o Char) Event {
         e.Normal = false
         return Event.Editing
     }
-    e.killed = $t[ls:le]
+    e.killed ~ $t[ls:le]
     a := ls - 1 if le == t.Len() and ls > 0 else ls
     b := le + 1 if le < t.Len() else le
-    k := e.killed
+    k :~ e.killed
     e.remove(a, b, kill = false)
-    e.killed = k
+    e.killed ~ k
     e.At = firstWord(e.Text, e.At if e.At <= e.Text.Len() else e.Text.Len())
     return Event.Editing
 }
 
 fn (e mut Editor&) command(c Char, n I64) Event {
-    t := e.Text
+    t :~ e.Text
     if c == 'd' or c == 'c' or c == 'r' {
         e.op = c
         e.opCount = n
@@ -724,7 +724,7 @@ fn (e Editor&) backBy(n I64) I64 {
 # insert mode, entered where the key says: i before the cursor, a after it, I at the line's first word, A at its end, o
 # and O on a new line below or above
 fn (e mut Editor&) enter(c Char) {
-    t := e.Text
+    t :~ e.Text
     e.Normal = false
     if c == 'a': e.At = e.right()
     if c == 'I': e.At = firstWord(t, e.At)
@@ -742,7 +742,7 @@ fn (e mut Editor&) enter(c Char) {
 
 fn (e mut Editor&) toggle(n I64) {
     end := offsetOf(e.Text, e.At, lineEnd(e.Text, e.At), n)
-    part := e.Text[e.At:end]
+    part :~ e.Text[e.At:end]
     b := StringBuilder()
     for c in part {
         u := c - 32 if c >= 'a' and c <= 'z' else c + 32 if c >= 'A' and c <= 'Z' else c
@@ -766,7 +766,7 @@ fn (e mut Editor&) paste(after Bool, n I64) {
 
 # $XDG_STATE_HOME/olang/history, else ~/.local/state/olang/history
 fn HistoryPath() String {
-    dir := try os.Env("XDG_STATE_HOME") catch default ""
+    dir :~ try os.Env("XDG_STATE_HOME") catch default ""
     if dir == "": return $(try os.Env("HOME") catch default ".") + "/.local/state/olang/history"
     return $dir + "/olang/history"
 }
@@ -792,9 +792,9 @@ fn decode(t String&) String {
 # the history in the file at path, its most recent Keep entries; later entries are added to it. A file grown past
 # twice Keep is written again with only those
 fn (e mut Editor&) Load(path String&) {
-    e.File = path
-    text := try os.ReadFile(path) catch default ""
-    lines := text.Split("\n")
+    e.File ~ path
+    text :~ try os.ReadFile(path) catch default ""
+    lines :~ text.Split("\n")
     n I64 = 0
     for line in lines {
         if line == "": continue
@@ -833,16 +833,16 @@ fn appendLine(path String&, line String&) {
 
 # $XDG_CONFIG_HOME/olang/prompt, else ~/.config/olang/prompt: the prompt's settings, a line "edit vi" or "edit emacs"
 fn ConfigPath() String {
-    dir := try os.Env("XDG_CONFIG_HOME") catch default ""
+    dir :~ try os.Env("XDG_CONFIG_HOME") catch default ""
     if dir == "": return $(try os.Env("HOME") catch default ".") + "/.config/olang/prompt"
     return $dir + "/olang/prompt"
 }
 
 # whether vi's keys are chosen: OLANG_EDIT=vi or emacs, else the settings' file, else emacs's
 fn ViChosen() Bool {
-    env := try os.Env("OLANG_EDIT") catch default ""
+    env :~ try os.Env("OLANG_EDIT") catch default ""
     if env != "": return env == "vi"
-    text := try os.ReadFile(ConfigPath()) catch default ""
+    text :~ try os.ReadFile(ConfigPath()) catch default ""
     for line in text.Split("\n") {
         if line.Trim() == "edit vi": return true
     }
@@ -894,13 +894,13 @@ fn (e mut Editor&) Read(open fn&(t String&) Bool) String& ? Ended {
     for {
         e.flush()
         if e.pos >= e.pending.Len(): try e.fill()
-        t := try e.feedPending(open)
-        if t != null: return t
+        t :~ try e.feedPending(open)
+        if t is not null: return t
     }
 }
 
 fn (e mut Editor&) done() String& {
-    t := e.Accept()
+    t :~ e.Accept()
     e.flush()
     return t
 }
@@ -1204,14 +1204,14 @@ test Editor "vi: j and k walk the history, / and n search it" {
 }
 
 test Remember "keeps the history in its file, escaped, and the most recent entries" {
-    dir := try os.MkTemp(prefix = "lineedit")
+    dir :~ try os.MkTemp(prefix = "lineedit")
     path := $dir + "/state/olang/history"
     e := Editor()
     e.Load(path)
     e.Remember("a \\ b")
     e.Remember("f(\n1)")
     e.Remember("f(\n1)")
-    text := try os.ReadFile(path)
+    text :~ try os.ReadFile(path)
     assert text == "a \\\\ b\nf(\\n1)\n"
     d := Editor()
     d.Load(path)

@@ -18,7 +18,7 @@ fn main() {
         for i in range 2, 5000: pm.Put(i, blk(i, i))
     }
     h := runner(grow)
-    r := ss.RefMut(0).m.RefMut(1)!
+    r :~ ss.RefMut(0).m.RefMut(1)!
     h.f()
     r.n = 77
     io.PutLn("r.n " + $r.n + " r.m " + $r.m)!

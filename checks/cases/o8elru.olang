@@ -19,25 +19,25 @@ type Lru struct(cap I64) {
 }
 
 fn (c mut Lru&) unlink(n mut Node&) {
-    p := n.prev
-    q := n.next
-    if p == null { c.head = q } else { p.next = q }
-    if q == null { c.tail = p } else { q.prev = p }
-    n.prev = null
-    n.next = null
+    p :~ n.prev
+    q :~ n.next
+    if p is null { c.head ~ q } else { p.next ~ q }
+    if q is null { c.tail ~ p } else { q.prev ~ p }
+    n.prev ~ null
+    n.next ~ null
 }
 
 fn (c mut Lru&) pushFront(n mut Node&) {
-    h := c.head
-    n.next = h
-    if h == null { c.tail = n } else { h.prev = n }
-    c.head = n
+    h :~ c.head
+    n.next ~ h
+    if h is null { c.tail ~ n } else { h.prev ~ n }
+    c.head ~ n
 }
 
 fn (c mut Lru&) Get(k String&, v I64) I64 {
-    n := try c.at.Get(k) catch {
+    n :~ try c.at.Get(k) catch {
         if c.at.Len() >= c.cap {
-            old := c.tail!
+            old :~ c.tail!
             c.unlink(old)
             assert c.at.Remove(old.key)
         }
@@ -52,10 +52,10 @@ fn (c mut Lru&) Get(k String&, v I64) I64 {
 }
 
 fn peakKb() I64 {
-    status := try os.ReadFile("/proc/self/status") catch default ""
+    status :~ try os.ReadFile("/proc/self/status") catch default ""
     at := try status.Find("VmHWM:") catch default -1
     if at < 0: return -1
-    line := status[at + 6:]
+    line :~ status[at + 6:]
     end := try line.FindByte('\n') catch default line.Len()
     return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1
 }

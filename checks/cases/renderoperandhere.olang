@@ -28,14 +28,14 @@ fn main() ? {
     outer String& = ""
     {
         local Node& = Node(42)
-        outer = $Wrap(local)
+        outer ~ $Wrap(local)
     }
     churn()
     assert Seen == 42 and outer == "Wrap(Node(42), Res(Node(42)))"
     Seen = 0
     {
         local Node& = Node(43)
-        outer = f(local)
+        outer ~ f(local)
     }
     churn()
     assert Seen == 43 and outer == "Wrap(Node(43), Res(Node(43)))"

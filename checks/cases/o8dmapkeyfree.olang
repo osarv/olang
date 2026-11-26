@@ -12,10 +12,10 @@ type Node struct(key String, v I64) {
 }
 
 fn peakKb() I64 {
-    status := try os.ReadFile("/proc/self/status") catch default ""
+    status :~ try os.ReadFile("/proc/self/status") catch default ""
     at := try status.Find("VmHWM:") catch default -1
     if at < 0: return -1
-    line := status[at + 6:]
+    line :~ status[at + 6:]
     end := try line.FindByte('\n') catch default line.Len()
     return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1
 }
@@ -36,7 +36,7 @@ fn nodes(n I64) I64 {
         m.Put(k, Node(k, t))
         if t >= 1000: assert m.Remove("node-" + $(t - 1000))
     }
-    last := m.Get("node-" + $(n - 1))!
+    last :~ m.Get("node-" + $(n - 1))!
     assert last.key == "node-" + $(n - 1)
     return last.v + m.Len()
 }

@@ -22,7 +22,7 @@ fn main() ? {
     h mut Hold& = Hold()
     for i in range 1 {
         local Node& = Node(42)
-        h.f = local if i == 0 else Node(7)
+        h.f ~ local if i == 0 else Node(7)
     }
     churn()
     try io.PutLn($h.f!.v)

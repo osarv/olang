@@ -43,7 +43,7 @@ fn fannkuch(n I64) I64, I32 {
 }
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     n I64 = 7
     times I64 = 1                # the whole run repeated, so a small size still times long enough
     if args.Len() > 1: n = try args[1].ParseInt()

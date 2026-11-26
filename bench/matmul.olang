@@ -16,17 +16,17 @@ fn matrix(n I64, seed I64) Array<F32> {
 
 fn multiply(a Array<F32>&, b Array<F32>&, c mut Array<F32>&, n I64) {
     for i in range n {
-        row := c[i * n:(i + 1) * n]
+        row :~ c[i * n:(i + 1) * n]
         for k in range n {
             aik := a[i * n + k]
-            bk := b[k * n:(k + 1) * n]
+            bk :~ b[k * n:(k + 1) * n]
             for j in range n: row[j] += aik * bk[j]
         }
     }
 }
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     n I64 = 64
     if args.Len() > 1: n = try args[1].ParseInt()
     a := matrix(n, 1)

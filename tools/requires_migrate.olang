@@ -32,7 +32,7 @@ fn lineEnd(src String&, i I64) I64 {
 # the name a declaration's line gives what it declares - a function's, a method's, a builder's ("Array.Range"), a
 # type's - and where its parameter list opens; -1 where the line declares none
 fn declAt(src String&, a I64, b I64) String, I64 {
-    t := srcmask.StripStart(src[a:b])
+    t :~ srcmask.StripStart(src[a:b])
     i := b - t.Len()
     if t.StartsWith("type ") {
         j := i + 5
@@ -117,7 +117,7 @@ fn splitTop(src String&, mask String&, a I64, b I64) Vec<String&> {
             at = k + 1
         }
     }
-    last := srcmask.Strip(src[at:b])
+    last :~ srcmask.Strip(src[at:b])
     if last.Len() > 0: out.Push(last)
     return out
 }
@@ -192,13 +192,13 @@ fn moveLine(path String&, src String&, mask String&, a I64, b I64, line I64, c m
         c.left.Push($where + "a requirement with no body to check it, dropped: [" + $src[k + 1:ke - 1] + "]")
         return head, b
     }
-    t := srcmask.StripStart(src[a:b])
+    t :~ srcmask.StripStart(src[a:b])
     indent := $src[a:b - t.Len()]
     inner := $indent + "    "
     checks := StringBuilder()
     for it in items: checks.Push($inner + $check(name, it) + "\n")
     hb := br - a - (ke - pe)    # the body's "{" in head
-    rest := srcmask.Strip(src[br + 1:b])
+    rest :~ srcmask.Strip(src[br + 1:b])
     if rest.Len() == 0 or rest.StartsWith("#"): return $head + "\n" + $checks.ToString().TrimEnd(), b
     be := srcmask.CloseOf(src, mask, br)
     if be < 0 or be > b {
@@ -210,7 +210,7 @@ fn moveLine(path String&, src String&, mask String&, a I64, b I64, line I64, c m
     out.Push(head[:hb + 1])
     out.PushChar('\n')
     out.Push(checks.ToString())
-    body := srcmask.Strip(src[br + 1:be - 1])
+    body :~ srcmask.Strip(src[br + 1:be - 1])
     if body.Len() > 0: out.Push($inner + $body + "\n")
     out.Push($indent + "}" + $src[be:b])
     return out.ToString(), b
@@ -236,9 +236,9 @@ fn main() ? {
     checkOnly := false
     verbose := false
     paths Vec<String&>
-    args := os.Args()
+    args :~ os.Args()
     for i in range 1, args.Len() {
-        a := args[i]
+        a :~ args[i]
         if a == "--check": checkOnly = true
         else if a == "-v": verbose = true
         else: paths.Push($a)
@@ -270,7 +270,7 @@ fn main() ? {
             }
         }
     }
-    verb := "would change " if checkOnly else "changed "
+    verb :~ "would change " if checkOnly else "changed "
     srcmask.Say($verb + $changed + " files: " + $total.changes + " contracts")
     for l in total.left: srcmask.Say("by hand: " + $l)
     if checkOnly and changed > 0: os.Exit(1)

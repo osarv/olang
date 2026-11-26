@@ -5,7 +5,7 @@ type N struct() {
     v I64 = 0
 }
 fn keepFirst(bs mut Vec<mut N&>&, keep mut Vec<mut N&>&) {
-    b := bs[0]
+    b :~ bs[0]
     keep.Push(b)
 }
 fn main() {

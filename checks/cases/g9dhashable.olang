@@ -4,7 +4,7 @@ import "std/io"
 type Res unique struct(k I64) {
     k
 } destruct { try io.PutLn("d" + $k) catch io.Error { } }
-fn same<T>(a T, b T) Bool { return a == b }
+fn same<T>(a T, b T) Bool { return a is b }
 fn hashOf<T Hashable<T>>(x T) I64 { return x.Hash() }
 fn main() ? {
     try io.PutLn($same(Res(1), Res(1)))

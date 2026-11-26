@@ -16,11 +16,11 @@ fn churn() I64 {
 }
 fn main() ? {
     b := SV<P>()
-    b.data = Array<P>(2)
+    b.data ~ Array<P>(2)
     b.data[0] = P("x" + $3, 3)
     b.data[1] = P("y", 4)
     k := b.data[0]
-    b.data = Array<P>(1)
+    b.data ~ Array<P>(1)
     churn()
     assert k.s == "x3" and k.n == 3 and b.data.Len() == 1
 }

@@ -224,10 +224,10 @@ fn backwardWritten(a mut Array<I64>&, scratch mut Array<I64>&, lo I64, m I64, hi
 }
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     if args.Len() < 5: error Usage.Args
-    mode := args[1]
-    kind := args[2]
+    mode :~ args[1]
+    kind :~ args[2]
     n := try args[3].ParseInt()
     passes := try args[4].ParseInt()
     if not (kind == "vec" or kind == "array" or kind == "list" or (mode == "sort" and (kind == "value" or kind == "written"))) { error Usage.Kind }

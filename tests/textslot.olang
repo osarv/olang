@@ -15,7 +15,7 @@ fn tsWalk(n I64) String {
         t Array<Char> = "abc"
         t[0] = Char(U8('a') + U8(i))
         if i % 2 == 0: tsUpper(t)
-        u := t[1:3]
+        u :~ t[1:3]
         out.Push($t + ":" + $u + " ")
         if i == 3: t = "longer than abc"
         out.Push($t.Len())

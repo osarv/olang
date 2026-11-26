@@ -11,6 +11,6 @@ fn (q aSq&) Area() I64 { return q.s * q.s }
 G mut any aShape?& = null
 fn f() {
     q := aSq(1)
-    G = q
+    G ~ q
 }
 fn main() { }

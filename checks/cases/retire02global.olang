@@ -9,7 +9,7 @@ type Job struct() {
 }
 fn add(j mut Job&) { for i in range 20 { j.items.Push(i) } }
 fn report(v Vec<I64>&, j mut Job&) I64 {
-    d := v.View()
+    d :~ v.View()
     add(j)
     return d[0]
 }

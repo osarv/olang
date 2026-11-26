@@ -20,7 +20,7 @@ fn primes(n I64) Array<I64> {
 Primes := primes(200)
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     n := try args[2].ParseInt()
     s I64 = 0
     for i in range n {

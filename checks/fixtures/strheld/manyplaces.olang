@@ -26,7 +26,7 @@ type Holder struct(k I64) {
 type Holder2 struct(k I64) {
     k
     t String& = "none"
-    if k > 0: t = $Big(k) + "nested"
+    if k > 0: t ~ $Big(k) + "nested"
 }
 fn fails(k I64) String ? {
     if k > 0: error Stop.Here

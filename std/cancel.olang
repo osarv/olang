@@ -100,7 +100,7 @@ table mut Vec<mut waiter&> = Vec<mut waiter&>()
 # the waiter numbered w, found under the table's lock
 fn waiter.at(w I64) mut waiter& {
     pthread.pthread_mutex_lock(tableLock)
-    x := table[w]
+    x :~ table[w]
     pthread.pthread_mutex_unlock(tableLock)
     return x
 }
@@ -121,7 +121,7 @@ fn Park(fd I32 = -1) I64 {
         table.Push(waiter())
         w = table.Len() - 1
     }
-    x := table[w]
+    x :~ table[w]
     x.used = true
     pthread.pthread_mutex_lock(x.lock)
     x.woken = 0
@@ -134,7 +134,7 @@ fn Park(fd I32 = -1) I64 {
 # the waiter let go: no wake reaches it any more, and its number may be given to another wait
 fn Done(w I64) {
     pthread.pthread_mutex_lock(tableLock)
-    x := table[w]
+    x :~ table[w]
     pthread.pthread_mutex_lock(x.lock)
     x.fd = -1
     pthread.pthread_mutex_unlock(x.lock)

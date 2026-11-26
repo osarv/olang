@@ -61,10 +61,10 @@ fn closeAfter(text String&, i I64, close String&) I64 {
 
 # a declaration's name: `fn Name(`, `fn (r T&) Name(`, `fn T.Name(`, `export fn Name(`
 fn declName(line String&) String& {
-    t := line[3:] if line.StartsWith("fn ") else line[10:]
+    t :~ line[3:] if line.StartsWith("fn ") else line[10:]
     if t.StartsWith("(") {
         close := try t.FindByte(')') catch default 0
-        t = t[close + 2:]
+        t ~ t[close + 2:]
     }
     end I64 = 0
     for end < t.Len() and t[end] != '(' and t[end] != '<' and t[end] != ' ': end++
@@ -73,13 +73,13 @@ fn declName(line String&) String& {
 
 # the functions of one file
 fn scanFile(path String&, out mut Vec<Func>&) ? os.Error {
-    text := try os.ReadFile(path)
+    text :~ try os.ReadFile(path)
     code := codeMask(text)
     n := text.Len()
     i I64 = 0
     line I64 = 1
     for i < n {
-        rest := text[i:]
+        rest :~ text[i:]
         if rest.StartsWith("fn ") or rest.StartsWith("export fn ") {
             f, end, endLine := measure(text, code, i, line, path)
             out.Push(f)
@@ -96,7 +96,7 @@ fn scanFile(path String&, out mut Vec<Func>&) ? os.Error {
 # the function declared at start (on line): its row, the index after its last line and that line's number
 fn measure(text String&, code Array<Bool>&, start I64, line I64, path String&) Func, I64, I64 {
     nl := try text[start:].FindByte('\n') catch default (text.Len() - start)
-    name := declName(text[start:start + nl])
+    name :~ declName(text[start:start + nl])
     depth I64 = 0
     deepest I64 = 0
     at := line
@@ -125,7 +125,7 @@ fn worse(a Func, b Func) Bool { return a.depth > b.depth or (a.depth == b.depth 
 
 fn defaultFiles() Vec<String&> {
     out := Vec<String&>()
-    names := try os.ReadDir("compiler") catch {
+    names :~ try os.ReadDir("compiler") catch {
         io.PutErrLn("nesting: no compiler/ here - run from the repository root")!
         os.Exit(2)
     }
@@ -137,7 +137,7 @@ fn defaultFiles() Vec<String&> {
 }
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     limit I64 = -1
     files := Vec<String&>()
     i I64 = 1

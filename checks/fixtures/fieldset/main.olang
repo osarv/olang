@@ -17,8 +17,8 @@ fn main() ? {
         x mut lib.N& = lib.N(I32(42 + i))
         c := lib.Cur(outer)
         arr Array<mut lib.Cur&> = Array<lib.Cur&>[c]
-        arr[0].At = x
-        keep = c.At
+        arr[0].At ~ x
+        keep ~ c.At
     }
     churn()
     try io.PutLn($keep.V)

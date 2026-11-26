@@ -319,7 +319,7 @@ fn shrink<F>(f F, start Array<U8>&, budget I64) Array<U8> {
             for lo < hi and tries < budget {
                 mid := lo if first else (lo + hi) / 2   # 0 first, the likeliest smallest
                 first = false
-                cand := best.ToArray()
+                cand :~ best.ToArray()
                 cand[i] = U8(mid)
                 tries++
                 if outcome.inChild(f, cand) == outcome.Failed: hi = mid
@@ -356,7 +356,7 @@ fn shrink<F>(f F, start Array<U8>&, budget I64) Array<U8> {
 fn Check<F>(f F, cases I64 = 100) ? F.Errors {
     data := try fuzz.Input() catch fuzz.Error {
         for path in fuzz.Saved() {
-            saved := try os.ReadFile(path) catch os.Error { continue }
+            saved :~ try os.ReadFile(path) catch os.Error { continue }
             try io.PutErr($"prop: replaying " + $path + "\n") catch io.Error { }
             s := source.newSource(saved, 0)
             try run(f, s) catch skip { }

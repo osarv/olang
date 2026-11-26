@@ -28,7 +28,7 @@ type Holder struct() {
 fn main() {
     h := Holder()
     for i in range 5 {
-        h.n = Node(i + 1)        # lets go of the old node
+        h.n ~ Node(i + 1)        # lets go of the old node
         io.PutLn($"turn " + $i + ": " + $Ends + " ended")!
     }
     io.PutLn($"before the close: " + $Ends + " ended")!

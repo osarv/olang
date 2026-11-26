@@ -11,12 +11,12 @@ type Holder struct() {
 }
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     n := try args[1].ParseInt()
     h := Holder()
-    h.a = Array<I64>(n)                            # field: allocated twice, copied once
-    h.rows = Array<mut Array<I64>&>(2)             # the same for an array of references
-    h.rows[0] = Array<I64>(n)                      # element: the same
+    h.a ~ Array<I64>(n)                            # field: allocated twice, copied once
+    h.rows ~ Array<mut Array<I64>&>(2)             # the same for an array of references
+    h.rows[0] ~ Array<I64>(n)                      # element: the same
     h.a[n - 1] = 7
     h.rows[0][0] = 5
     try io.Put($(h.a[n - 1] + h.rows[0][0]) + "\n")

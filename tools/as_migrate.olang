@@ -102,7 +102,7 @@ fn main() ? {
     olang := srcmask.Compiler()
     jobs I64 = 3
     paths Vec<String&>
-    args := os.Args()
+    args :~ os.Args()
     i I64 = 1
     for i < args.Len() {
         if (args[i] == "--olang" or args[i] == "-j") and i + 1 < args.Len() {
@@ -127,7 +127,7 @@ fn main() ? {
     diagedit.OlangFiles(paths, files)
     allowed Vec<String&>
     for p in paths: allowed.Push(diagedit.RealPathOf(p))
-    tmp := try os.MkTemp("", "as_migrate") catch {
+    tmp :~ try os.MkTemp("", "as_migrate") catch {
         srcmask.SayErr("as_migrate: cannot make a temporary directory")
         os.Exit(1)
         unreachable
@@ -135,7 +135,7 @@ fn main() ? {
     defer: try os.RemoveAll(tmp) catch { }
     work mut Array<String&>& = Array<String&>(jobs)
     for k in range jobs {
-        work[k] = $tmp + "/w" + $k
+        work[k] ~ $tmp + "/w" + $k
         try os.MkDirAll(work[k]) catch {
             srcmask.SayErr("as_migrate: cannot make " + $work[k])
             os.Exit(1)
@@ -143,9 +143,9 @@ fn main() ? {
     }
     total I64 = 0
     left Vec<String&>
-    fileArray := files.ToArray()
+    fileArray :~ files.ToArray()
     for round in range 1, 10 {
-        outputs := diagedit.CompileAll(olang, fileArray, work, true)
+        outputs :~ diagedit.CompileAll(olang, fileArray, work, true)
         requests Vec<diagedit.Request>
         for o in outputs {
             for row in o.Split("\n") {
@@ -177,7 +177,7 @@ fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
         src := try srcmask.ReadText(path) catch { continue }
         expect Vec<String&>
         diagedit.ExpectedTexts(src, expect)
-        lines := src.Split("\n")
+        lines :~ src.Split("\n")
         mine Vec<diagedit.Request>
         for r in requests {
             if r.Path == path: mine.Push(r)
@@ -203,7 +203,7 @@ fn apply(requests Vec<diagedit.Request>&, left mut Vec<String&>&) I64 {
                 if not (r.Why in left): left.Push($r.Why)
                 continue
             }
-            lines[idx] = $out
+            lines[idx] ~ $out
             delta := out.Len() - text.Len()
             diagedit.Realign(lines, idx, delta, r.Col - 1)
             shLine.Push(r.Line)

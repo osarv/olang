@@ -12,7 +12,7 @@ fn main() ? {
     y Node& = Node(0)
     for i in range 3 {
         n Node& = Node(i)
-        y = id(n)
+        y ~ id(n)
     }
     assert $y != ""
 }

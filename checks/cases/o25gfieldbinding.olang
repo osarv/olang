@@ -22,11 +22,11 @@ fn main() ? {
     {
         t mut N& = N()
         c := C(t)
-        c.cur = g
-        c.cur.next = N()
+        c.cur ~ g
+        c.cur.next ~ N()
         c.cur.next!.v = 5
     }
     churn()
-    assert g.next != null
+    assert g.next is not null
     assert g.next!.v == 5
 }

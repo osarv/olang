@@ -17,7 +17,7 @@ fn keep(l mut Vec<fn&() I64>&, g fn&() I64) { l.Push(g) }
 fn main() ? {
     n mut Node& = Node(1)
     g := fn() I64 {
-        n.next = Node(n.v + 41)
+        n.next ~ Node(n.v + 41)
         return n.next!.v
     }
     fns mut Vec<fn&() I64>& = Vec<fn&() I64>()

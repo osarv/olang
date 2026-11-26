@@ -65,10 +65,10 @@ fn renameTryForms(text String&) String {
         if isIdent(text[i]) {
             j := i
             for j < text.Len() and isIdent(text[j]): j++
-            w := text[i:j]
+            w :~ text[i:j]
             kept Bool = true
             if w.Len() > 3 and (w[0] == 'T' or w[0] == 't') and w[1] == 'r' and w[2] == 'y' {
-                rest := w[3:]
+                rest :~ w[3:]
                 if rest in Forms {
                     b.Push("Checked" if w[0] == 'T' else "checked")
                     b.Push(rest)
@@ -182,7 +182,7 @@ type Unparsed error {
 # a call that can now fail, written "try CALL" - in a test too, where what it lets through fails the test (S16)
 fn tryCall(text String&, line I64, col I64) String ? {
     ls, le := lineSpan(text, line)
-    l := text[ls:le]
+    l :~ text[ls:le]
     a, b := try callExtent(l, col)
     if b < a: error Unparsed.Call
     return splice(text, ls + a, 0, "try ")
@@ -191,7 +191,7 @@ fn tryCall(text String&, line I64, col I64) String ? {
 # the "try" at col, or the last one before col on its line, made "checked"
 fn checkedAt(text String&, line I64, col I64) String ? {
     ls, le := lineSpan(text, line)
-    l := text[ls:le]
+    l :~ text[ls:le]
     k := col - 1
     for k >= 0 {
         if (k + 3 <= l.Len() and l[k:k + 3] == "try" and (k == 0 or not isIdent(l[k - 1]))
@@ -208,9 +208,9 @@ fn declareError(text String&, line I64, errType String&) String ? {
     n := line
     for n > 0 {
         ls, le := lineSpan(text, n)
-        l := text[ls:le]
+        l :~ text[ls:le]
         if l.StartsWith("fn ") or l.StartsWith("type ") {
-            code := codeOf(l).TrimEnd()
+            code :~ codeOf(l).TrimEnd()
             if not code.EndsWith(" {") { error Unparsed.Signature }
             at := ls + code.Len() - 2
             if code.EndsWith(" ? {") { error Unparsed.Signature }         # inferred: nothing to add
@@ -230,17 +230,17 @@ fn declareError(text String&, line I64, errType String&) String ? {
 # the diagnostics compiling path (with -t, from its own directory) gives
 fn diagnostics(olang String&, path String&) Vec<diagnostic> ? {
     out := Vec<diagnostic>()
-    dir := filepath.Dir(path)
+    dir :~ filepath.Dir(path)
     r := try os.Output.Exec(olang, "test", filepath.Base(path), dir = dir)
     for row in r.Stdout.Lines() {
         # "FILE:LINE:COL: error[RULE]: MESSAGE"
         e := try row.Find(": error[") catch { continue }
-        loc := row[:e].Split(":")
+        loc :~ row[:e].Split(":")
         if loc.Len() != 3: continue
         close := try row.Find("]: ") catch { continue }
         line := try loc[1].ParseInt() catch { continue }
         col := try loc[2].ParseInt() catch { continue }
-        file := loc[0] if filepath.IsAbs(loc[0]) else filepath.Join(dir, loc[0])
+        file :~ loc[0] if filepath.IsAbs(loc[0]) else filepath.Join(dir, loc[0])
         out.Push(diagnostic($file, line, col, $row[e + 8:close], $row[close + 3:]))
     }
     return out
@@ -249,7 +249,7 @@ fn diagnostics(olang String&, path String&) Vec<diagnostic> ? {
 # one file's diagnostics applied, bottom to top so an edit moves nothing still to be applied; what could not be is put
 # in left. How many edits were made
 fn apply(file String&, ds mut Vec<diagnostic>&, left mut Vec<String&>&) I64 ? {
-    text := try os.ReadFile(file)
+    text :~ try os.ReadFile(file)
     edits I64 = 0
     ds.Sort(fn(a diagnostic, b diagnostic) { return a.Line > b.Line or (a.Line == b.Line and a.Col > b.Col) })
     lastLine I64 = -1
@@ -258,14 +258,14 @@ fn apply(file String&, ds mut Vec<diagnostic>&, left mut Vec<String&>&) I64 ? {
         if d.Line != lastLine {                                    # one edit a line a round: its columns move
             if d.Msg.EndsWith("write 'checked' to check it") or (d.Rule == "E31a" and d.Msg.EndsWith("under 'checked'")) {
                 edited = true
-                text = try checkedAt(text, d.Line, d.Col) catch { edited = false } default text
+                text ~ try checkedAt(text, d.Line, d.Col) catch { edited = false } default text
             } else if d.Rule == "E15" and d.Msg.StartsWith("this call can fail") {
                 edited = true
-                text = try tryCall(text, d.Line, d.Col) catch { edited = false } default text
+                text ~ try tryCall(text, d.Line, d.Col) catch { edited = false } default text
             } else if d.Rule == "R9" and d.Msg.Contains(" can escape here, and this function does not declare it") {
-                t := d.Msg[:try d.Msg.Find(" can escape") catch default 0]
+                t :~ d.Msg[:try d.Msg.Find(" can escape") catch default 0]
                 edited = true
-                text = try declareError(text, d.Line, t) catch { edited = false } default text
+                text ~ try declareError(text, d.Line, t) catch { edited = false } default text
             }
         }
         if edited {
@@ -291,15 +291,15 @@ fn filesOf(paths Array<String&>&) Vec<String&> ? {
 }
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     if args.Len() < 3 {
         try io.PutErrLn("usage: errors_migrate OLANG PATH...")
         os.Exit(2)
     }
-    olang := try os.RealPath(args[1])
+    olang :~ try os.RealPath(args[1])
     files := try filesOf(args[2:])
     for f in files {
-        text := try os.ReadFile(f)
+        text :~ try os.ReadFile(f)
         renamed := renameTryForms(text)
         if renamed != text: try os.WriteFile(f, renamed)
     }

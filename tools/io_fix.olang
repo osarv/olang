@@ -42,7 +42,7 @@ fn build(olang String&, path String&, src String&) String {
     for c in path {
         munged.PushChar(c if srcmask.IsWord(c) else '_')
     }
-    tmp := try os.Env("TMPDIR") catch default ""
+    tmp :~ try os.Env("TMPDIR") catch default ""
     dir := $(tmp if tmp.Len() > 0 else "/tmp") + "/olang_io_fix/" + $munged.ToString()
     try os.MkDirAll(dir) catch {
         srcmask.SayErr("io_fix: cannot make " + $dir)
@@ -119,7 +119,7 @@ fn fixRound(path String&, alias String&, errs Array<String&>&, lines mut Array<S
         at := col - 1
         if ln < 0 or ln >= lines.Len() or at < 0 or at > lines[ln].Len(): continue
         if code == "E15" {
-            lines[ln] = $lines[ln][:at] + "try " + $lines[ln][at:]
+            lines[ln] ~ $lines[ln][:at] + "try " + $lines[ln][at:]
             TryFixes++
             return 1
         }
@@ -129,7 +129,7 @@ fn fixRound(path String&, alias String&, errs Array<String&>&, lines mut Array<S
             srcmask.Say("MANUAL " + $path + " " + $(ln + 1) + " " + $srcmask.Prefix(msg, 60))
             continue
         }
-        head := lines[k]
+        head :~ lines[k]
         inner := head.StartsWith("test") or head.StartsWith("type") or code == "R13"
         for j in range k + 1, ln + 1 {
             if hasFnParen(lines[j]): inner = true
@@ -160,11 +160,11 @@ fn fixRound(path String&, alias String&, errs Array<String&>&, lines mut Array<S
             } else {
                 pre = $pre + " ?" + $(" " + $alias + ".Error" if named else "")
             }
-            lines[j] = $pre + " " + $lines[j][b:]
+            lines[j] ~ $pre + " " + $lines[j][b:]
             SigFixes++
             return 1
         }
-        text := lines[ln]
+        text :~ lines[ln]
         mask := srcmask.Mask(text, false)
         depth I64 = 0
         end I64 = -1
@@ -185,7 +185,7 @@ fn fixRound(path String&, alias String&, errs Array<String&>&, lines mut Array<S
             i++
         }
         if end > 0 and not srcmask.StripStart(text[end:]).StartsWith("catch") {
-            lines[ln] = $text[:end] + " catch " + $alias + ".Error { }" + $text[end:]
+            lines[ln] ~ $text[:end] + " catch " + $alias + ".Error { }" + $text[end:]
             CatchFixes++
             return 1
         }
@@ -202,8 +202,8 @@ fn fixFile(olang String&, path String&, alias String&) {
             os.Exit(1)
             unreachable
         }
-        errs := build(olang, path, src).Split("\n")
-        lines := src.Split("\n")
+        errs :~ build(olang, path, src).Split("\n")
+        lines :~ src.Split("\n")
         outcome := fixRound(path, alias, errs, lines)
         if outcome != 1 {
             if outcome == 0 {
@@ -225,7 +225,7 @@ fn fixFile(olang String&, path String&, alias String&) {
 }
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     if args.Len() < 2 {
         srcmask.SayErr("usage: build/tools_io_fix OLANG FILE...")
         os.Exit(2)

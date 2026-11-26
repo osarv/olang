@@ -7,7 +7,7 @@ type N struct(v I64) {
     next N?& = null
 }
 
-fn link(a mut N&, b N&) { a.next = b }
+fn link(a mut N&, b N&) { a.next ~ b }
 
 # storage made and let go many times: a value kept in a scope already closed would read another's
 fn churn(n I64) I64 {
@@ -89,7 +89,7 @@ test "a twin building where the followed function needs it" {
     x mut N& = N(1)
     put(link, x, 42)
     y mut N& = N(2)
-    put(fn(a mut N&, b N&) { a.next = b }, y, 43)
+    put(fn(a mut N&, b N&) { a.next ~ b }, y, 43)
     churn(100)
     assert x.next!.v == 42 and y.next!.v == 43
 }

@@ -14,7 +14,7 @@ type Box struct() {
 type H struct(b Box) { b }
 fn viaCtor(r mut Box&) {
     h := H(r)
-    h.b.head.next = Node()
+    h.b.head.next ~ Node()
 }
 fn main() ? {
 }

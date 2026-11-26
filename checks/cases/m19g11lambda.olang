@@ -4,7 +4,7 @@ import "std/io"
 fn main() ? {
     v := Vec<I64>()
     v.Push(5)
-    d := v.View()
+    d :~ v.View()
     f := fn() I64 { return d[0] }
     for i in range 100: v.Push(i)
     try io.PutLn($f())

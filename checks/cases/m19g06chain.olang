@@ -9,7 +9,7 @@ fn outer(c mut Vec<I64>&) { middle(c) }
 fn main() ? {
     v := Vec<I64>()
     v.Push(1)
-    d := v.View()
+    d :~ v.View()
     outer(v)
     try io.PutLn($d[0])
 }

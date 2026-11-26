@@ -7,7 +7,7 @@ fn bad(c Bool) I32 {
     nb NB& = NB(P(1))
     if c {
         q P& = P(2)
-        nb = NB(q)
+        nb ~ NB(q)
     }
     return nb.inner.x
 }

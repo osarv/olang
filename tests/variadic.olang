@@ -50,7 +50,7 @@ fn calls(z I64) String {
 CallsBaked := calls(0)
 
 fn texts(z I64) String {
-    w := "w" if z == 0 else "?"
+    w :~ "w" if z == 0 else "?"
     return $joined("-", "a", w, "c") + " " + $joined(",") + " " + $joined(",", "x", "y", upper = true) + " " + $largest(3, 9, 2) + " " + $largest(1.5, 0.5) + " " + $largest("b", "a", "c")
 }
 

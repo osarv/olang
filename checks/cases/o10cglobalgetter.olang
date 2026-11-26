@@ -13,7 +13,7 @@ type Mir unique struct(d mut Vec<I64>&) {
 opened mut Vec<I64>?& = null
 
 fn Shared() mut Vec<I64>& {
-    if opened == null: opened = Vec<I64>()
+    if opened is null: opened ~ Vec<I64>()
     return opened!
 }
 
@@ -22,7 +22,7 @@ type Sys struct() {
 }
 
 fn (s mut Sys&) Plan() {
-    s.M = Mir(Shared())
+    s.M ~ Mir(Shared())
 }
 
 fn Sys.build() Sys {
@@ -33,5 +33,5 @@ fn Sys.build() Sys {
 
 fn main() {
     s := Sys.build()
-    assert s.M != null
+    assert s.M is not null
 }

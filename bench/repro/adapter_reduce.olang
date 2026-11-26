@@ -25,7 +25,7 @@ fn viaLoop(a Array<I64>&, n I64) I64 {
 }
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     n := try args[2].ParseInt()
     passes := try args[3].ParseInt()
     a := Array<I64>[(i * 7) % 1000 for i in range n]

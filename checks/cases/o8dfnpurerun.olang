@@ -31,7 +31,7 @@ fn twice(xs Array<I64>&, f fn&(x I64) I64) I64 { return sum(xs, f) + sum(xs, f) 
 fn (it mut Interp&) step(d I64, xs Array<I64>&) I64 {
     it.frames.Push(Frame(d))
     it.frames.Push(Frame(d + 1))
-    f := try it.frames.Last() catch { unreachable }
+    f :~ try it.frames.Last() catch { unreachable }
     r := sumPure(xs, fn(x): return x * 2)
     r += twice(xs, fn(x): return x + d)
     r += sum(xs, it.scale)

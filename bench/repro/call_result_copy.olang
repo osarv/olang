@@ -10,7 +10,7 @@ fn mk(i I64) String { return "item " + $i + " of many" }
 fn ln(t String&) I64 { return t.Len() + I64(t[0]) }
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     n := try args[2].ParseInt()
     s I64 = 0
     for i in range n {

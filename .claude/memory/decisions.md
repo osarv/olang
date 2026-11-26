@@ -32,3 +32,8 @@ Open questions:
 5. (2026-11-26, same) A view rooted at a parameter, field or global is judged per declaration (parameters of one type may
    name one value). Per value needs per-call-site facts, so an edit recompiles callers (against B3i). Default and
    recommendation: per declaration until a real program shows the growth; then measure both.
+6. (2026-11-26, wt-assign stage 2; HISTORY "links and contents, stage 2") `r ~ x` with `x` a new value (a constructor's
+   call, a literal, a call giving a value): the decision said an error, but the compiler alone holds 351 such links
+   (`p ~ typed.Lvalue.Deref(...)`), and a local plus a link for each would double those statements. Default in effect:
+   `~` builds the new value where the reference is held (E12c, the old repoint's placement); `:~` of a new value stays
+   an error (`:=` declares it). Recommendation: keep the default.

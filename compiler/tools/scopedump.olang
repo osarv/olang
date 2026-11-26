@@ -25,7 +25,7 @@ import "../types"
 import "../scope"
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     if args.Len() < 2 {
         try io.PutErrLn("usage: scopedump [-D NAME=VALUE]... [-t] [-plan PATTERN] FILE...") catch io.Error { }
         os.Exit(2)
@@ -35,7 +35,7 @@ fn main() ? {
 
 fn run(args Array<String&>&) {
     out := io.Writer(io.Stdout)
-    std := try os.Env("OLANG_STD") catch default "std"
+    std :~ try os.Env("OLANG_STD") catch default "std"
     defines Vec<String&>
     testBuild := false
     planAt String& = ""
@@ -48,12 +48,12 @@ fn run(args Array<String&>&) {
             defines.Push(args[k])
         } else if args[k] == "-plan" and k + 1 < args.Len() {
             k++
-            planAt = args[k]
+            planAt ~ args[k]
         }
         k++
     }
     for i in range k, args.Len() {
-        path := args[i]
+        path :~ args[i]
         out.Write("== " + $path + "\n")
         d := diag.Diagnostics(false)
         consts := cond.Consts()
@@ -78,9 +78,9 @@ fn run(args Array<String&>&) {
         unjudged I64 = 0
         for b in range c.Bodies.Len() {
             if s.Judged(b): judged++
-            else if c.Bodies[b].Root != null: unjudged++
+            else if c.Bodies[b].Root is not null: unjudged++
             if planAt.Len() == 0: continue
-            body := c.Bodies[b]
+            body :~ c.Bodies[b]
             where := d.Locate(body.File, I64(body.Sp.Start))
             if (try where.Find(planAt) catch default -1) < 0: continue
             out.Write("-- plan B" + $b + " " + $where + "\n" + $body.Print(p.T) + $varsText(body) + $planText(s.Plans[b]) + $s.Summary(b))

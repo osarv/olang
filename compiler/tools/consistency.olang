@@ -23,7 +23,7 @@ type Problems struct() { Rows Vec<String&> }
 fn (p mut Problems&) Add(row String&) { p.Rows.Push($"consistency: " + $row) }
 
 fn main() {
-    args := os.Args()
+    args :~ os.Args()
     compiler := $args[1] if args.Len() > 1 else toolkit.Compiler()
     if not toolkit.Built(compiler): toolkit.Die("consistency: " + $compiler + " is not built (make build/olang)")
     p := Problems()
@@ -91,7 +91,7 @@ fn quoted(row String&) Vec<String&> {
 # the text between each pair of backticks in a row
 fn spans(row String&) Vec<String&> {
     out := Vec<String&>()
-    parts := row.Split("`")
+    parts :~ row.Split("`")
     for i in range 1, parts.Len(), 2 {
         if i + 1 < parts.Len(): out.Push(parts[i])
     }
@@ -127,7 +127,7 @@ fn compare(p mut Problems&, what String&, mine String&, ours Vec<String&>&, othe
 fn scannerWords() Vec<String&> {
     out := Vec<String&>()
     for row in toolkit.Rows(toolkit.Read("compiler/token.olang")) {
-        r := row.Trim()
+        r :~ row.Trim()
         if not r.StartsWith("case Tok."): continue
         w := quoted(r)
         if w.Len() == 1 and w[0].Len() > 1 and isLower(w[0]): out.Push($w[0])
@@ -207,10 +207,10 @@ fn checkPromises(p mut Problems&) {
     for w in names {
         if w != "noborrow" and not has(named, w) { p.Add($"types.olang's PromiseNames has " + $w + ", which this check's table of facts (compiler/tools/consistency.olang PromiseFacts) has not") }
     }
-    spec := toolkit.Read("SPEC.md")
-    effects := toolkit.Read("compiler/effects.olang")
+    spec :~ toolkit.Read("SPEC.md")
+    effects :~ toolkit.Read("compiler/effects.olang")
     for pf in PromiseFacts {
-        parts := pf.Split(" ")
+        parts :~ pf.Split(" ")
         if not has(names, parts[0]): p.Add($"PromiseNames lacks " + $parts[0] + ", which PromiseFacts has")
         if not effects.Contains($"case \"" + $parts[1] + "\": Fact.") { p.Add($"effects.olang's Fact.Named lacks " + $parts[1] + ", the fact " + $parts[0] + " promises") }
         if not spec.Contains($"| `" + $parts[0] + "` |"): p.Add($"SPEC's T21c table has no row for " + $parts[0])
@@ -324,12 +324,12 @@ fn checkSpecB1(c CommandLine&, p mut Problems&) {
 
 # one table row: its options (the first cell's code spans) against the modes the compiler says they apply to
 fn checkTableRow(c CommandLine&, row String&, p mut Problems&, tabled mut Vec<String&>&) {
-    cells := row.Split("|")
+    cells :~ row.Split("|")
     if cells.Len() < 4: return
     modes := Vec<String&>()
     for m in cells[2].Split(","): modes.Push(m.Trim())
     for s in spans(cells[1]) {
-        o := toolkit.Fields(s)[0]
+        o :~ toolkit.Fields(s)[0]
         tabled.Push($o)
         want := modesAt(c, o)
         if want == "" {
@@ -361,12 +361,12 @@ fn commandFiles() Vec<String&> {
 # the commands a row writes: what follows "`olang " up to the closing backtick, or a row that begins with "olang "
 fn commandsIn(row String&, fenced Bool) Vec<String&> {
     out := Vec<String&>()
-    parts := row.Split("`olang ")
+    parts :~ row.Split("`olang ")
     for i in range 1, parts.Len() {
         close := try parts[i].FindByte('`') catch default parts[i].Len()
         out.Push($parts[i][:close])
     }
-    t := row.Trim()
+    t :~ row.Trim()
     if fenced and t.StartsWith("olang "): out.Push($t[6:])
     if fenced and t.StartsWith("$ olang "): out.Push($t[8:])
     return out
@@ -399,7 +399,7 @@ fn checkCommand(c CommandLine&, where String&, command String&, p mut Problems&)
         w := f[i].Replace("[", "").Replace("]", "").Replace(",", "").Replace(".", "").Replace(")", "")
         if own and (w.Contains("olang") or w.StartsWith("ARG") or w.StartsWith("FILE")): break
         if w.Len() < 3 or w[0] != '-' or not Char(w[1]).IsLetter(): continue
-        name := w[:try w.FindByte('=') catch default w.Len()]
+        name :~ w[:try w.FindByte('=') catch default w.Len()]
         want := modesAt(c, name)
         if want == "" {
             p.Add($where + " writes `olang " + $mode + " ... " + $name + "`, and " + $name + " is no option (olang help)")
@@ -526,7 +526,7 @@ fn checkMcpTools(p mut Problems&) {
         }
     }
     spec := section("SPEC.md", "**B16.**", "**B17.**")
-    readme := toolkit.Read("editors/README.md")
+    readme :~ toolkit.Read("editors/README.md")
     for t in tools {
         if not specMentions(spec, t): p.Add("SPEC B16 does not name the MCP tool " + $t)
         if not mentions(readme, t): p.Add("editors/README.md does not name the MCP tool " + $t)
@@ -545,7 +545,7 @@ fn checkReadmes(p mut Problems&) {
     for f in toolkit.Tracked("*") {
         slash := try f.FindByte('/') catch default -1
         if slash < 0: continue
-        d := f[:slash]
+        d :~ f[:slash]
         if not has(folders, d): folders.Push($d)
     }
     for d in folders {
@@ -562,11 +562,11 @@ fn checkReadmes(p mut Problems&) {
 
 # each file of dir with the suffix named by the README
 fn listedIn(p mut Problems&, dir String&, suffix String&, readme String&) {
-    text := toolkit.Read(readme)
+    text :~ toolkit.Read(readme)
     for f in toolkit.Matching(dir, suffix) {
-        name := f[dir.Len() + 1:]
+        name :~ f[dir.Len() + 1:]
         if name == "README.md": continue
-        stem := name[:name.Len() - suffix.Len()]
+        stem :~ name[:name.Len() - suffix.Len()]
         if not mentions(text, stem if dir == "compiler/tools" else name): p.Add($readme + " does not name " + $f)
     }
 }

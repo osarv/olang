@@ -35,8 +35,8 @@ fn main() ? {
     a := viaLocal()
     b := Lex2.viaField()
     churn()
-    s := a[0].text
-    u := b.toks[0].text
+    s :~ a[0].text
+    u :~ b.toks[0].text
     assert s == "x5-function-block-text"
     assert u == "y6-function-block-text"
 }

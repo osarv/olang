@@ -16,8 +16,8 @@ test "a struct two C modules translate alike is one type" {
 }
 
 test "an opaque C type two C modules declare is one type" {
-    h := one.cs_open(21)
-    assert h != null
+    h :~ one.cs_open(21)
+    assert h is not null
     assert two.cs_twice(h) == 42
     assert two.cs_value(h) == one.cs_value(h)
 }

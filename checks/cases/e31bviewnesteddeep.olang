@@ -5,7 +5,7 @@ type M struct(d mut Array<I64>&, off I64) {
     d
     off
 }
-fn reset(m mut M&) { m = M(m.d, 0) }
+fn reset(m mut M&) { m ~ M(m.d, 0) }
 fn (m mut M&) Fill(x I64) {
     m.d[m.off] = x
     deep(m)

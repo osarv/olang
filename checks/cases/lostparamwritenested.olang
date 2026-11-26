@@ -1,5 +1,5 @@
-# check: fail error[S4e]: 'p' is repointed at a new value: the caller still sees what it passed
-# S4e: a nested field written through a reference parameter repointed at the callee's own storage is a lost store
+# check: fail error[S4e]: 'p' is linked to a new value: the caller still sees what it passed
+# S4e: a nested field written through a reference parameter linked to the callee's own storage is a lost store
 type In struct() {
     B I64 = 0
 }
@@ -7,7 +7,7 @@ type P struct() {
     A In = In()
 }
 fn setp(p mut P&) {
-    p = P()
+    p ~ P()
     p.A.B = 1
 }
 fn main() {

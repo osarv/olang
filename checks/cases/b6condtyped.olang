@@ -13,7 +13,7 @@ fn main() ? {
     n mut Nd& = Nd(5)
     for i in range 2 {
         q mut Nd& = n if i == 1 else Nd(7)
-        q.next = Nd(100 + i)
+        q.next ~ Nd(100 + i)
     }
     try io.PutLn($n.next!.v)
 }

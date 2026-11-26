@@ -91,7 +91,7 @@ fn (w mut writer&) decl(d ast.Decl&) {
         case ast.Decl.Errors(_, name, words, members, cases) { w.errorDecl(name, words, members, cases) }
         case ast.Decl.Test(_, name, body, target) {
             w.put("test ")
-            if target != null {
+            if target is not null {
                 for i, n in target.Parts {
                     if i > 0: w.put(".")
                     w.name(n)
@@ -110,7 +110,7 @@ fn (w mut writer&) decl(d ast.Decl&) {
         case ast.Decl.Assert(_, cond, msg) {
             w.put("assert ")
             w.expr(cond)
-            if msg != null {
+            if msg is not null {
                 w.put(", ")
                 w.expr(msg)
             }
@@ -173,7 +173,7 @@ fn (w mut writer&) topIf(i ast.TopIf&) {
     w.put("if ")
     w.expr(i.Cond!)
     w.topBranch(i.Then!)
-    if i.ElseIf == null and i.Else == null: return
+    if i.ElseIf is null and i.Else is null: return
     # after a one-line branch (S1b) the "else" begins the next line
     if w.text[I64(i.Then!.Sp.Start)] == ':' {
         w.nl()
@@ -181,7 +181,7 @@ fn (w mut writer&) topIf(i ast.TopIf&) {
     } else {
         w.put(" else")
     }
-    if i.ElseIf != null {
+    if i.ElseIf is not null {
         w.put(" ")
         w.topIf(i.ElseIf!)
     } else {
@@ -217,7 +217,7 @@ fn (w mut writer&) topBranch(b ast.TopBranch&) {
 fn (w mut writer&) func(f ast.Func&) {
     if f.Export: w.put("export ")
     w.put("fn ")
-    if f.Recv != null {
+    if f.Recv is not null {
         w.put("(")
         w.param(f.Recv!)
         w.put(") ")
@@ -279,8 +279,8 @@ fn (w mut writer&) promises(ps Array<ast.Promise&>&) {
 # whether a type is a function type with no error set of its own - and no promise after it, which ends it before a "?"
 # (T21c)
 fn noErrorsOf(t ast.TypeRef&) Bool {
-    s := t.FuncSig()
-    return s != null and not s.HasErrors and s.Promises.Len() == 0
+    s :~ t.FuncSig()
+    return s is not null and not s.HasErrors and s.Promises.Len() == 0
 }
 
 fn (w mut writer&) errors(s ast.Sig&) {
@@ -304,11 +304,11 @@ fn (w mut writer&) params(ps Array<ast.Param&>&) {
 
 fn (w mut writer&) param(x ast.Param&) {
     if x.Name != source.NameId(0): w.name(x.Name)
-    if x.Ty != null {
+    if x.Ty is not null {
         if x.Name != source.NameId(0): w.put(" ")
         w.ty(x.Ty!)
     }
-    if x.Dflt != null {
+    if x.Dflt is not null {
         w.put(" = ")
         w.expr(x.Dflt!)
     }
@@ -343,7 +343,7 @@ fn (w mut writer&) typeDecl(t ast.TypeDecl&) {
 
 # a type's name; one declared in place (D4a) its owner as written, "Box<T>", then "." and its member
 fn (w mut writer&) inPlaceName(t ast.TypeDecl&) {
-    if t.Owner == null {
+    if t.Owner is null {
         w.name(t.Name)
         return
     }
@@ -367,7 +367,7 @@ fn (w mut writer&) typeParams(tps Array<ast.TypeParam&>&) {
         }
         if i > 0: w.put(", ")
         w.name(x.Name)
-        if x.Ty != null {
+        if x.Ty is not null {
             w.put(" ")
             w.ty(x.Ty!)
         }
@@ -375,7 +375,7 @@ fn (w mut writer&) typeParams(tps Array<ast.TypeParam&>&) {
             w.put(" ")
             w.ty(a)
         }
-        if x.Dflt != null {
+        if x.Dflt is not null {
             w.put(" = ")
             w.ty(x.Dflt!)
         }
@@ -399,7 +399,7 @@ fn (w mut writer&) typeBody(b ast.TypeBody&) {
         }
         case ast.TypeBody.Enum(cases, raw) {
             w.put("enum ")
-            if raw != null {
+            if raw is not null {
                 w.ty(raw)
                 w.put(" ")
             }
@@ -416,7 +416,7 @@ fn (w mut writer&) typeBody(b ast.TypeBody&) {
                     w.params(c.Payload)
                     w.put(")")
                 }
-                if c.Value != null {
+                if c.Value is not null {
                     w.put(" = ")
                     w.expr(c.Value!)
                 }
@@ -447,7 +447,7 @@ fn (w mut writer&) typeBody(b ast.TypeBody&) {
             w.ind++
             for m in methods {
                 w.nl()
-                if m.Recv != null: w.put("mut ")
+                if m.Recv is not null: w.put("mut ")
                 w.name(m.Name)   # a builder required (T30b): "T.Parse", its joined name
                 w.sig(m.S)
             }
@@ -457,7 +457,7 @@ fn (w mut writer&) typeBody(b ast.TypeBody&) {
         }
         case ast.TypeBody.Over(base, ctor) {
             w.ty(base)
-            if ctor != null {
+            if ctor is not null {
                 w.put("(")
                 w.params(ctor.S.Params)
                 w.put(")")
@@ -526,8 +526,8 @@ fn (w mut writer&) ty(t ast.TypeRef&) {
         case ast.TypeRef.Ref(_, of, nullable, isWeak) {
             if isWeak { w.put("weak ") }   # T2d
             # T21: a function type's marker is on its "fn"
-            s := of.FuncSig()
-            if s != null {
+            s :~ of.FuncSig()
+            if s is not null {
                 w.funcType(s, "?&" if nullable else "&")
             } else {
                 w.ty(of)
@@ -551,13 +551,13 @@ fn (w mut writer&) ty(t ast.TypeRef&) {
         }
         case ast.TypeRef.Perm(_, of, writable) {
             # T2d: "weak" is written before the "mut" of the reference it marks
-            if of != null and of.IsWeak() {
+            if of is not null and of.IsWeak() {
                 w.put("weak mut " if writable else "weak ")
                 w.ty(of.Unweak())
                 return
             }
             if writable: w.put("mut")
-            if of != null {
+            if of is not null {
                 w.put(" ")
                 w.ty(of)
             }
@@ -621,7 +621,7 @@ fn (w mut writer&) varDecl(v ast.VarDecl&) {
         w.name(n)
     }
     if v.Infer {
-        if v.Ty != null {
+        if v.Ty is not null {
             w.put(" ")
             w.ty(v.Ty!)
         }
@@ -629,7 +629,7 @@ fn (w mut writer&) varDecl(v ast.VarDecl&) {
         w.exprs(v.Values)
         return
     }
-    if v.Ty == null: return
+    if v.Ty is null: return
     w.put(" ")
     w.ty(v.Ty!)
     if v.Values.Len() > 0 {
@@ -663,7 +663,7 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
         case ast.Stmt.Var(_, v) { w.varDecl(v) }
         case ast.Stmt.Multi(_, m) {
             w.exprs(m.Targets)
-            w.put(" := " if m.Define else " = ")
+            w.put(" := " if m.Define else " ~ " if m.Link else " = ")
             w.exprs(m.Values)
         }
         case ast.Stmt.Assign(_, op, target, value) {
@@ -735,7 +735,7 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
         }
         case ast.Stmt.Jump(_, kind, msg) {
             w.put(kind.Text())
-            if msg != null {
+            if msg is not null {
                 w.put(" ")
                 w.expr(msg)
             }
@@ -743,18 +743,18 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
         case ast.Stmt.Assert(_, cond, msg) {
             w.put("assert ")
             w.expr(cond)
-            if msg != null {
+            if msg is not null {
                 w.put(", ")
                 w.expr(msg)
             }
         }
         case ast.Stmt.Raise(_, word, args) {
             w.put("error")
-            if word != null {
+            if word is not null {
                 w.put(" ")
                 w.path(word)
             }
-            if args != null {
+            if args is not null {
                 w.put("(")
                 w.items(args)
                 w.put(")")
@@ -787,18 +787,18 @@ fn (w mut writer&) stmt(s ast.Stmt&) {
 # a branch that did not parse is written as the text it was, its diagnostics held where they were (DESIGN.md point 12);
 # an else whose block did not parse is an If with no condition
 fn (w mut writer&) ifStmt(i ast.If&) {
-    if i.Cond == null {
+    if i.Cond is null {
         w.branch(i.Then!)
         return
     }
     w.put("if ")
     w.expr(i.Cond!)
     w.branch(i.Then!)
-    if i.Else != null {
+    if i.Else is not null {
         w.put(" else")
         match i.Else {
             case ast.Stmt.If(_, e) {
-                if e.Cond == null {
+                if e.Cond is null {
                     w.branch(e.Then!)
                     return
                 }
@@ -837,7 +837,7 @@ fn (w mut writer&) match(m ast.Match&) {
             if i > 0: w.put(", ")
             w.ty(t)
         }
-        if c.Guard != null {
+        if c.Guard is not null {
             w.put(" if ")
             w.expr(c.Guard!)
         }
@@ -849,7 +849,7 @@ fn (w mut writer&) match(m ast.Match&) {
 }
 
 fn (w mut writer&) caseBody(c ast.Case&) {
-    if c.Value != null {
+    if c.Value is not null {
         w.put(": ")
         w.expr(c.Value!)
         return
@@ -992,15 +992,15 @@ fn (w mut writer&) expr(x ast.Expr&) {
         case ast.Expr.Slice(_, y, lo, hi) {
             w.expr(y)
             w.put("[")
-            if lo != null: w.expr(lo)
+            if lo is not null: w.expr(lo)
             w.put(":")
-            if hi != null: w.expr(hi)
+            if hi is not null: w.expr(hi)
             w.put("]")
         }
         case ast.Expr.Axis(_, lo, hi) {
-            if lo != null: w.expr(lo)
+            if lo is not null: w.expr(lo)
             w.put(":")
-            if hi != null: w.expr(hi)
+            if hi is not null: w.expr(hi)
         }
         case ast.Expr.ArrayLit(_, elem, items) {
             w.ty(elem!)
@@ -1016,7 +1016,7 @@ fn (w mut writer&) expr(x ast.Expr&) {
         case ast.Expr.Compr(_, c) {
             # G37: one written as a call's arguments has no brackets
             if not c.InCall {
-                if c.Elem != null: w.ty(c.Elem!)
+                if c.Elem is not null: w.ty(c.Elem!)
                 w.put("[")
             }
             w.expr(c.Value)
@@ -1028,7 +1028,7 @@ fn (w mut writer&) expr(x ast.Expr&) {
             w.name(c.Name)
             w.put(" in ")
             w.expr(c.Source)
-            if c.Filter != null {
+            if c.Filter is not null {
                 w.put(" if ")
                 w.expr(c.Filter!)
             }
@@ -1055,7 +1055,7 @@ fn (w mut writer&) expr(x ast.Expr&) {
         case ast.Expr.Default(_) { w.put("default") }
         case ast.Expr.Unreachable(_, msg) {
             w.put("unreachable")
-            if msg != null {
+            if msg is not null {
                 w.put(" ")
                 w.expr(msg)
             }

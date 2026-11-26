@@ -61,7 +61,7 @@ type Rows struct(of String&, sep Char = ',') {
 # not CSV, the reader then staying where it was
 fn (r mut Rows&) Next() Array<String&> ? Error, Exhausted {
     if r.sep == '"' or r.sep == '\n' or r.sep == '\r': error Error.BadSeparator
-    t := r.text
+    t :~ r.text
     n I64 = t.Len()
     if r.at >= n: error Exhausted.End
     r.Line = r.next
@@ -77,17 +77,17 @@ fn (r mut Rows&) Next() Array<String&> ? Error, Exhausted {
     for k in range count {
         e := try fieldEnd(t, i, r.sep, r.Line) catch { unreachable }   # checked by the count above
         if t[i] == '"' if i < n else false {
-            inner := t[i + 1:e - 1]
+            inner :~ t[i + 1:e - 1]
             quotes I64 = 0
             for c in inner {
                 if c == '"': quotes++
                 if c == '\n': lines++
             }
-            row[k] = inner if quotes == 0 else unquote(inner, quotes / 2)
+            row[k] ~ inner if quotes == 0 else unquote(inner, quotes / 2)
         } else {
             last I64 = e
             if last > i and t[last - 1] == '\r' and (last == n or t[last] == '\n'): last--
-            row[k] = t[i:last]
+            row[k] ~ t[i:last]
         }
         i = e + 1
     }

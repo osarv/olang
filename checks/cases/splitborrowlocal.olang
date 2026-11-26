@@ -16,7 +16,7 @@ type W struct(b Box) { b }
 fn bump(src mut W&) {
     b := src.b
     br mut Box& = b
-    br.head.next = Node()
+    br.head.next ~ Node()
 }
 fn main() ? {
     w := W(Box())

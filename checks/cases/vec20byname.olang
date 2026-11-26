@@ -18,14 +18,14 @@ fn main() ? {
     v := Vec<I64>()
     v.Push(10)
     v.Push(20)
-    d := view(v)
+    d :~ view(v)
     x := Ix.asIx(v)
     assert d[1] == 20 and x[0] == 10
     v.Push(30)
     t := Vec<Char>()
     t.Push('h')
     t.Push('i')
-    s := asText(t)
+    s :~ asText(t)
     assert s == "hi"
     copied String = String(t.View())
     t.Push('!')

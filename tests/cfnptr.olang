@@ -25,20 +25,20 @@ type Env struct() {
 
 test "a fresh struct's C function pointers are null, and the struct is laid out as C's" {
     o := f.cfp_ops()
-    assert o.twice == null and o.add == null and o.seen == null
+    assert o.twice is null and o.add is null and o.seen is null
     assert f.cfp_ops.Size == 32 and Hooks.Size == 16
     h := Hooks()
-    assert h.twice == null
+    assert h.twice is null
     assert $h.twice == "null"
 }
 
 test "C calls the export fns a struct of function pointers holds, and leaves a null one uncalled" {
     o := f.cfp_ops()
     assert f.cfp_apply(o, 5) == -1
-    o.twice = cfpDoubled
+    o.twice ~ cfpDoubled
     assert f.cfp_apply(o, 5) == 10
-    o.add = cfpPlus
-    o.seen = cfpSeen
+    o.add ~ cfpPlus
+    o.seen ~ cfpSeen
     o.base = 1
     assert f.cfp_apply(o, 21) == 43 and Seen == 21
     assert $o.twice == "extern fn&(a0 I32) I32"
@@ -48,21 +48,21 @@ test "the program calls the functions C gives back, in a struct and alone" {
     o := f.cfp_c_ops()
     assert o.twice!(4) == 12
     assert o.add!(10, 3) == 7
-    assert o.seen == null and o.base == 7
-    t := f.cfp_c_twice()
-    if t != null: assert t(5) == 15
+    assert o.seen is null and o.base == 7
+    t :~ f.cfp_c_twice()
+    if t is not null: assert t(5) == 15
     # two pointers compare by the function they point to - C's, or an export fn's entry
-    assert t == o.twice and o.twice != null
+    assert t == o.twice and o.twice is not null
     h := Hooks()
-    h.twice = t
+    h.twice ~ t
     assert h.twice!(2) == 6
-    h.twice = cfpDoubled
-    o.twice = cfpDoubled
+    h.twice ~ cfpDoubled
+    o.twice ~ cfpDoubled
     assert h.twice == o.twice and h.twice != t
 }
 
 test "a table reached through a pointer to a pointer, as JNI's is, is read out and called through" {
-    env := f.cfp_env_get()
+    env :~ f.cfp_env_get()
     e := Env()
     c.memcpy(e, env, U64(Env.Size))
     t := f.cfp_iface()
@@ -70,5 +70,5 @@ test "a table reached through a pointer to a pointer, as JNI's is, is read out a
     assert t.version!(env) == 6
     assert t.scaled!(env, 4, 2) == 42
     # a variadic function has no olang form: its field is C's pointer of no type
-    assert t.format == null and t.reserved0 == null
+    assert t.format is null and t.reserved0 is null
 }

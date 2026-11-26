@@ -14,7 +14,7 @@ fn main() ? {
     keep Node& = outer
     for i in range 2 {
         a, _ := two(i)
-        keep = a
+        keep ~ a
     }
     assert $keep != ""
 }

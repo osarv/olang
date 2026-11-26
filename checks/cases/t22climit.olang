@@ -4,23 +4,23 @@ type N struct(v I64) {
     v
     next N?& = null
 }
-fn link0(a mut N&, b N&) { a.next = b }
-fn link1(a mut N&, b N&) { a.next = b }
-fn link2(a mut N&, b N&) { a.next = b }
-fn link3(a mut N&, b N&) { a.next = b }
-fn link4(a mut N&, b N&) { a.next = b }
-fn link5(a mut N&, b N&) { a.next = b }
-fn link6(a mut N&, b N&) { a.next = b }
-fn link7(a mut N&, b N&) { a.next = b }
-fn link8(a mut N&, b N&) { a.next = b }
-fn link9(a mut N&, b N&) { a.next = b }
-fn link10(a mut N&, b N&) { a.next = b }
-fn link11(a mut N&, b N&) { a.next = b }
-fn link12(a mut N&, b N&) { a.next = b }
-fn link13(a mut N&, b N&) { a.next = b }
-fn link14(a mut N&, b N&) { a.next = b }
-fn link15(a mut N&, b N&) { a.next = b }
-fn link16(a mut N&, b N&) { a.next = b }
+fn link0(a mut N&, b N&) { a.next ~ b }
+fn link1(a mut N&, b N&) { a.next ~ b }
+fn link2(a mut N&, b N&) { a.next ~ b }
+fn link3(a mut N&, b N&) { a.next ~ b }
+fn link4(a mut N&, b N&) { a.next ~ b }
+fn link5(a mut N&, b N&) { a.next ~ b }
+fn link6(a mut N&, b N&) { a.next ~ b }
+fn link7(a mut N&, b N&) { a.next ~ b }
+fn link8(a mut N&, b N&) { a.next ~ b }
+fn link9(a mut N&, b N&) { a.next ~ b }
+fn link10(a mut N&, b N&) { a.next ~ b }
+fn link11(a mut N&, b N&) { a.next ~ b }
+fn link12(a mut N&, b N&) { a.next ~ b }
+fn link13(a mut N&, b N&) { a.next ~ b }
+fn link14(a mut N&, b N&) { a.next ~ b }
+fn link15(a mut N&, b N&) { a.next ~ b }
+fn link16(a mut N&, b N&) { a.next ~ b }
 fn put(f fn&(a mut N&, b N&), a mut N&, i I64) { f(a, N(i)) }
 fn main() {
     x mut N& = N(1)

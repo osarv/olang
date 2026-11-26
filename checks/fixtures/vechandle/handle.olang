@@ -44,7 +44,7 @@ fn main() {
     m := Map<String&, Vec<I64>>()
     for k in range 5 {
         m.Put($k, Vec<I64>())
-        e := try m.RefMut($k) catch { unreachable }
+        e :~ try m.RefMut($k) catch { unreachable }
         for j in range k * 10: e.Push(j)
     }
     churn()

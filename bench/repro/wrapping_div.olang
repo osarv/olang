@@ -11,7 +11,7 @@ import "std/os"
 fn entry(i I64, j I64) F64 { return 1.0 / F64((i + j) * (i + j + 1) / 2 + i + 1) }
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     n := try args[1].ParseInt()
     s F64 = 0.0
     for i in range n {

@@ -26,7 +26,7 @@ fn people() Vec<P> {
 
 test "a ViewMut walk's index form writes each struct element, reaching the Vec" {
     ps := people()
-    w := ps.ViewMut()
+    w :~ ps.ViewMut()
     for i, p in w {
         n := churn()
         w[i].x = p.x * 10 + n
@@ -58,7 +58,7 @@ test "a walk of an array value names copies" {
 
 test "numbers are values: the index form writes them" {
     v := Vec<I64>[1, 2, 3]
-    w := v.ViewMut()
+    w :~ v.ViewMut()
     for i, x in w: w[i] = x * 10
     assert v[0] == 10 and v[2] == 30
     total I64 = 0
@@ -77,7 +77,7 @@ test "a struct holding an array is written by index" {
     rs := Vec<Row>[]
     rs.Push(Row([1, 2]))
     rs.Push(Row([3, 4]))
-    w := rs.ViewMut()
+    w :~ rs.ViewMut()
     for i, r in w: w[i].cells[0] = r.cells[1] * 2
     assert churn() > 0
     assert rs[0].cells[0] == 4 and rs[1].cells[0] == 8 and rs[1].cells[1] == 4
@@ -122,7 +122,7 @@ test "the index form over a writable walk of rows in place writes them" {
     for i, r in rows: rows[i][0] = r[1] * 10 + churn()
     n := churn()
     assert m[0][0] == 20 + n and m[1][0] == 40 + n and m[2][0] == 60 + n and m[2][1] == 6
-    tail := rows[1:]
+    tail :~ rows[1:]
     for i in range tail.Len(): tail[i][1] = -1
     assert m[0][1] == 2 and m[1][1] == -1 and m[2][1] == -1
     zeroFirst(m)
@@ -134,7 +134,7 @@ test "a ViewMut walk's index form writes a Vec's rows" {
     v := Vec<Array<I64>>[]
     v.Push([1, 2, 3])
     v.Push([4, 5])
-    w := v.ViewMut()
+    w :~ v.ViewMut()
     for i in range w.Len() {
         n := churn()
         w[i][1] = 7 + n

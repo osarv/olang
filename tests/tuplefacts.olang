@@ -19,8 +19,8 @@ fn refsPaired(p mut pop&, c I64) F32 {
 }
 
 fn refsApart(p mut pop&, c I64) F32 {
-    x := p.rate(c)
-    y := p.rate(1 - c)
+    x :~ p.rate(c)
+    y :~ p.rate(1 - c)
     return sum(x.U, y.U)
 }
 

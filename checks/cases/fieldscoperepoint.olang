@@ -31,7 +31,7 @@ fn main() {
         for k in range 10 {
             lg := Logger(inner)
             lg.note(k)
-            lg.log = out
+            lg.log ~ out
             lg.note(k + 100)
         }
         assert inner.seen.Len() == 10

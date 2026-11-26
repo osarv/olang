@@ -102,7 +102,7 @@ fn Args() mut Array<String&>& {
     for i in range n {
         text := Array<U8>(__olang_arg(i, Array<U8>(0), 0))
         __olang_arg(i, text, text.Len())
-        args[i] = String(text)
+        args[i] ~ String(text)
     }
     return args
 }
@@ -675,7 +675,7 @@ fn MkDirAll(path String&) ? Error {
     if IsDir(path): return
     for i in range 1, path.Len() + 1 {
         if i < path.Len() and path[i] != '/': continue
-        part := path[:i]
+        part :~ path[:i]
         if TargetOs == "windows" and part.EndsWith(":"): continue     # B12f: a drive, "C:"
         if mkdir($part + "\0") != 0 {
             code := __olang_err()
@@ -719,7 +719,7 @@ fn RemoveAll(path String&) ? Error {
     for e > 1 and path[e - 1] == '/' { e -= 1 }      # "a/b/" names b
     s := e
     for s > 0 and path[s - 1] != '/': s -= 1
-    name := path[s:e]
+    name :~ path[s:e]
     if name == "." or name == "..": error Error.Failed(path)
     try removeTree(path)
 }
@@ -743,7 +743,7 @@ fn removeTree(path String&) ? Error {
 fn MkTemp(dir String& = "", prefix String& = "") String& ? Error {
     if prefix.Contains("/") { error Error.Failed(prefix) }   # a name, never a path below "dir"
     base := tempDir(dir)
-    sep := "" if base.EndsWith("/") else "/"
+    sep :~ "" if base.EndsWith("/") else "/"
     path Array<Char> = $base + $sep + $prefix + "XXXXXX\0"      # (mkdtemp writes the six characters: no String's)
     if __olang_mkdtemp(path) != 0: try raise(__olang_err(), base)
     return String(path[:path.Len() - 1])
@@ -752,7 +752,7 @@ fn MkTemp(dir String& = "", prefix String& = "") String& ? Error {
 # where MkTemp makes a directory: "dir", else TMPDIR, else /tmp
 fn tempDir(dir String&) String {
     if dir.Len() > 0: return $dir
-    env := try Env("TMPDIR") catch default ""
+    env :~ try Env("TMPDIR") catch default ""
     if env.Len() > 0: return $env
     if TargetOs == "windows" {
         # B12f: where Windows keeps temporary files
@@ -792,7 +792,7 @@ fn ReadLink(path String&) String& ? Error {
         n := unistd.readlink(p, buf, U64(cap))
         for n == cap {                                  # it may not all have fitted: again, with twice the room
             cap = cap * 2
-            buf = Array<U8>(cap)
+            buf ~ Array<U8>(cap)
             n = unistd.readlink(p, buf, U64(cap))
         }
         try check(n, path)
@@ -816,7 +816,7 @@ fn ReadDir(path String&) Array<String&>& ? Error {
     p := $path + "\0"
     all String& = try copyOut(fn(buf mut Array<U8>&) I64 { return __olang_dir(p, buf, buf.Len()) }, path)
     if all.Len() == 0: return Array<String&>(0)
-    names := all[:all.Len() - 1].Split("\0")      # each name ends in a NUL, the last one included
+    names :~ all[:all.Len() - 1].Split("\0")      # each name ends in a NUL, the last one included
     names.Sort(fn(a, b) { return a.Compare(b) < 0 })
     return names
 }
@@ -827,7 +827,7 @@ fn Quote(t String&) String& {
     start I64 = 0
     for i in range t.Len() {
         if t[i] == '\'' {
-            out = $out + $t[start:i] + "'\\''"
+            out ~ $out + $t[start:i] + "'\\''"
             start = i + 1
         }
     }
@@ -841,19 +841,19 @@ test "Run gives a command's exit status" {
 
 test "ReadFile reads what a command wrote" {
     assert Run("printf 'a\\nb' > build/os_test.txt") == 0
-    text := try ReadFile("build/os_test.txt") catch default ""
+    text :~ try ReadFile("build/os_test.txt") catch default ""
     assert text.Eq("a\nb")
-    missing := try ReadFile("build/no/such/file") catch Error.NotFound default "gone" catch default "other"
+    missing :~ try ReadFile("build/no/such/file") catch Error.NotFound default "gone" catch default "other"
     assert missing.Eq("gone")
 }
 
 # a file with no size to give - one in /proc, a pipe - is read to its end all the same, and so is one longer than the
 # room first made for it
 test "ReadFile reads to the end, whatever the size says" {
-    status := try ReadFile("/proc/self/status") catch default ""
+    status :~ try ReadFile("/proc/self/status") catch default ""
     assert status.Contains("VmHWM:") and status.EndsWith("\n")
     Run("mkdir -p build/os_files && seq 1 20000 > build/os_files/seq.txt")
-    lines := try ReadFile("build/os_files/seq.txt") catch default ""
+    lines :~ try ReadFile("build/os_files/seq.txt") catch default ""
     assert lines.Len() == 108894 and lines.StartsWith("1\n2\n") and lines.EndsWith("19999\n20000\n")
 }
 
@@ -863,7 +863,7 @@ test "Quote survives a quote" {
 
 # the command line of this very test binary: its own path, and nothing after it
 test "Args gives the program's own name first" {
-    args := Args()
+    args :~ Args()
     assert args.Len() == 1
     assert args[0].Contains("os_test")
 }
@@ -878,10 +878,10 @@ test "Env gives a variable's value, and fails when it is not set" {
 test "WriteFile creates a file, and empties one that is there" {
     assert Run("rm -rf build/os_files && mkdir -p build/os_files") == 0
     try WriteFile("build/os_files/a.txt", "first line\nsecond")
-    text := try ReadFile("build/os_files/a.txt") catch default ""
+    text :~ try ReadFile("build/os_files/a.txt") catch default ""
     assert text == "first line\nsecond"
     try WriteFile("build/os_files/a.txt", "short")
-    again := try ReadFile("build/os_files/a.txt") catch default ""
+    again :~ try ReadFile("build/os_files/a.txt") catch default ""
     assert again == "short"
     try WriteFile("build/os_files/empty", "")
     assert (try ReadFile("build/os_files/empty") catch default "x") == ""
@@ -898,7 +898,7 @@ test "Create writes through a File, a piece at a time" {
     assert (try ReadFile("build/os_files/pieces") catch default "") == "one two"
     rd := try File.Open("build/os_files/pieces")
     buf := Array<U8>(16)
-    got := try rd.Read(buf)
+    got :~ try rd.Read(buf)
     assert got.Len() == 7
     assert (try rd.Read(buf)).Len() == 0
 }
@@ -1019,14 +1019,14 @@ test "ReadDir, Rename and Remove" {
     try WriteFile("build/os_files/d/b", "2")
     try WriteFile("build/os_files/d/a", "1")
     try WriteFile("build/os_files/d/.hidden", "")
-    names := try ReadDir("build/os_files/d") catch default Array<String&>(0)
+    names :~ try ReadDir("build/os_files/d") catch default Array<String&>(0)
     assert names.Len() == 4
     assert names[0] == ".hidden" and names[1] == "a" and names[2] == "b" and names[3] == "sub"
     try Rename("build/os_files/d/a", "build/os_files/d/z")
     try Rename("build/os_files/d/b", "build/os_files/d/z")      # replaces it
     assert (try ReadFile("build/os_files/d/z") catch default "") == "2"
     try Remove("build/os_files/d/.hidden")
-    after := try ReadDir("build/os_files/d") catch default Array<String&>(0)
+    after :~ try ReadDir("build/os_files/d") catch default Array<String&>(0)
     assert after.Len() == 2 and after[0] == "sub" and after[1] == "z"
     full := false
     try Remove("build/os_files/d") catch Error.NotEmpty { full = true } catch { }
@@ -1066,8 +1066,8 @@ test "ReadLink, RealPath and Cwd" {
     try RealPath("build/os_files/l/link") catch Error.NotFound { dangling = true } catch { }
     assert dangling
     try WriteFile("build/os_files/l/target.txt", "t")
-    real := try RealPath("build/os_files/l/./link") catch default ""
-    cwd := try Cwd() catch default ""
+    real :~ try RealPath("build/os_files/l/./link") catch default ""
+    cwd :~ try Cwd() catch default ""
     assert cwd.StartsWith("/") and real == $cwd + "/build/os_files/l/target.txt"
     assert (try RealPath(".") catch default "") == cwd
 }
@@ -1094,11 +1094,11 @@ fn churn() I64 {
 test "what os gives back lives where it is put" {
     assert Run("rm -rf build/os_files/c && mkdir -p build/os_files/c && touch build/os_files/c/aa build/os_files/c/bb") == 0
     assert Run("ln -s bb build/os_files/c/ln") == 0
-    args := Args()
-    path := try Env("PATH") catch default ""
-    names := try ReadDir("build/os_files/c") catch default Array<String&>(0)
-    linked := try ReadLink("build/os_files/c/ln") catch default ""
-    real := try RealPath("build/os_files/c/ln") catch default ""
+    args :~ Args()
+    path :~ try Env("PATH") catch default ""
+    names :~ try ReadDir("build/os_files/c") catch default Array<String&>(0)
+    linked :~ try ReadLink("build/os_files/c/ln") catch default ""
+    real :~ try RealPath("build/os_files/c/ln") catch default ""
     assert churn() > 0
     assert args[0].Contains("os_test")
     assert path.Len() > 0 and not path.Contains("-----")
@@ -1287,15 +1287,15 @@ test "RemoveAll removes a tree, depth first, and never follows a link" {
 
 test "MkTemp makes a new directory only its user can enter, and names it" {
     assert Run("rm -rf build/os_files/mt && mkdir -p build/os_files/mt") == 0
-    a := try MkTemp("build/os_files/mt", "run-") catch default ""
-    b := try MkTemp("build/os_files/mt/", "run-") catch default ""
+    a :~ try MkTemp("build/os_files/mt", "run-") catch default ""
+    b :~ try MkTemp("build/os_files/mt/", "run-") catch default ""
     assert a.StartsWith("build/os_files/mt/run-") and a.Len() == "build/os_files/mt/run-".Len() + 6
     assert b.StartsWith("build/os_files/mt/run-") and not b.Contains("//") and a != b and IsDir(a) and IsDir(b)
     assert (try ReadDir(a) catch default Array<String&>["x"]).Len() == 0
     assert Run("test \"$(stat -c %a " + $Quote(a) + ")\" = 700") == 0
-    plain := try MkTemp("build/os_files/mt") catch default ""
+    plain :~ try MkTemp("build/os_files/mt") catch default ""
     assert plain.Len() == "build/os_files/mt/".Len() + 6 and IsDir(plain)
-    tmp := try MkTemp() catch default ""
+    tmp :~ try MkTemp() catch default ""
     assert tmp.StartsWith("/") and IsDir(tmp)
     try RemoveAll(tmp)
     missing := false
@@ -1310,7 +1310,7 @@ test "MkTemp makes a new directory only its user can enter, and names it" {
 
 # where a program's standard output goes: a memory file Exec reads back, or - not captured - this program's own
 test "Exec without capture leaves the program this one's output and error" {
-    mine := try ReadLink("/proc/self/fd/1") catch default "none"
+    mine :~ try ReadLink("/proc/self/fd/1") catch default "none"
     seen := try Output.Exec("sh", "-c", "readlink /proc/$$/fd/1")
     assert seen.Status == 0 and seen.Stdout.Contains("memfd:") and seen.Stdout != $mine + "\n"
     assert Run("mkdir -p build/os_files") == 0
@@ -1382,7 +1382,7 @@ if TestBuild {
     fn stackFill(t I64) I64 {
         bad I64 = 0
         for i in range 5000 {
-            stackSlots[t] = stackNode(t * 1000000 + i)          # built in the program's scope, as a global's is
+            stackSlots[t] ~ stackNode(t * 1000000 + i)          # built in the program's scope, as a global's is
             for x in stackSlots[t].pad { if x != t * 1000000 + i { bad++ } }
         }
         return bad

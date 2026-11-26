@@ -205,7 +205,7 @@ fn apply(requests Vec<diagedit.Request>&) I64, I64 {
         }
         expect Vec<String&>
         diagedit.ExpectedTexts(src, expect)
-        lines := src.Split("\n")
+        lines :~ src.Split("\n")
         mine Vec<diagedit.Request>
         for r in requests {
             if r.Path == path: mine.Push(r)
@@ -227,7 +227,7 @@ fn apply(requests Vec<diagedit.Request>&) I64, I64 {
             text := $lines[idx]
             mask := srcmask.Mask(text, true)
             at := r.Col - 1
-            typ := r.Arg
+            typ :~ r.Arg
             replaced := ""
             if r.Kind == "local" {
                 # NAME[ \t]*:= at the column
@@ -244,7 +244,7 @@ fn apply(requests Vec<diagedit.Request>&) I64, I64 {
                 replaced = $text[:s] + $typ + "(" + $text[s:e] + ")" + $text[e:]
                 at = s
             }
-            lines[idx] = $replaced
+            lines[idx] ~ $replaced
             diagedit.Realign(lines, idx, replaced.Len() - text.Len(), at)
             shLine.Push(r.Line)
             shAt.Push(at)
@@ -264,7 +264,7 @@ fn main() ? {
     olang := srcmask.Compiler()
     jobs I64 = 3
     paths Vec<String&>
-    args := os.Args()
+    args :~ os.Args()
     i I64 = 1
     for i < args.Len() {
         if args[i] == "--olang" or args[i] == "-j" {
@@ -301,7 +301,7 @@ fn main() ? {
     allowed Vec<String&>
     for p in paths: allowed.Push(diagedit.RealPathOf(p))
 
-    tmp := try os.MkTemp("", "int_literal_i64") catch {
+    tmp :~ try os.MkTemp("", "int_literal_i64") catch {
         srcmask.SayErr("int_literal_i64: cannot make a temporary directory")
         os.Exit(1)
         unreachable
@@ -309,7 +309,7 @@ fn main() ? {
     defer: try os.RemoveAll(tmp) catch { }
     work mut Array<String&>& = Array<String&>(jobs)
     for k in range jobs {
-        work[k] = $tmp + "/w" + $k
+        work[k] ~ $tmp + "/w" + $k
         try os.MkDirAll(work[k]) catch {
             srcmask.SayErr("int_literal_i64: cannot make " + $work[k])
             os.Exit(1)
@@ -318,9 +318,9 @@ fn main() ? {
     totalLocals I64 = 0
     totalRanges I64 = 0
     unanswered Vec<diagedit.Request>
-    fileArray := files.ToArray()
+    fileArray :~ files.ToArray()
     for round in range 1, 9 {
-        outputs := diagedit.CompileAll(olang, fileArray, work, true)
+        outputs :~ diagedit.CompileAll(olang, fileArray, work, true)
         requests Vec<diagedit.Request>
         unanswered = Vec<diagedit.Request>()
         for o in outputs: diagsFrom(o, allowed, requests, unanswered)

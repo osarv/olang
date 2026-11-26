@@ -12,8 +12,8 @@ type View struct(ns Array<mut Node&>&) {
     at Array<mut Node&>& = ns
 }
 fn put(w View&, k I64) {
-    x := w.at[k]
-    x.next = Node(x.v + 100)
+    x :~ w.at[k]
+    x.next ~ Node(x.v + 100)
 }
 fn work(a Array<mut Node&>&) {
     w := View(a)

@@ -8,7 +8,7 @@ import "std/io"
 import "std/os"
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     n := try args[1].ParseInt()
     total I64 = 0
     for i in range n {

@@ -7,7 +7,7 @@ type N struct(v I64) {
     next N?& = null
 }
 fn hang(a mut N&, b N&) {
-    a.next = b
+    a.next ~ b
 }
 fn apply(f fn&(a mut N&, b N&), a mut N&, b N&) {
     f(a, b)

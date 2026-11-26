@@ -653,7 +653,7 @@ fn (f mut Fn&) NewBlock() BlockId {
 # through a local: stage 0 builds the first chunk of a list pushed to as `f.Blocks[i].Stmts.Push(s)` (E31b's held copy
 # of an element of a parameter's list) where the call's frame is, and frees it on return
 fn (f mut Fn&) Add(b BlockId, s Stmt&) {
-    blk := f.Blocks.RefMut(I64(b))
+    blk :~ f.Blocks.RefMut(I64(b))
     blk.Stmts.Push(s)
 }
 
@@ -666,7 +666,7 @@ fn (p Lvalue) BaseIs(l LocalId) Bool { return p.B == Base.Local(l) }
 # to it (D9b) - one judgement for emit and the evaluator
 fn (f Fn&) WritesInto(t types.Table&, l LocalId) Bool {
     for blockIx in range f.Blocks.Len() {
-        bb := f.Blocks.Ref(blockIx)
+        bb :~ f.Blocks.Ref(blockIx)
         for st in bb.Stmts {
             if writesInto(t, st, l): return true
         }
@@ -824,7 +824,7 @@ fn (g mut GenInfo&) leavesThrough(t types.Table&, r types.TypeId, depth I64) Boo
     if k == types.Kind.Ref: return g.IsGen(t, t.Referent(r)) and g.leavesThrough(t, t.Repr(t.Referent(r)), depth + 1)
     if k == types.Kind.Array: return g.leavesThrough(t, t.Repr(t.Elem(r)), depth + 1)
     if HasFields(t, r) {
-        fs := t.Items(FieldsOf(t, r))
+        fs :~ t.Items(FieldsOf(t, r))
         for i in range fs.Len() {
             if not g.WeakField(t, r, i) and g.leavesThrough(t, t.Repr(fs[i]), depth + 1): return true
         }
@@ -967,7 +967,7 @@ fn (g mut GenInfo&) GenRef(t types.Table&, ty types.TypeId) Bool {
 fn (g mut GenInfo&) HoldsGen(t types.Table&, ty types.TypeId) Bool {
     r := t.Repr(ty)
     if g.holds.Has(r) {
-        ds := try g.deps.Get(r) catch default Array<I64>(0)
+        ds :~ try g.deps.Get(r) catch default Array<I64>(0)
         for d in ds {
             g.Asked.Put(d, true)
             if g.depth > 0: g.walking.Push(d)
@@ -994,7 +994,7 @@ fn (g mut GenInfo&) holdsGen(t types.Table&, r types.TypeId) Bool {
     if k == types.Kind.Array: return g.HoldsGen(t, t.Elem(r))
     out := false
     if HasFields(t, r) {
-        fs := t.Items(FieldsOf(t, r))
+        fs :~ t.Items(FieldsOf(t, r))
         for i in range fs.Len() {
             if not g.WeakField(t, r, i) and g.HoldsGen(t, fs[i]): out = true
         }
@@ -1110,7 +1110,7 @@ fn GuardType(t mut types.Table&, held types.TypeId) types.TypeId {
 # the type a guard is of (its holder's), else UnknownT
 fn GuardOf(t types.Table&, ty types.TypeId) types.TypeId {
     if t.KindOf(ty) != types.Kind.Tuple: return types.UnknownT
-    ps := t.Items(t.Parts(ty))
+    ps :~ t.Items(t.Parts(ty))
     if ps.Len() != 2 or not t.IsRef(ps[0]) or not t.IsRef(ps[1]) or t.Referent(ps[0]) != types.BoolT: return types.UnknownT
     return t.Referent(ps[1])
 }
@@ -1161,7 +1161,7 @@ fn PassedCount(t mut types.Table&, c Callee, ty types.TypeId) I64 {
 # an error's code under an error list (R6): (its type's position from 1) << 16 | its word; an error type the list does
 # not name is its default error where the list has one (R17); -1 where neither
 fn ErrorCode(t types.Table&, errors types.ListId, err types.TypeId, word I64) I64 {
-    xs := t.Items(errors)
+    xs :~ t.Items(errors)
     for k in range xs.Len() {
         if t.Same(t.ErrOf(xs[k]), t.ErrOf(err)): return ((k + 1) << 16) | word
     }
@@ -1233,7 +1233,7 @@ fn (v mut verifier&) itemsBefore(r Range, i I64) {
 }
 
 fn (v mut verifier&) shape() Bool {
-    f := v.F
+    f :~ v.F
     start := v.out.Len()
     v.at, v.idx = -1, -1
     if f.Blocks.Len() == 0 {
@@ -1244,7 +1244,7 @@ fn (v mut verifier&) shape() Bool {
         v.bad("its type is no function type")
         return false
     }
-    ps := v.T.Items(v.T.Params(f.Ty))
+    ps :~ v.T.Items(v.T.Params(f.Ty))
     if ps.Len() != f.Params.Len(): v.bad("its type has " + $ps.Len() + " parameters, its Params " + $f.Params.Len())
     for i in range f.Params.Len() {
         if v.local(f.Params[i]) {
@@ -1320,7 +1320,7 @@ fn (v mut verifier&) shape() Bool {
     }
     for b in range f.Blocks.Len() {
         v.at = b
-        bb := f.Blocks.Ref(b)
+        bb :~ f.Blocks.Ref(b)
         for i in range bb.Stmts.Len() {
             v.idx = i
             v.stmtShape(bb.Stmts[i])
@@ -1541,7 +1541,7 @@ fn (v mut verifier&) termShape(t Term) {
 # ---- reachability ----
 
 fn (v mut verifier&) succs(t Term) Array<BlockId> {
-    f := v.F
+    f :~ v.F
     return match t {
         case Term.Goto(b): Array<BlockId>[b]
         case Term.Branch(_, y, n): Array<BlockId>[y, n]
@@ -1563,7 +1563,7 @@ fn (v mut verifier&) switchSuccs(r Range, o BlockId) Array<BlockId> {
 
 fn (v mut verifier&) reach() {
     nb := v.F.Blocks.Len()
-    v.reached = Array<Bool>(nb)
+    v.reached ~ Array<Bool>(nb)
     work Vec<BlockId>
     work.Push(BlockId(0))
     v.reached[0] = true
@@ -1599,11 +1599,11 @@ fn (v mut verifier&) reach() {
 # ---- types ----
 
 fn (v mut verifier&) types() {
-    f := v.F
+    f :~ v.F
     for b in range f.Blocks.Len() {
         if not v.reached[b]: continue
         v.at = b
-        bb := f.Blocks.Ref(b)
+        bb :~ f.Blocks.Ref(b)
         for i in range bb.Stmts.Len() {
             v.idx = i
             v.stmtTypes(bb.Stmts[i])
@@ -1621,7 +1621,7 @@ fn (v mut verifier&) canon(ty types.TypeId) String { return v.T.Canon(ty) }
 # and a reference into one of the same referent with no permission it lacks - writable or owning dropped (T25b; a
 # borrow of an own slot, O32), whether either may be null (T2c)
 fn (v mut verifier&) fits(from types.TypeId, to types.TypeId) Bool {
-    t := v.T
+    t :~ v.T
     if from == types.UnknownT or to == types.UnknownT: return false
     if v.sameRepr(from, to): return true
     if from == types.NullT: return t.IsRef(to) or t.KindOf(to) == types.Kind.Func
@@ -1648,7 +1648,7 @@ fn (v mut verifier&) fits(from types.TypeId, to types.TypeId) Bool {
 # whether two types have one representation: past declared types over others (T29), and through arrays to their
 # elements' (T29h's Array<Char> is an Array<U8>)
 fn (v mut verifier&) sameRepr(a types.TypeId, b types.TypeId) Bool {
-    t := v.T
+    t :~ v.T
     ra, rb := t.Repr(a), t.Repr(b)
     if t.Same(ra, rb): return true
     if t.KindOf(ra) == types.Kind.Array and t.KindOf(rb) == types.Kind.Array {
@@ -1660,10 +1660,10 @@ fn (v mut verifier&) sameRepr(a types.TypeId, b types.TypeId) Bool {
 # a call's result as the caller holds it: a result built in the result scope is new storage only the caller holds, and
 # writable (T25b) - a reference result built, or one of several results built, with its write permission
 fn (v mut verifier&) held(f types.TypeId) types.TypeId {
-    t := v.T
+    t :~ v.T
     res := t.Result(f)
     if t.KindOf(res) == types.Kind.Tuple {
-        xs := t.Items(t.Parts(res))
+        xs :~ t.Items(t.Parts(res))
         out := Array<types.TypeId>(xs.Len())
         for k in range xs.Len(): out[k] = v.builtPart(f, k, xs[k])
         return t.Tuple(t.List(out))
@@ -1672,7 +1672,7 @@ fn (v mut verifier&) held(f types.TypeId) types.TypeId {
 }
 
 fn (v mut verifier&) builtPart(f types.TypeId, k I64, x types.TypeId) types.TypeId {
-    t := v.T
+    t :~ v.T
     if not t.IsRef(x) or t.ResultFrom(f, k) != types.OwnScope: return x
     return t.Ref(t.Referent(x), t.PermOf(x) | types.Writable)
 }
@@ -1705,11 +1705,11 @@ fn (v mut verifier&) placeType(p Lvalue) types.TypeId {
 
 # the type a projection pr of a place of type ty reaches; Unknown, said, where it does not apply
 fn (v mut verifier&) projected(ty types.TypeId, pr Proj) types.TypeId {
-    t := v.T
+    t :~ v.T
     match pr {
         case Proj.Field(k) {
             fl, ok := FieldsOf(v.T, ty), HasFields(v.T, ty)
-            fs := t.Items(fl)
+            fs :~ t.Items(fl)
             if not ok or k < 0 or k >= fs.Len() {
                 v.bad("no field " + $k + " in a " + $v.canon(ty))
                 return types.UnknownT
@@ -1746,7 +1746,7 @@ fn (v mut verifier&) projected(ty types.TypeId, pr Proj) types.TypeId {
         }
         case Proj.Payload(tag) {
             cl, ok := CasesOf(v.T, ty), HasCases(v.T, ty)
-            cs := t.Items(cl)
+            cs :~ t.Items(cl)
             if not ok or tag < 0 or tag >= cs.Len() {
                 v.bad("no case " + $tag + " in a " + $v.canon(ty))
                 return types.UnknownT
@@ -1776,7 +1776,7 @@ fn (v mut verifier&) taskTargets(task Task&, rs Array<types.TypeId>&) {
 }
 
 fn (v mut verifier&) stmtTypes(s Stmt&) {
-    t := v.T
+    t :~ v.T
     match s {
         case Stmt.Assign(_, p, rv) {
             pt := v.placeType(p)
@@ -1854,7 +1854,7 @@ fn (v mut verifier&) stmtTypes(s Stmt&) {
 
 # an array of U8 or of Char, or a reference to one: what a Bytes write appends
 fn (v mut verifier&) isText(ty types.TypeId) Bool {
-    t := v.T
+    t :~ v.T
     x := t.Referent(t.Repr(ty)) if t.IsRef(t.Repr(ty)) else ty
     a := v.arrayOf(x)
     return a != types.UnknownT and t.Repr(t.Elem(a)) == types.TypeId(7)
@@ -1908,7 +1908,7 @@ fn (v mut verifier&) intOf(got types.TypeId, want types.TypeId, what String&) ty
 }
 
 fn (v mut verifier&) refType(of types.TypeId, ty types.TypeId) types.TypeId {
-    t := v.T
+    t :~ v.T
     if not t.IsRef(ty) {
         v.bad("a reference typed " + $v.canon(ty))
         return types.UnknownT
@@ -1927,7 +1927,7 @@ fn (v mut verifier&) tagType(of types.TypeId) types.TypeId {
 }
 
 fn (v mut verifier&) primType(op typed.PrimOp, ty types.TypeId, r Range) types.TypeId {
-    t := v.T
+    t :~ v.T
     n := I64(r.N)
     want := match op {
         case typed.PrimOp.Neg, typed.PrimOp.BitNot, typed.PrimOp.Not, typed.PrimOp.Convert, typed.PrimOp.Bitcast: 1
@@ -2082,7 +2082,7 @@ fn (v mut verifier&) sameArgs(op typed.PrimOp, r Range, ty types.TypeId) {
 }
 
 fn (v mut verifier&) overflowsType(op typed.PrimOp, ty types.TypeId, r Range) types.TypeId {
-    t := v.T
+    t :~ v.T
     good := match op {
         case typed.PrimOp.Add, typed.PrimOp.Sub, typed.PrimOp.Mul, typed.PrimOp.Div: r.N == I32(2)
         case typed.PrimOp.Neg, typed.PrimOp.Convert: r.N == I32(1)
@@ -2097,7 +2097,7 @@ fn (v mut verifier&) overflowsType(op typed.PrimOp, ty types.TypeId, r Range) ty
 }
 
 fn (v mut verifier&) aggregateType(ty types.TypeId, tag I64, r Range) types.TypeId {
-    t := v.T
+    t :~ v.T
     n := I64(r.N)
     a := v.arrayOf(ty)
     if a != types.UnknownT {
@@ -2109,7 +2109,7 @@ fn (v mut verifier&) aggregateType(ty types.TypeId, tag I64, r Range) types.Type
         return ty
     }
     cl, isEnum := CasesOf(v.T, ty), HasCases(v.T, ty)
-    cs := t.Items(cl)
+    cs :~ t.Items(cl)
     if isEnum {
         if tag < 0 or tag >= cs.Len() {
             v.bad("no case " + $tag + " in a " + $v.canon(ty))
@@ -2128,7 +2128,7 @@ fn (v mut verifier&) aggregateType(ty types.TypeId, tag I64, r Range) types.Type
 }
 
 fn (v mut verifier&) parts(ty types.TypeId, fl types.ListId, r Range) {
-    fs := v.T.Items(fl)
+    fs :~ v.T.Items(fl)
     if fs.Len() != I64(r.N) {
         v.bad("a " + $v.canon(ty) + " of " + $fs.Len() + " parts made of " + $r.N)
         return
@@ -2137,7 +2137,7 @@ fn (v mut verifier&) parts(ty types.TypeId, fl types.ListId, r Range) {
 }
 
 fn (v mut verifier&) newArrayType(ty types.TypeId, n Operand, fill Operand) types.TypeId {
-    t := v.T
+    t :~ v.T
     x := t.Referent(t.Repr(ty)) if t.IsRef(t.Repr(ty)) else ty
     a := v.arrayOf(x)
     if a == types.UnknownT or t.Length(a) != types.TypeId(0) {
@@ -2150,7 +2150,7 @@ fn (v mut verifier&) newArrayType(ty types.TypeId, n Operand, fill Operand) type
 }
 
 fn (v mut verifier&) sliceType(of types.TypeId, lo Operand, hi Operand, ty types.TypeId) types.TypeId {
-    t := v.T
+    t :~ v.T
     a := v.arrayOf(of)
     s := v.arrayOf(t.Referent(t.Repr(ty))) if t.IsRef(t.Repr(ty)) else types.UnknownT
     if a == types.UnknownT or s == types.UnknownT or not t.Same(t.Repr(t.Elem(a)), t.Repr(t.Elem(s))) {
@@ -2201,8 +2201,8 @@ fn (v verifier&) pointerLike(t types.TypeId) Bool {
 
 # a call's or a task's arguments and scopes against its callee's type
 fn (v mut verifier&) args(c Callee, ty types.TypeId, args Range, scopes Range) {
-    t := v.T
-    ps := t.Items(t.Params(ty))
+    t :~ v.T
+    ps :~ t.Items(t.Params(ty))
     isExtern := match c {
         case Callee.Extern(_, _), Callee.Pointer(_, _): true
         case _: false
@@ -2232,7 +2232,7 @@ fn (v mut verifier&) args(c Callee, ty types.TypeId, args Range, scopes Range) {
 
 # each of a switch's case values (r of f.Cases) once
 fn (v mut verifier&) casesOnce(r Range) {
-    f := v.F
+    f :~ v.F
     for i in range r.N {
         for j in range i {
             if f.Cases[I64(r.At) + i].Value == f.Cases[I64(r.At) + j].Value { v.bad("a switch with the value " + $f.Cases[I64(r.At) + i].Value + " twice") }
@@ -2241,8 +2241,8 @@ fn (v mut verifier&) casesOnce(r Range) {
 }
 
 fn (v mut verifier&) termTypes(term Term) {
-    t := v.T
-    f := v.F
+    t :~ v.T
+    f :~ v.F
     match term {
         case Term.Branch(c, _, _) {
             ct := v.operandType(c)
@@ -2319,17 +2319,17 @@ fn (v mut verifier&) termTypes(term Term) {
 # ---- the dataflow: initialization, live storage, scopes, joins ----
 
 fn (v mut verifier&) flow() {
-    f := v.F
+    f :~ v.F
     nb, nl, ns := f.Blocks.Len(), f.Locals.Len(), f.Scopes.Len()
-    v.seen = Array<Bool>(nb)
-    v.initAt = Array<Bool>(nb * nl)
-    v.liveAt = Array<Bool>(nb * nl)
-    v.pendAt = Array<Bool>(nb * ns)
-    v.stackAt = Array<I64>(nb)
-    v.stackN = Array<I64>(nb)
-    v.init = Array<Bool>(nl)
-    v.live = Array<Bool>(nl)
-    v.pend = Array<Bool>(ns)
+    v.seen ~ Array<Bool>(nb)
+    v.initAt ~ Array<Bool>(nb * nl)
+    v.liveAt ~ Array<Bool>(nb * nl)
+    v.pendAt ~ Array<Bool>(nb * ns)
+    v.stackAt ~ Array<I64>(nb)
+    v.stackN ~ Array<I64>(nb)
+    v.init ~ Array<Bool>(nl)
+    v.live ~ Array<Bool>(nl)
+    v.pend ~ Array<Bool>(ns)
     # the entry: parameters and captures hold their values, every frame local's storage exists
     for l in f.Params: v.init[I64(l)] = true
     for l in f.Captures: v.init[I64(l)] = true
@@ -2355,7 +2355,7 @@ fn (v mut verifier&) flow() {
 # the current state given to block b's entry: its first state kept; after it, initialized and live where every
 # path says so, a join pending where any path says so, and the open scopes the same on every path
 fn (v mut verifier&) enter(b BlockId) {
-    f := v.F
+    f :~ v.F
     nl, ns := f.Locals.Len(), f.Scopes.Len()
     bi := I64(b)
     if not v.seen[bi] {
@@ -2411,7 +2411,7 @@ fn (v mut verifier&) stackOf(b BlockId) String {
 }
 
 fn (v mut verifier&) walk(b BlockId) {
-    f := v.F
+    f :~ v.F
     nl, ns := f.Locals.Len(), f.Scopes.Len()
     bi := I64(b)
     for i in range nl {
@@ -2422,7 +2422,7 @@ fn (v mut verifier&) walk(b BlockId) {
     v.stack.Clear()
     for k in range v.stackN[bi]: v.stack.Push(v.stacks[v.stackAt[bi] + k])
     v.at = bi
-    bb := f.Blocks.Ref(bi)
+    bb :~ f.Blocks.Ref(bi)
     for i in range bb.Stmts.Len() {
         v.idx = i
         v.stmtFlow(bb.Stmts[i])
@@ -2504,7 +2504,7 @@ fn (v mut verifier&) usesScope(s ScopeRef) {
 }
 
 fn (v mut verifier&) stmtFlow(s Stmt&) {
-    f := v.F
+    f :~ v.F
     match s {
         case Stmt.Assign(_, p, rv) {
             v.rvalueFlow(rv)
@@ -2649,7 +2649,7 @@ fn (v mut verifier&) rvalueFlow(rv Rvalue) {
 }
 
 fn (v mut verifier&) termFlow(term Term) {
-    f := v.F
+    f :~ v.F
     match term {
         case Term.Goto(b) { v.enter(b) }
         case Term.Branch(c, y, n) {
@@ -2739,7 +2739,7 @@ fn (w mut dumper&) line(depth I64, text String&) {
 }
 
 fn (w mut dumper&) all() {
-    f := w.F
+    f :~ w.F
     w.line(0, "fn " + $w.key(f.Of) + ": " + $w.T.Canon(f.Ty))
     if f.Vars.Len() > 0 {
         vs := StringBuilder()
@@ -2748,20 +2748,20 @@ fn (w mut dumper&) all() {
     }
     for i in range f.Locals.Len() {
         l := f.Locals[i]
-        name := w.T.Names.Text(l.Name)
-        home := "" if l.Home == ScopeRef.Frame else " in " + $w.ref(l.Home)
+        name :~ w.T.Names.Text(l.Name)
+        home :~ "" if l.Home == ScopeRef.Frame else " in " + $w.ref(l.Home)
         w.line(1, "L" + $i + " " + $short($l.Kind) + $(" " + $name if name.Len() > 0 else "") + ": " + $w.T.Canon(l.Ty) + $home)
     }
     for i in range f.Scopes.Len() {
         s := f.Scopes[i]
-        parent := "" if s.Parent == NoScope else " in S" + $s.Parent
-        block := "" if s.Block < typed.BlockId(0) else " block " + $s.Block
-        errs := "" if s.Errors == types.ListId(0) else " fails " + $w.list(s.Errors)
+        parent :~ "" if s.Parent == NoScope else " in S" + $s.Parent
+        block :~ "" if s.Block < typed.BlockId(0) else " block " + $s.Block
+        errs :~ "" if s.Errors == types.ListId(0) else " fails " + $w.list(s.Errors)
         w.line(1, "S" + $i + " " + $short($s.Kind) + $parent + $block + $errs)
     }
     for b in range f.Blocks.Len() {
         w.line(0, "bb" + $b + ":")
-        bb := f.Blocks.Ref(b)
+        bb :~ f.Blocks.Ref(b)
         for s in bb.Stmts: w.line(1, w.stmt(s))
         w.line(1, w.term(bb.T))
     }
@@ -2769,7 +2769,7 @@ fn (w mut dumper&) all() {
 
 fn (w mut dumper&) list(l types.ListId) String {
     out := StringBuilder()
-    xs := w.T.Items(l)
+    xs :~ w.T.Items(l)
     for i in range xs.Len() { out.Push($(" + " if i > 0 else "") + $w.T.Canon(xs[i])) }
     return out.ToString()
 }
@@ -2862,7 +2862,7 @@ fn (w mut dumper&) refs(r Range) String {
 }
 
 fn (w mut dumper&) rvalue(rv Rvalue) String {
-    t := w.T
+    t :~ w.T
     return match rv {
         case Rvalue.Use(x): w.operand(x)
         case Rvalue.Ref(p, ty): "ref " + $w.place(p) + ": " + $t.Canon(ty)
@@ -2954,7 +2954,7 @@ fn (w mut dumper&) task(k Task) String {
 }
 
 fn (w mut dumper&) term(term Term) String {
-    f := w.F
+    f :~ w.F
     return match term {
         case Term.None: "(no terminator)"
         case Term.Goto(b): "goto bb" + $b

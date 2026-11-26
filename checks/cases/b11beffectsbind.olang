@@ -14,7 +14,7 @@ fn Put(h Holder&, g mut Node&, k I64) {
     match h {
         case Holder.One(x) { x.v = k }
     }
-    n := g if k > 0 else g
+    n :~ g if k > 0 else g
     n.v = k
 }
 

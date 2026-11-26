@@ -148,15 +148,15 @@ Builds Array<String&> = Array<String&>[
 ]
 
 fn main() {
-    args := os.Args()
+    args :~ os.Args()
     capture := args.Len() == 3 and args[1] == "-capture"
     if args.Len() > 1 and not capture: toolkit.Die("usage: drvdiff [-capture COMPILER]")
     exe := $args[2] if capture else toolkit.Env("DRVDIFF_DRIVER", "build/compiler_olang")
     if not toolkit.Built(exe): toolkit.Die("drvdiff: " + $exe + " is not built (make " + $exe + ")")
     gpath := "compiler/goldens/drv.txt"
     g := toolkit.Golden() if capture else toolkit.Golden.Read(gpath, "drvgold")
-    here := try os.Cwd() catch os.Error { toolkit.Die("drvdiff: no working directory") }
-    work := toolkit.Scratch("drvdiff")
+    here :~ try os.Cwd() catch os.Error { toolkit.Die("drvdiff: no working directory") }
+    work :~ toolkit.Scratch("drvdiff")
     defer: toolkit.Clean(work)
     try os.MkDir($work + "/adir") catch os.Error { toolkit.Die("drvdiff: cannot make " + $work + "/adir") }
     keys := Vec<String&>()
@@ -187,7 +187,7 @@ fn main() {
     ran := Map<String&, Bool>()
     for i in range keys.Len() {
         ran.Put(keys[i], true)
-        want := try g.Bodies.Get(keys[i]) catch {
+        want :~ try g.Bodies.Get(keys[i]) catch {
             bad++
             toolkit.Say("-- " + $keys[i] + ": not in " + $gpath + " (make drvgold)\n")
             continue

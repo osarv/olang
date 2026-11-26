@@ -10,7 +10,7 @@ import "std/os"
 import "std/list"
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     n := try args[1].ParseInt()
     passes := try args[2].ParseInt()
     l := list.List<I64>()

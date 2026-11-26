@@ -4,7 +4,7 @@
 fn main() {
     v := Vec<I64>()
     v.Push(1)
-    d := v.View()
+    d :~ v.View()
     t := 0
     for i in range 10 {
         t += d[0]

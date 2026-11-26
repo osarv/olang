@@ -1092,7 +1092,7 @@ neither.
     `c5Keep(g, g.fresh(i).Data)`), or, for the parameter a result is borrowed from, where the result goes (O13).
 39. **A three-clause `for`'s own block stands for the block around it** (S9): its variable is declared there, and
     what its initializer builds is built there, as stage 0 evaluates the initializer in the block around the loop - so
-    `for c Link& = a, c != null, c = c.next` walks a structure of an outer block. The block is still a block at run
+    `for c Link& = a, c is not null, c = c.next` walks a structure of an outer block. The block is still a block at run
     time; nothing is placed in it.
 40. **Landing by obligations** (O18c) reads a derived scope's record (O23a) - `for x in It<T>(nodes)` lands each
     element where the nodes are; skips a variable no argument determines yet (it is bound after, by its own obligations

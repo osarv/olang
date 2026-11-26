@@ -409,7 +409,7 @@ test "Keyword finds every reserved word and nothing else" {
                  Tok.Trait, Tok.Fn, Tok.Error, Tok.Mut, Tok.Import, Tok.Test, Tok.Destruct
                  Tok.Extern, Tok.Default, Tok.And, Tok.Or, Tok.Xor, Tok.Not, Tok.Yield, Tok.Become, Tok.Comptime, Tok.NullLit
                  Tok.Any, Tok.Unique, Tok.Immut, Tok.Packed, Tok.Commutes, Tok.Returns, Tok.Noalloc, Tok.Noblock, Tok.Nospawn, Tok.Norecurse, Tok.Noextern, Tok.Pure, Tok.Keeps, Tok.Borrows, Tok.Noborrow, Tok.Weak] {
-        w := k.Text()
+        w :~ k.Text()
         assert Tok.Keyword(w, 0, w.Len()) == k, "keyword " + $w
     }
     assert Tok.Keyword("true", 0, 4) == Tok.BoolLit

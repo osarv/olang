@@ -53,10 +53,10 @@ fn (u mut Thirds&) Next() I64 ? Exhausted {
 }
 
 fn main() ? {
-    args := os.Args()
+    args :~ os.Args()
     if args.Len() < 5: error Usage.Args
-    mode := args[1]
-    form := args[2]
+    mode :~ args[1]
+    form :~ args[2]
     n := try args[3].ParseInt()
     passes := try args[4].ParseInt()
     t I64 = 0

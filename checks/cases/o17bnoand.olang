@@ -8,7 +8,7 @@ type Cell struct() {
 }
 type Box struct() { c mut Cell& = Cell() }
 fn (h mut Box&) stash() {
-    h.c.kept = h
+    h.c.kept ~ h
 }
 fn run(m mut Map<I64, Box>&) ? {
     for _ in range 3 {

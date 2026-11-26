@@ -6,7 +6,7 @@ type N struct(v I64) {
     v
     next N?& = null
 }
-fn link(a mut N&, b N&) { a.next = b }
+fn link(a mut N&, b N&) { a.next ~ b }
 
 # storage made and let go many times, so a value kept in a scope already closed would read another's
 fn churn(n I64) I64 {

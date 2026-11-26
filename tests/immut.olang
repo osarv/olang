@@ -61,7 +61,7 @@ test "an Array<Char> lent as a writable Array<U8>& is written in place" {
 # it had been written in place, so a slice of its old value read the new text
 fn sameLength(k I64) String {
     s := "a" + $k
-    v := s[0:2]
+    v :~ s[0:2]
     s = "x" + $(k + 1)
     return $v + " " + $s
 }
@@ -73,7 +73,7 @@ test "a String given a value of its own length leaves a slice of the old one as 
     assert sameLength(1) == Same
     t := "a1"
     for i in range 1000 {
-        old := t[0:2]
+        old :~ t[0:2]
         t = "b" + $(i % 10)
         assert old.Len() == 2 and t[0] == 'b'
         if i > 0: assert old[0] == 'b'

@@ -28,20 +28,20 @@ fn (p mut Parser&) primary() mut Expr& {
     t := p.toks[p.at]
     p.at++
     if t.kind == '(' {
-        e := p.expr(1)
+        e :~ p.expr(1)
         p.at++
         return e
     }
     return Expr.Num(t.val)
 }
 fn (p mut Parser&) expr(minPrec I64) mut Expr& {
-    lhs := p.primary()
+    lhs :~ p.primary()
     for {
         op := p.toks[p.at]
         if prec(op.kind) < minPrec: break
         p.at++
-        rhs := p.expr(prec(op.kind) + 1)
-        lhs = Expr.Bin(op.kind, lhs, rhs)
+        rhs :~ p.expr(prec(op.kind) + 1)
+        lhs ~ Expr.Bin(op.kind, lhs, rhs)
     }
     return lhs
 }

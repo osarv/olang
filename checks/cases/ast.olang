@@ -35,8 +35,8 @@ fn count(e Expr&) I64 {
 
 fn main() {
     p := Program()
-    p.root = Expr.build(4)
-    for _ in range 100: p.root = simplify(p.root)
+    p.root ~ Expr.build(4)
+    for _ in range 100: p.root ~ simplify(p.root)
     assert count(p.root) == 47
 }
 # also: ast.olang:40:9: memory: 'p.root' keeps what it lets go of until main's scope closes

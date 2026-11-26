@@ -9,7 +9,7 @@ fn node.build(k I64) node& {
     cur := head
     for i in range 1, k {
         nn := node(i)
-        cur.next = nn
+        cur.next ~ nn
         cur = nn
     }
     return cur
@@ -31,7 +31,7 @@ fn part(k I64) Array<I64>& {
 fn all() I64 {
     junk := Vec<String>()
     f := mkfn(3)
-    p := part(2)
+    p :~ part(2)
     b := node.build(5)
     for i in range 1000: junk.Push($i)
     return b.v + 10 * f() + 100 * p[1] + junk.Len()

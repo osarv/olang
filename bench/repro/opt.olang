@@ -10,7 +10,7 @@ import "std/os"
 import "../benchlib"
 
 fn main() {
-    args := os.Args()
+    args :~ os.Args()
     if args.Len() < 2: benchlib.Fail("usage: opt NAME", 1)
     name := $args[1]
     dir := "bench/repro"

@@ -186,7 +186,7 @@ fn (g mut migration&) dropChains(o I64, c I64) {
 
 # the text with every edit made, in order; one overlapping an earlier is left out
 fn (g migration&) applied() String {
-    sorted := g.edits.ToArray()
+    sorted :~ g.edits.ToArray()
     sorted.Sort(fn(a Edit, b Edit) Bool: return a.start < b.start)
     out := StringBuilder()
     last I64 = 0
@@ -214,11 +214,11 @@ fn migrate(src String&, total mut Counts&) String {
 # a Markdown text with its "```olang" blocks migrated
 fn migrateMarkdown(src String&, total mut Counts&) String {
     out := StringBuilder()
-    lines := src.Split("\n")
+    lines :~ src.Split("\n")
     inBlock := false
     block := StringBuilder()
     for k in range lines.Len() {
-        line := lines[k]
+        line :~ lines[k]
         if inBlock and line.StartsWith("```") {
             out.Push(migrate(block.ToString(), total))
             block.Clear()
@@ -241,9 +241,9 @@ fn main() ? {
     check := false
     verbose := false
     paths Vec<String>
-    args := os.Args()
+    args :~ os.Args()
     for i in range 1, args.Len() {
-        a := args[i]
+        a :~ args[i]
         if a == "--check": check = true
         else if a == "-v": verbose = true
         else: paths.Push($a)
@@ -276,7 +276,7 @@ fn main() ? {
             os.Exit(1)
         }
     }
-    verb := "would change " if check else "changed "
+    verb :~ "would change " if check else "changed "
     srcmask.Say($verb + $changed + " files: " + $total.Describe())
     if check and changed > 0: os.Exit(1)
 }

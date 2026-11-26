@@ -15,7 +15,7 @@ type H struct(n I64) {
     keep P& = P(0)
     {
         x := P(n)
-        keep = borrow(x)
+        keep ~ borrow(x)
     }
 }
 fn main() ? {

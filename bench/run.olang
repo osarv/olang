@@ -101,7 +101,7 @@ fn options.parse(args Array<String&>&) options {
     o := options()
     i I64 = 1
     for i < args.Len() {
-        a := args[i]
+        a :~ args[i]
         if a == "--" {
             i++
             break
@@ -142,7 +142,7 @@ fn main() {
     o := options.parse(os.Args())
     rows := Vec<String&>()
     for row in table() {
-        name := row.Split("|")[0]
+        name :~ row.Split("|")[0]
         if o.names.Len() == 0 {
             rows.Push($row)
             continue
@@ -172,7 +172,7 @@ fn main() {
 fn build(olang String&, rows Vec<String&>&, base Bool) {
     built := Map<String&, Bool>()
     for row in rows {
-        f := row.Split("|")
+        f :~ row.Split("|")
         prog := $f[1]
         cprog := $f[2]
         if "o." + $prog not in built {
@@ -233,16 +233,16 @@ fn command(bin String&, args String&) Array<String&>& {
 
 fn check(rows Vec<String&>&, base Bool) {
     for row in rows {
-        f := row.Split("|")
-        name := f[0]
-        prog := f[1]
-        cprog := f[2]
-        args := f[3]
+        f :~ row.Split("|")
+        name :~ f[0]
+        prog :~ f[1]
+        cprog :~ f[2]
+        args :~ f[3]
         variants := Vec<String&>()
         variants.Push("build/" + $prog + "|build/" + $cprog + "_c")
         if base: variants.Push("build/" + $prog + ".base|build/" + $cprog + "_c.base")
         for v in variants {
-            pair := v.Split("|")
+            pair :~ v.Split("|")
             a := benchlib.Capture(command(pair[0], args), benchlib.Dir)
             b := benchlib.Capture(command(pair[1], args), benchlib.Dir)
             if a.Stderr.Len() > 0: benchlib.Warn(a.Stderr)
@@ -261,11 +261,11 @@ fn timing(rows Vec<String&>&, base Bool, reps I64) Map<String&, Vec<I64>> {
     for r in range 1, reps + 1 {
         benchlib.Warn("repetition " + $r + "/" + $reps + "\n")
         for row in rows {
-            f := row.Split("|")
-            name := f[0]
-            prog := f[1]
-            cprog := f[2]
-            args := f[3]
+            f :~ row.Split("|")
+            name :~ f[0]
+            prog :~ f[1]
+            cprog :~ f[2]
+            args :~ f[3]
             bins := Vec<String&>()
             bins.Push("o|build/" + $prog)
             bins.Push("c|build/" + $cprog + "_c")
@@ -314,7 +314,7 @@ fn report(rows Vec<String&>&, base Bool, reps I64, times Map<String&, Vec<I64>>&
     if base: out.Push(" " + $right("olang x86-64", 10) + " " + $right("C x86-64", 10) + " " + $right("ratio", 7))
     out.Push("     (median of " + $reps + "; min in parentheses)\n")
     for row in rows {
-        name := row.Split("|")[0]
+        name :~ row.Split("|")[0]
         om, omin := stat(try times.Get($name + "|o") catch default Vec<I64>())
         cm, cmin := stat(try times.Get($name + "|c") catch default Vec<I64>())
         out.Push($left(name, 26) + " " + $right(secs(om), 9) + " " + $right(secs(cm), 9) + " " + $right(ratio(om, cm), 7))

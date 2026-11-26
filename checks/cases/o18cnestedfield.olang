@@ -15,7 +15,7 @@ fn churn() ? io.Error {
     }
 }
 fn add(ll mut Vec<Vec<Blk>>&, x I64) {
-    h := ll.RefMut(0).RefMut(0)
+    h :~ ll.RefMut(0).RefMut(0)
     h.S.Push(x)
 }
 fn main() ? {
