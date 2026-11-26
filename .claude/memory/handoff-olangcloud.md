@@ -25,10 +25,11 @@ Stopped by the Orchestrator's pacing guard; no new items until it restarts this 
 - wt-revfix1 merged (08dd7d3de) and wt-revfix2 merged (5048bcacd, goldens e2de6b2de), each after a full verify green
   in its worktree (master = e2de6b2de holds every full-verified change; revfix1's first verify was OOM-killed with two
   verifies and builds side by side - run ONE full verify at a time on this 15 GB machine).
-- Running from e2de6b2de: wt-revfix3 (a text local given existing text each turn - false -check pass; finding 6's
-  over-report; builtResult's over-report for a Vec<String&> kept on purpose) and wt-fnregion (per-value regions for
-  function-value locals, fnvalgrow; then builtResult/origrefcall if it falls out). Merge each after a full verify, one
-  at a time.
+- Done, unmerged: wt-revfix3 (text locals given existing text, finding 6, a Vec that only grows; self-build 569/1056)
+  is in a steward's full verify (log /home/user/steward-logs/verify-revfix3.log), then merged. wt-fnregion (76a9ce0fd:
+  closures in a function-value local get a region per call, lower.handsPlan..handOver, Stmt.Drop; fnvalgrow and l1xmod
+  flat; builtref NOT closed - a field path, needs fieldscopes/O23b) waits: after revfix3 merges, merge master into it
+  (both touch lower.olang - Opus resolves), rerun its gates, then its own full verify and merge.
 - Threaded fixtures (taskcaps, taskdefault) measure flatness by VmHWM: under `ulimit -v 8192` threads exit 2 even flat.
 - wt-cunion merged (7c6e81776, goldens 526eb409a): X18a, `u.m()`/`u.set_m(v)` for C union number members (little-endian).
 
