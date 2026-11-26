@@ -14750,7 +14750,7 @@ fn (s mut Scoper&) wantPromotionOf(t types.TypeId) {
 # given back to their container's scope, for good (2.6, step 4)
 fn (s mut Scoper&) giveBack(d I64) {
     if not (s.fieldGather and s.finalQuiet and not s.standIn and d >= 0): return
-    if s.Trace and not s.wantField.Has(pair.Pair<I64, I64>(d, -1)) { s.TraceLog.Push($"give back " + $d + " | " + $s.traceAt(s.stmtSp.Start)) }
+    if s.Trace and not s.wantField.Has(pair.Pair<I64, I64>(d, -1)) { s.TraceLog.Push($"give back " + $d + " " + $s.declWord(d) + " | " + $s.traceAt(s.stmtSp.Start)) }
     if not s.wantField.Has(pair.Pair<I64, I64>(d, -1)): s.wantNewField.Push(pair.Pair<I64, I64>(d, -1))
     s.wantField.Put(pair.Pair<I64, I64>(d, -1), true)
     s.wantsField.Push(pair.Pair<I64, I64>(d, -1))
