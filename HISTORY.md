@@ -44057,3 +44057,7 @@ pushed onto a turn's Vec - flat under 8 MB at 200,000 turns, 71 MB on master, wh
 kept's textsAgain (read back after a churn, baked by the evaluator). Every probe of batch1125b and batch1125 agrees across
 built, `-free late`, `-sanitize` and the evaluator; -check results are unchanged but k2twotargets, which now names 'b' (a
 task's result given each turn) beside 'a'. The review's w1walkesc and w2bindesc are flat (64.8 MB at 1,000,000 on master).
+The self-build frees 569 of its 1056 places at once - master's compiler on the same source 560 of 1022: 34 more owner
+text locals are counted, 25 of them keeping and now named; warm peak 2608 MB for both (child maximum resident set,
+second run). `make fixedpoint`, `make consistency`, the freeing and earlyfree scenarios pass; the goldens moved for the
+fixture, kept's test and the new fields.

@@ -1499,4 +1499,7 @@ is no slot (building every copy's text in slots would lift it, at a slot allocat
   builtResult's turn row left out for a call's value pushed onto a Vec local that only grows (`lower.pushedInto`).
   checks' freeing textagain (`limited`), kept's textsAgain. Every probe of batch1125b and batch1125 agrees across
   built, `-free late`, `-sanitize` and the evaluator; -check results unchanged but k2twotargets (its 'b', a task's result
-  each turn, now named beside 'a'), and more places counted where a text local is given text.
+  each turn, now named beside 'a'), and more places counted where a text local is given text. The self-build frees 569
+  of its 1056 places at once (master's compiler on the same source: 560 of 1022 - 34 more owner text locals counted, 25
+  of them keeping, now named); warm peak 2608 MB both (child maximum resident set, second run); fix.olang:181's turn
+  row gone (explain.olang:821, fix.olang:334 and lower.olang:393 remain, waste).
