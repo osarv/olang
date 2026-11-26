@@ -678,12 +678,13 @@ a6e276f41c1524b3 4431253f10292974 checks/cases/externruntime2.olang
 9d3bc1311560def3 106036e3b0137004 checks/cases/fieldscopeattach.olang
 a28aa635925cccf7 c98d9b3ae533b429 checks/cases/fieldscopectx.olang
 0592bb290a0e7a1a 8cd7f9b745b704ee checks/cases/fieldscopedtor.olang
-180c3d1ef2e8dce8 41f8e56b243f7fdf checks/cases/fieldscopeelem.olang
+73695ea39e791ca2 41f8e56b243f7fdf checks/cases/fieldscopeelem.olang
 8eb618726f3e0667 4ba1295c0b1989d5 checks/cases/fieldscopeflat.olang
 cf3d6a267c8312c8 6842c814e555318d checks/cases/fieldscopegeneric.olang
 c8e8ddcd53266615 f4e84d3b24baa4da checks/cases/fieldscopelambda.olang
 6eb386715b0f99eb f0d8a6b9174d335a checks/cases/fieldscopelookup.olang
 1670934d7ede2567 0de6de7524a8ddb5 checks/cases/fieldscopepart.olang
+58186df570932a92 0408e91528317b14 checks/cases/fieldscopepin.olang
 3b6d12e9d505e7f7 cd579b2e11eb1c82 checks/cases/fieldscoperepoint.olang
 03a8582ea93ae41c d58dd6e022d681d7 checks/cases/fieldscoperepointshort.olang
 e0c480b50ef7dd2c 968a62fb03b9efe6 checks/cases/fieldscopereturn.olang
@@ -2617,7 +2618,7 @@ aab3407a3541d000 2d9dcb85b74e0b0e compiler/parse.olang
 82bf514b5f4b74af 0b798b4ab68f71ca compiler/records.olang
 b0fdc6062b60ae22 55dae3ed6d428fcd compiler/runtime.olang
 2511dd84a1c09780 1ce6031eaa59f5c2 compiler/scan.olang
-789516294b3b691b c0ac2c09e4149d6d compiler/scope.olang
+5f45674eef0b8840 8d8d026c75b7c1e9 compiler/scope.olang
 9dedb4537638e755 fdd470f517990cbb compiler/session.olang
 5a240fe6da4da6db e84af040edacca63 compiler/source.olang
 9bee4e94ca053127 837a4be40276ab63 compiler/spin.olang
@@ -2818,6 +2819,7 @@ b4f760f463944c47 7e83d9b1511fd76c tests/defaultbinds.olang
 dc6fb3e1ffda8011 1cee458687576623 tests/definit.olang
 e08c5b2adab239ab 0645f8989dd42d8c tests/display.olang
 d5fae2f97d53ecf1 2e5baa34f0f6e2e0 tests/drops.olang
+548d370768b18131 264f8efbed64752c tests/elemfields.olang
 d98dd9f60429f402 87ec9d7d85a1d286 tests/embed.olang
 3a688c724366b3b6 c11926e1dfc9dbd8 tests/errdata.olang
 cd3c3b30a44dbdaa ad2ddeb08778583d tests/errsetparams.olang
