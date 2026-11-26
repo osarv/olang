@@ -2742,7 +2742,7 @@ f8db35951918e773 6c41b2d86cbcf9c2 std/http.olang
 b43238e3aa861233 b2b29e8b574fa241 std/io.olang
 e23a590c28d782c1 96f7b343ee199ef4 std/json.olang
 221b8519dc86705d dfed119dd3db340c std/list.olang
-f157cab81cd39828 1c467ac4f581ed6a std/net.olang
+ee18b8590fcbd721 f38718417a810eb1 std/net.olang
 e9aa94e405345e7a 4927fbcc42dcb6a9 std/order.olang
 0b523561cae41db5 01d29c476d0fa257 std/os.olang
 17c08f79ab55afc4 3582f78520a746d0 std/pair.olang
@@ -2785,8 +2785,8 @@ ac5bc791fca142dc ac6f449016838138 std/sha256.olang
 a81faf81143e4029 4013c4fb0394df9f std/stats.olang
 19ece18762025aa5 debcafb04ce1c79b std/sync.olang
 cec14acad2356597 f724159fa1f8b372 std/tile.olang
-3fcc7563568b5e24 244baf23a15600ce std/time.olang
-4557fa01cd857aad 460ba3e0254c5503 std/tls.olang
+3b93257c3931545d 0a2ddd365af3e89f std/time.olang
+d77d3d7dcb389abb 3643d850b3aabb73 std/tls.olang
 8e99022da399d590 36c4766273e07866 std/utf8.olang
 bcf05ec500439ae2 c8591c75d05aa4de std/zmtp.olang
 a56142c30b36b352 bd74e8c2761ce0e0 tests/Base.olang
