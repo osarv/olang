@@ -44272,3 +44272,47 @@ x := Ctx(); q := ps[0]; q.link(x)`) gives Pass back and grows 320 MB over 20,000
 
 builtref, which the ledger named, is no O23b case: `P.r String&` is never promoted (nothing is stored through it). Its
 gap stays as docs/freeing.md 2.5 says: a reference field owning what a call builds for it (option (a)), not decided.
+
+## 2026-11-26: O23b per instance, for instances held in elements (the user's call 2026-11-26; mine on the mechanism; wt-o23bi)
+
+Built as docs/fieldscopes.md B.1 states O23b, at compile time and with no word in the instance. A declaration whose
+shared field a read through an element would give back (giveBackUnresolved, an underestimate's read, a store or build
+through the field there) is *pinned* first instead - asked like a give-back (a WantField of -2, so a judging taken
+again or from its record asks it again), applied at the round's end, every component judged again in the next round.
+For a pinned declaration:
+
+- an instance held by value in an element, or in a field held by value of one held so (`pinPlace`), is bound exactly at
+  its place's `partsTerm` - where `fieldTerm` used to return an underestimate - and so is a local copied from one
+  (`bindLocal`), a result handing one back (`noteResBind`: Vec's `At`, so `q := ps[0]` knows its binding) and a call's
+  argument reading one (`derivedAt`);
+- every store of an instance anywhere but into a whole local - `assign` (an `occupy` is one: Vec.Push's
+  `v.data[v.n].occupy(x)`, grown's moves), an array literal's or fill's element (`valMake`), a comprehension's yield -
+  fits each shared field's binding exactly into the place's term (`pinStore` -> `fit(b, slot, exact)`). A parameter held
+  by value has its derived scope as binding (`pinnedParam`), so Push records "D(x, C) exactly Var(v)" - `oblige` already
+  records an exact relation as two, and `fit`'s refusal of an exact derived relation applies only to a local's kinds,
+  which the store does not use - and each caller discharges it through `derivedAt`, which now resolves an argument that
+  is a pinned by-value parameter to its own derived scope. A value holding a pinned instance by value inside it is
+  fitted too where it is read out of an element or is a constructor's instance whose fields are given its arguments as
+  they are (`pinNested`, `fieldArg`: Map's `MapEntry<K, V>(key, value)`); any other such value gives the declaration
+  back.
+
+What could not be shown - a binding not known at a store, a pinned declaration whose read still asks - gives the
+declaration back for the whole program, as before. The store asks of the instance stored exactly what C2d's equality
+asked of every instance, so every program accepted before is accepted; only instances held elsewhere (locals,
+parameters, results) are relaxed. Records: a judging's context word names the pinned set (`ctxText`, `pinWord`), so a
+record judged under other pins is never taken.
+
+Measured. checks' fieldscopepin (fieldscopeflat beside `stash`: `ps.Push(Pass(c, Out(0))); x := Ctx(); q := ps[0];
+q.link(x)`): grew 320 MB over 20,000 turns, now flat (Pass pinned, given back nowhere). Probes under `-sanitize`: a
+store through an element's reference (`put(ps[0], s)`), an element overwritten from a shorter block, a vector copied
+element to element, a Map's value, a global vector, a for-in's element - all pinned, all clean. The self-build pins
+nothing: its ten give-backs (views:Viewer, interp:Exec, eval:Machine, emit:Emitter, names:Resolver, scope:Scoper,
+load:Loader, listing:Writer, check:Checker, generic:Program) are each a reference to a context held in another
+instance's field (`v.P.L`, `x.M`, `fe.E.Lw`), not an instance in an element, and stay given back - each built once a
+run, nothing to free. The self-built compiler is byte-identical; the cold self-build's scope phase 3.2-3.4 s before and
+after, peak 2692 -> 2703 MB (within run-to-run noise of the scope phase's resident set).
+
+Left: a reference held in a field, a payload, an `any` and a capture still give their declaration back (B.1 lists them
+too). Pinning them needs the stores of a *reference* to such an instance to ask the referent's binding to be exactly its
+own scope, which a relaxed local instance's is not; nothing measured needs it (the self-build's ten are built once).
+builtref's option (a) is separate and left alone.

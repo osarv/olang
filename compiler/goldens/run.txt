@@ -227,6 +227,9 @@
 | ok - deferPush: hands its by-value parameter on from deferred code, once
 | ok - Viewed: is ended where the storage a view of it is kept in lives
 | ok - seenBy: reads a join block's holder while its task runs, ended after the wait
+=== test tests/elemfields.olang
+| status 0
+| ok - an instance stored into an element is bound where the element's references are
 === test tests/embed.olang
 | status 0
 | ok - E38: embed gives the file's bytes, baked and decided while compiling, read at run time
@@ -2649,6 +2652,9 @@
 | status 0
 === run fieldscopepart.olang
 | status 0
+=== run fieldscopepin.olang
+| status 0
+| flat
 === run fieldscoperepoint.olang
 | status 0
 === run fieldscopereturn.olang

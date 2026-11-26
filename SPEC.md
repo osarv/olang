@@ -7697,10 +7697,27 @@ its instance is reached through a path that names none - an element of an array,
 a global, an `any`'s instance, a capture of a function value not followed into its callee (T22c) - and a store through
 the field there, a temporary built through it there, a local taking what it reads there, or a call whose callee's
 obligation names the binding through such an instance needs the binding to be judged, it is not known there, and the
-field could point somewhere every other reader of the instance believes it does not. Rather than refuse it, the field's
-declaration keeps no binding of its own, for the whole program: its shared fields live in the instance scope, exactly
-where their referents do (C2d's equality), as though the inference had never given them one - so a program accepted
-without the inference is accepted with it, and a `Vec<Pass>` of handlers stored through by element is judged as it
+field could point somewhere every other reader of the instance believes it does not. Rather than refuse it:
+
+- **Per instance, where the instance is held in an element.** Where the instance is held by value in an element of an
+  array (a vector's, a map's), or in a field held by value of one held so, the declaration is *pinned*: every store of
+  one of its instances anywhere but into a whole local - an element, a field, a payload, a global, what a reference
+  leads to, an array literal's or fill's element - asks that each shared field's binding be **exactly** the scope where
+  the place's references live (placed by lifting the container where it can, O28; refused as C2d's equality is where
+  it cannot), and so does a store of a value holding such an instance by value inside it (one read out of an element, or
+  a constructor's instance given it as it is). Inside a body the binding of a parameter held by value is its derived
+  scope and the place's a scope variable, a derived obligation of exactness each caller discharges (O22). A read through
+  such an element then knows the binding - the element's own - and so do a copy of it, a call handing one back (O13c)
+  and a `for ... in` element: nothing is given back, and every instance held elsewhere - a local, a parameter, a result
+  - keeps the binding of its own. Judged entirely while compiling: no word in the instance, no cost at run time.
+- **Otherwise, for the whole program.** Where the path is another (a reference held in a field, a payload, an `any`, a
+  capture), where a pinned declaration's binding still cannot be shown, or where a store of a pinned declaration's
+  instance does not know its binding, the field's declaration keeps no binding of its own, for the whole program: its
+  shared fields live in the instance scope, exactly where their referents do (C2d's equality), as though the inference
+  had never given them one.
+
+Either way a program accepted without the inference is accepted with it (a pinned store asks of the instance stored
+what C2d's equality asked of every instance), and a `Vec<Pass>` of handlers stored through by element is judged as it
 always was. Reads through such a path, and builds found where the referent lives (O29), keep the binding.
 
 **O22.** An assignment whose target's scope tag resolves to a scope variable of the **type** of a parameter —
@@ -7954,7 +7971,8 @@ of them allow, and every judgment of this section is then made of it. So:
   constructor builds into its own field - or something can be stored through it (O25g) and C2d's equality would lift an
   instance above the scope its other uses need (a **shared field**: a helper's writable reference to a context, a
   table, a sink) - when it lives where that parameter's argument does: a **binding of its own** (O23a), decided over
-  the whole program and kept only where every function reaching it can resolve it (O23b);
+  the whole program and kept where every function reaching it can resolve it - an instance held in an element bound
+  exactly where the element's references are (O23b);
 - a generator's elements live where its yields say (D18c).
 
 The placement extends storage only for what is kept: a whole value where it is kept, the storage a view shows where

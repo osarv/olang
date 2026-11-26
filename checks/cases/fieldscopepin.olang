@@ -1,0 +1,78 @@
+# check: run
+# O23b per instance (docs/fieldscopes.md B.1, docs/freeing.md 2.4): fieldscopeflat's lowerAs shape run 20,000 times over
+# one context, beside one helper stored into a vector and linked through a copy of its element (stash). The stored
+# helper is bound where the vector's elements are - the store asks it, so the copy read back knows where its field
+# points - and the declaration keeps its own field binding everywhere else: each turn's helper and output live where
+# the turn puts them and the peak stays flat. With the declaration given back for the whole program, every turn's
+# output and helper were kept to the context's end, over 300 MB
+import "std/os"
+import "std/io"
+
+fn peakKb() I64 {
+    status :~ try os.ReadFile("/proc/self/status") catch default ""
+    at := try status.Find("VmHWM:") catch default -1
+    if at < 0: return -1
+    line :~ status[at + 6:]
+    end := try line.FindByte('\n') catch default line.Len()
+    return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1
+}
+
+type Ctx struct() {
+    count I64 = 0
+    names Vec<String&> = Vec<String&>()
+    other mut Ctx?& = null
+}
+
+type Out struct(k I64) {
+    k
+    cells Array<I64> = Array<I64>(512, k)
+}
+
+type Pass struct(L mut Ctx&, made mut Out&) {
+    L
+    F Out = made
+}
+
+fn (p mut Pass&) link(x mut Ctx&) { p.L.other ~ x }
+
+fn (p mut Pass&) work() {
+    p.L.count++
+    if p.L.count % 1000 == 0: p.L.names.Push($p.L.count)
+    p.F.cells[1] = p.F.k * 2
+}
+
+fn (c mut Ctx&) lowerAs(i I64) Out& {
+    f := Out(i)
+    p mut Pass& = Pass(c, f)
+    p.work()
+    return p.F
+}
+
+fn turns(c mut Ctx&, n I64) I64 {
+    total := 0
+    for i in range n {
+        o :~ c.lowerAs(i)
+        total += o.cells[1] - o.cells[0]
+    }
+    return total
+}
+
+fn stash(c mut Ctx&) {
+    ps := Vec<Pass>()
+    ps.Push(Pass(c, Out(0)))
+    x := Ctx()
+    q := ps[0]
+    q.link(x)
+    x.count = 7
+}
+
+fn main() ? {
+    c := Ctx()
+    stash(c)
+    first := turns(c, 1000)
+    before := peakKb()
+    rest := turns(c, 20000)
+    grew := peakKb() - before
+    if c.other!.count != 7 or first != 999 * 1000 / 2 or rest != 19999 * 20000 / 2 or c.names.Len() != 21: unreachable "sum"
+    try io.PutLn("flat" if grew < 8000 else $"grew " + $grew + " kB")
+}

@@ -678,12 +678,13 @@ a6e276f41c1524b3 d8d9076941c878be checks/cases/externruntime2.olang
 9d3bc1311560def3 b69d2a576ce6a2b8 checks/cases/fieldscopeattach.olang
 a28aa635925cccf7 dfcd22e8eacde916 checks/cases/fieldscopectx.olang
 0592bb290a0e7a1a 4f5ba917e6e4c930 checks/cases/fieldscopedtor.olang
-180c3d1ef2e8dce8 180ea0ae3430fb7c checks/cases/fieldscopeelem.olang
+73695ea39e791ca2 180ea0ae3430fb7c checks/cases/fieldscopeelem.olang
 8eb618726f3e0667 7406b4abc170f969 checks/cases/fieldscopeflat.olang
 cf3d6a267c8312c8 0c911c91a723d2b2 checks/cases/fieldscopegeneric.olang
 c8e8ddcd53266615 8e6ed9afb2621bde checks/cases/fieldscopelambda.olang
 6eb386715b0f99eb 823900f544305ab0 checks/cases/fieldscopelookup.olang
 1670934d7ede2567 0a7e50eb055d4986 checks/cases/fieldscopepart.olang
+58186df570932a92 00a8c5291d6fb1e2 checks/cases/fieldscopepin.olang
 3b6d12e9d505e7f7 bf4cd89d2001afa4 checks/cases/fieldscoperepoint.olang
 03a8582ea93ae41c e5e33b6ac9913029 checks/cases/fieldscoperepointshort.olang
 e0c480b50ef7dd2c cd69ffea4b6a6374 checks/cases/fieldscopereturn.olang
@@ -2617,7 +2618,7 @@ aab3407a3541d000 df3996d76bfb8a28 compiler/parse.olang
 82bf514b5f4b74af 45e8a83505eb5248 compiler/records.olang
 b0fdc6062b60ae22 f609278ab736be3b compiler/runtime.olang
 2511dd84a1c09780 a2670faf0064a349 compiler/scan.olang
-789516294b3b691b ef6dcb3013854478 compiler/scope.olang
+5f45674eef0b8840 210b0303055a2eb1 compiler/scope.olang
 9dedb4537638e755 8514ecc99ef5b7d7 compiler/session.olang
 5a240fe6da4da6db 59f0b23b4d247b37 compiler/source.olang
 9bee4e94ca053127 882c3c1eac35e714 compiler/spin.olang
@@ -2818,6 +2819,7 @@ b4f760f463944c47 8f836e1332eb39c2 tests/defaultbinds.olang
 dc6fb3e1ffda8011 40760add63b8c569 tests/definit.olang
 e08c5b2adab239ab ed77220fd1ea5407 tests/display.olang
 d5fae2f97d53ecf1 6b36215be2f23eb0 tests/drops.olang
+548d370768b18131 8ccc40221d6aaab7 tests/elemfields.olang
 d98dd9f60429f402 f5d5a7d95c16ad9a tests/embed.olang
 3a688c724366b3b6 b0e3297e4822a754 tests/errdata.olang
 cd3c3b30a44dbdaa 83d7b6e9e2b852e2 tests/errsetparams.olang

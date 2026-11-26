@@ -483,6 +483,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     underElem Vec<Bool>                   # ... and whether each was read through an array's element (O23)
     underDecl Vec<I64>                    # ... and the declaration whose field viewing p's referent each read (the field inference)
     underRoot Map<I64, typed.Expr&>       # ... by index: the field a lambda's capture holds, its referent found at run time (O29)
+    underPin Map<I64, Bool>               # ... by index: read of an instance held in an element (pinPlace), which pinning binds (O23b)
     temps Map<I64, Term>                   # by site: a temporary place's value judged (tempTerm), the term its references are at
     partDest Map<I64, Term>                # by call site: where a part read out of its built result is put (O18a)
     resAt Term = Term.None                 # the result scope the call judged last was bound to
@@ -634,6 +635,12 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     landLog Vec<I64>                       # ... those the judging being made landed in (compRun.Landed)
     promotedF Map<pair.Pair<I64, I64>, I64>   # ... the constructor parameter it binds to
     demotedF Map<pair.Pair<I64, I64>, Bool>
+    # O23b per instance (docs/fieldscopes.md B.1): the declarations whose promoted fields are bound exactly where an
+    # instance's container's references are wherever it is held in an element - every store of one into a place asks
+    # that its binding be that place's scope - instead of given back for the whole program; pinGrew where a round
+    # pinned one, so the next judges every component again
+    pinnedD Map<I64, Bool>
+    pinGrew Bool = false
     Unplaced Vec<String&>                     # fields a refusal needed promoted that have no parameter to bind to (open point 4)
     Trace Bool = false                     # OLANG_INFERDUMP: every lift written to TraceLog, for a person
     # a round of the field inference taking again the judging of every component whose inputs are as they were
@@ -868,7 +875,7 @@ fn (s mut Scoper&) judgeAll(report Bool) {
         # before it was promoted, rather than judged once with it and once without
         if not s.fieldGather: continue
         for w in s.wantsField {
-            if s.giveBackDecl(w.First): s.gaveBack = true
+            if w.Second != -2 and s.giveBackDecl(w.First): s.gaveBack = true
         }
     }
 }
@@ -3607,6 +3614,7 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     s.underElem.Clear()
     s.underDecl.Clear()
     s.underRoot.Clear()
+    s.underPin.Clear()
     s.temps.Clear()
     s.partDest.Clear()
     s.lifted.Clear()
@@ -7941,6 +7949,8 @@ fn (s mut Scoper&) stmt(st typed.Stmt?&) {
             } else {
                 s.val(x, s.here())
             }
+            # (O23b per instance: an element of a comprehension's array, bound where the array's references are)
+            if n > 0: s.pinStore(x, s.collectAt[n - 1], FitElem)
         }
     }
     s.verLeave(st)
@@ -8303,6 +8313,16 @@ fn (s mut Scoper&) bindLocal(l typed.LocalId, x typed.Expr&) {
         }
         return
     }
+    # (O23b per instance: a copy of a pinned declaration's instance held in an element, bound where its references are)
+    pt := s.pinnedRead(x)
+    if pt != Term.None {
+        s.bindFrom.Put(I64(l), s.bindTerms.Len())
+        for _ in range s.ctorParams(x.Type()) {
+            s.bindTerms.Push(pt)
+            s.bindKids.Push(-1)
+        }
+        return
+    }
     c :~ typed.Call.Of(s.unPromoted(x))
     if c is null or I64(c.Site) != s.ctorSite: return
     s.bindFrom.Put(I64(l), s.ctorFrom)
@@ -8330,9 +8350,19 @@ fn (s mut Scoper&) noteResBind(x typed.Expr&) {
         l := s.argLocal(s.unPromoted(x))
         if l >= 0 { from = try s.bindFrom.Get(l) catch default -1 }
     }
+    # (O23b per instance: a pinned declaration's instance read out of an element, bound where its references are)
+    pt := s.pinnedRead(s.unPromoted(x)) if from < 0 else Term.None
     for w in range n {
         t := Term.Untraced
-        if from >= 0 and from + w < s.bindTerms.Len() {
+        if pt != Term.None {
+            t = pt
+            ok := match t {
+                case Term.Var(_), Term.Program: true
+                case Term.Derived(p, _): p >= 0
+                case _: false
+            }
+            if not ok: t = Term.Untraced
+        } else if from >= 0 and from + w < s.bindTerms.Len() {
             t = s.bindTerms[from + w]
             ok := match t {
                 case Term.Var(_), Term.Program: true
@@ -9166,6 +9196,12 @@ fn (s mut Scoper&) assign(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
         s.fitTarget = -1
         s.fitAt, s.fitSp = savedAt, savedSp
     }
+    # (O23b per instance: an instance of a pinned declaration stored into a part, a global or a referent bound there)
+    if wholeLocal(p) < 0 and p != typed.Lvalue.Temp and p != typed.Lvalue.Target {
+        s.fitTarget = s.throughLocal(p, slot)
+        s.pinStore(x, slot, kind)
+        s.fitTarget = -1
+    }
     if v.K == ValKind.Fresh and not slot.Runs() and slot != Term.None and not found: s.freshIntoUnknown(sp, p, slot)
     try s.targets.Pop() catch { }
 }
@@ -9447,15 +9483,210 @@ fn (s mut Scoper&) fieldTerm(base typed.Lvalue&, i I64) Term {
     }
     # an instance whose construction bindings are known (O23a): a local's, a field's of one
     if s.recAt(s.recOf(base), w) != Term.None: return s.recAt(s.recOf(base), w)
+    # (O23b per instance: an instance of a pinned declaration held in an element is bound exactly where the element's
+    # references are - every store of one there asked it, pinStore)
+    held := s.pinPlace(base)
+    if held and s.isPinned(s.declOf(bt)): return s.partsTerm(base)
     # (W4: else where the body's own instances' fields are bound - its field set - where every instance is its own)
     fs := s.fieldSet(bt, w) if throughElem(base) else Term.None
     if fs != Term.None: return fs
     s.under.Push(s.partsTerm(base))
     s.underElem.Push(throughElem(base))
     s.underDecl.Push(s.declOf(bt))
+    if held: s.underPin.Put(s.under.Len() - 1, true)
     root :~ s.capFieldRoot(base, i, s.P.T.Items(s.P.T.Fields(bt))[i])
     if root is not null: s.underRoot.Put(s.under.Len() - 1, root)
     return Term.Derived(-s.under.Len(), w)
+}
+
+# O23b per instance: whether place p holds an instance by value reached through an element of an array - directly, or as
+# a field held by value of an instance held so. A pinned declaration's instance there is bound exactly where the place's
+# references are (fieldTerm), which every store of one into a place asks (pinStore)
+fn (s mut Scoper&) pinPlace(p typed.Lvalue&) Bool {
+    if s.isRef(p.Type()): return false
+    return match p {
+        case typed.Lvalue.Elem(_, _, _): true
+        case typed.Lvalue.Field(_, _, b, _): s.pinPlace(b)
+        case _: false
+    }
+}
+
+# whether declaration d is pinned (O23b per instance; a judging's record names the pinned set, ctxText)
+fn (s mut Scoper&) isPinned(d I64) Bool { return d >= 0 and s.pinnedD.Has(d) }
+
+# O23b per instance: where x - a read of, or a borrow of, an instance of a pinned declaration held in an element - is
+# bound: the element's references' term; None for anything else
+fn (s mut Scoper&) pinnedRead(x typed.Expr&) Term {
+    p :~ match unPassed(s.unAway(x)) {
+        case typed.Expr.Read(_, _, q, _), typed.Expr.Borrow(_, _, q), typed.Expr.Take(_, _, q): q
+        case _: return Term.None
+    }
+    if not s.pinPlace(p) or not s.isStruct(p.Type()) or not s.isPinned(s.declOf(p.Type())): return Term.None
+    return s.partsTerm(p)
+}
+
+# ... the index of the parameter x reads, a pinned declaration's instance it holds by value and never assigns - its
+# fields bound where its argument's are, a derived scope its callers resolve (O23a, O22); -1 for anything else, and in
+# a body whose callers resolve no derived scope (a lambda's, a become chain's)
+fn (s mut Scoper&) pinnedParam(x typed.Expr&) I64 {
+    p :~ match unPassed(s.unAway(x)) {
+        case typed.Expr.Read(_, _, q, _), typed.Expr.Borrow(_, _, q): q
+        case _: return -1
+    }
+    y := wholeLocal(p) if p == typed.Lvalue.Local else -1
+    if y < 0 or s.B!.Locals[y].Kind != typed.LocalKind.Param or s.reassigned(y): return -1
+    ty := s.B!.Locals[y].Ty
+    if s.isRef(ty) or not s.isStruct(ty) or s.noDerived.Has(s.Id) or s.isLambda(s.B!): return -1
+    return s.paramIndex(y) if s.isPinned(s.declOf(ty)) else -1
+}
+
+# whether declaration d has a promoted field not given back
+fn (s mut Scoper&) promotedDecl(d I64) Bool {
+    if d < 0: return false
+    for k in s.promotedF.Keys() {
+        if k.First == d and not s.demotedF.Has(k): return true
+    }
+    return false
+}
+
+# O23b per instance (fieldscopes.md B.1): value x stored where references live at slot - an element, a field, a payload,
+# a global, what a reference leads to, an array or a comprehension being built. An instance of a pinned declaration asks
+# that each promoted field's binding be exactly slot - placed by lifting where it can (O28), else C2d's refusal - so an
+# instance held in an element is bound where the element's references are (fieldTerm). Where its binding is not known
+# here, or the value holds such an instance by value inside another, the declaration goes back for the whole program
+# (O23b), as it did before pinning
+fn (s mut Scoper&) pinStore(x typed.Expr&, slot Term, kind I64) {
+    if s.promotedF.Len() == 0 or slot == Term.None: return
+    t := s.P.T.Repr(x.Type())
+    if s.isRef(t): return
+    k := FitField if kind == FitValue or kind == FitLocal else kind
+    d := s.declOf(t)
+    if s.isStruct(t) and s.promotedDecl(d) and s.isPinned(d) {
+        if not s.pinFields(x, t, slot, k): s.giveBack(d)
+        return
+    }
+    nd := s.nestedPinned(t, 0)
+    if nd < 0 or s.pinNested(x, t, slot, k, 0): return
+    if s.Trace { s.TraceLog.Push($"pin nested " + $s.P.T.CanonNamed(t) + " | " + $s.traceAt(x.Span().Start)) }
+    s.giveBack(nd)
+}
+
+# ... each promoted field of x, an instance of pinned struct t, bound exactly at slot: false where a binding is not known
+fn (s mut Scoper&) pinFields(x typed.Expr&, t types.TypeId, slot Term, kind I64) Bool {
+    d := s.declOf(t)
+    for k in s.promotedF.Keys() {
+        if k.First != d or s.demotedF.Has(k): continue
+        fm := s.fieldMark(t, k.Second)
+        if fm != typed.Mark.Of: continue
+        b := s.pinBinding(x, k.Second, s.ctorParamIndex(t, fm.local))
+        if b == Term.None {
+            if s.Trace { s.TraceLog.Push($"pin unbound " + $s.P.T.CanonNamed(t) + " | " + $s.traceAt(x.Span().Start)) }
+            return false
+        }
+        s.fit(b, slot, true, x, kind)
+    }
+    return true
+}
+
+# ... x, of type t, holding a pinned declaration's instance by value inside it: a value read out of an element (each
+# instance inside it bound where the element's references are, which must be slot), or a constructor's instance whose
+# fields holding one are given its arguments as they are (each argument judged so in turn); false for anything else
+fn (s mut Scoper&) pinNested(x typed.Expr&, t types.TypeId, slot Term, kind I64, depth I64) Bool {
+    if depth > 6: return false
+    v :~ unPassed(s.unAway(s.unPromoted(x)))
+    src :~ match v {
+        case typed.Expr.Read(_, _, q, _), typed.Expr.Take(_, _, q): q
+        case _: null
+    }
+    if src is not null and s.pinPlace(src) {
+        s.fit(s.partsTerm(src), slot, true, x, kind)
+        return true
+    }
+    c :~ typed.Call.Of(v)
+    if c is null or s.P.T.Role(s.calleeType(c)) != types.RoleCtor or not s.isStruct(t): return false
+    fts := s.P.T.Items(s.P.T.Fields(t))
+    for i in range fts.Len() {
+        ft := s.P.T.Repr(fts[i])
+        if s.nestedPinned(ft, 1) < 0: continue
+        a :~ s.fieldArg(c, t, i)
+        if a is null: return false
+        fd := s.declOf(ft)
+        if s.isStruct(ft) and s.promotedDecl(fd) and s.isPinned(fd) {
+            if not s.pinFields(a, ft, slot, kind): return false
+        } else if not s.pinNested(a, ft, slot, kind, depth + 1) {
+            return false
+        }
+    }
+    return true
+}
+
+# ... the argument of constructor call c that field i of its struct t holds as given: the field's initializer a bare read
+# of a constructor parameter, the field never assigned after; null for anything else
+fn (s mut Scoper&) fieldArg(c typed.Call&, t types.TypeId, i I64) typed.Expr?& {
+    id := s.ctorBody(t)
+    if id < 0 or s.Bodies[id].Root is null or i >= s.Bodies[id].Fields.Len(): return null
+    body :~ s.Bodies[id]
+    f := I64(body.Fields[i])
+    for k in range s.assignedFrom[id], s.assignedFrom[id + 1] {
+        if s.assignedTo[k] == f: return null
+    }
+    for st in body.Root!.Stmts {
+        match st {
+            case typed.Stmt.Let(_, l, x) {
+                if I64(l) != f: continue
+                q := match unPassed(s.unAway(x)) {
+                    case typed.Expr.Read(_, _, p, _): wholeLocal(p)
+                    case _: -1
+                }
+                for k in range body.Params.Len() {
+                    if I64(body.Params[k]) == q and q >= 0 and k < c.Args.Len(): return c.Args[k]
+                }
+                return null
+            }
+            case _ { }
+        }
+    }
+    return null
+}
+
+# ... where value x's field i, viewing constructor parameter w's referent, is bound: a call's record, a parameter's
+# derived scope, a place's field binding (fieldTerm); None where not known here
+fn (s mut Scoper&) pinBinding(x typed.Expr&, i I64, w I64) Term {
+    v :~ unPassed(s.unAway(s.unPromoted(x)))
+    c :~ typed.Call.Of(v)
+    if c is not null: return s.recAt(try s.siteRec.Get(I64(c.Site)) catch default -1, w)
+    vp := s.pinnedParam(v)
+    if vp >= 0: return Term.Derived(vp, w)
+    p :~ match v {
+        case typed.Expr.Read(_, _, q, _), typed.Expr.Borrow(_, _, q), typed.Expr.Take(_, _, q): q
+        case _: return Term.None
+    }
+    t := s.fieldTerm(p, i)
+    return match t {
+        case Term.Derived(q, _): t if q >= 0 else Term.None
+        case Term.Untraced: Term.None
+        case _: t
+    }
+}
+
+# ... the pinned declaration a value of type t holds by value inside it - a field of a struct or a tuple's item, at any
+# depth, never through a reference or an array; -1 for none
+fn (s mut Scoper&) nestedPinned(t types.TypeId, depth I64) I64 {
+    r := s.P.T.Repr(t)
+    if depth > 6 or s.isRef(r): return -1
+    if depth > 0 and s.isStruct(r) and s.promotedDecl(s.declOf(r)) and s.isPinned(s.declOf(r)): return s.declOf(r)
+    if s.isStruct(r): return s.nestedIn(s.P.T.Items(s.P.T.Fields(r)), depth)
+    k := s.P.T.KindOf(r)
+    if k == types.Kind.Tuple or k == types.Kind.Record: return s.nestedIn(s.P.T.Items(s.P.T.Parts(r)), depth)
+    return -1
+}
+
+fn (s mut Scoper&) nestedIn(items Array<types.TypeId>&, depth I64) I64 {
+    for it in items {
+        d := s.nestedPinned(it, depth + 1)
+        if d >= 0: return d
+    }
+    return -1
 }
 
 # O29, T22c: field i of a lambda's capture (held, or read through a captured reference), read - the reference whose
@@ -10447,6 +10678,12 @@ fn (s mut Scoper&) valMake(m typed.Make&, ty types.TypeId, d Term, whole I64, wh
     vs := Array<Val>(m.Items.Len())
     for k in range m.Items.Len(): vs[k] = s.val(m.Items[k], s.here() if temp else d)
     agreed := m.Kind != typed.MakeKind.Case or not s.report or s.payloadAgree(m.Items, vs)
+    # (O23b per instance: an array's element, bound where the array's references are)
+    if kind == FitElem {
+        s.fitTarget = whole
+        for it in m.Items: s.pinStore(it, d, FitElem)
+        s.fitTarget = -1
+    }
     if filled {
         if vs[0].K == ValKind.Existing and s.P.T.SharesRefs(m.Items[0].Type()): s.fit(vs[0].T, d, s.storeThrough(m.Items[0].Type()), m.Items[0], FitValue)
         return Val.fresh(d)
@@ -13077,6 +13314,12 @@ fn (s mut Scoper&) derivedAt(p I64, w I64, c typed.Call&, hi Bool, beta Array<Te
     # an instance whose construction bindings are known (O23a): a local's, a field's of one
     rec := s.argRec(a)
     if s.recAt(rec, w) != Term.None: return s.recAt(rec, w)
+    # O23b per instance: a pinned declaration's instance held in an element, bound where the element's references are;
+    # one a parameter holds by value, where its argument bound it (each caller resolves it, O22)
+    pt := s.pinnedRead(a)
+    if pt != Term.None: return pt
+    vp := s.pinnedParam(a)
+    if vp >= 0: return Term.Derived(vp, w)
     # W4: an instance an element refers to - where the body's field set says its fields are bound
     if throughElemExpr(s.unAway(a)) {
         fs := s.fieldSet(a.Type(), w)
@@ -14591,7 +14834,15 @@ fn (s mut Scoper&) inferFields() Bool {
         # a declaration a promoted field of was built through: its promoted fields given back, for good - those a
         # round gave back as it went included (judgeAll)
         for w in s.wantField.Keys() {
-            if s.giveBackDecl(w.First): grew = true
+            if w.Second != -2 and s.giveBackDecl(w.First): grew = true
+        }
+        # ... and those a read through an element asked pinned, not given back (O23b per instance): every component
+        # judged again with them
+        for w in s.wantField.Keys() {
+            if w.Second != -2 or s.pinnedD.Has(w.First) or not s.promotedDecl(w.First): continue
+            s.pinnedD.Put(w.First, true)
+            s.pinGrew = true
+            grew = true
         }
         if s.gaveBack: grew = true
         s.gaveBack = false
@@ -14607,7 +14858,8 @@ fn (s mut Scoper&) inferFields() Bool {
         if not grew and s.wantHits == 0: return true
         s.P.L.Diags.Forget(mark)
         # the next round judges again only the components something they read changed for (judgeAll)
-        s.reuse = not s.NoReuse
+        s.reuse = not s.NoReuse and not s.pinGrew
+        s.pinGrew = false
         if not grew: return false
     }
     return false
@@ -14756,6 +15008,20 @@ fn (s mut Scoper&) giveBack(d I64) {
     s.wantsField.Push(pair.Pair<I64, I64>(d, -1))
 }
 
+# ... or pinned instead (O23b per instance): bound exactly where its container's references are wherever an instance is
+# held in an element, every store of one asking it (pinStore) - asked once (a WantField of -2); a declaration pinned that
+# still asks is given back. True where asked now
+fn (s mut Scoper&) pin(d I64) Bool {
+    if not (s.fieldGather and s.finalQuiet and not s.standIn and d >= 0): return false
+    if s.pinnedD.Has(d) or not s.promotedDecl(d): return false
+    key := pair.Pair<I64, I64>(d, -2)
+    if s.Trace and not s.wantField.Has(key) { s.TraceLog.Push($"pin " + $d + " " + $s.declWord(d) + " | " + $s.traceAt(s.stmtSp.Start)) }
+    if not s.wantField.Has(key): s.wantNewField.Push(key)
+    s.wantField.Put(key, true)
+    s.wantsField.Push(key)
+    return true
+}
+
 # ... the field a refusal reads through at a derived term t: the declaration it is read out of, and the parameter's
 fn (s mut Scoper&) giveBackRead(x typed.Expr&, t Term) {
     if not s.fieldGather or not s.finalQuiet: return
@@ -14777,7 +15043,8 @@ fn (s mut Scoper&) giveBackPlace(p typed.Lvalue&) {
     if not s.fieldGather or not s.finalQuiet: return
     match p {
         case typed.Lvalue.Field(_, _, b, _) {
-            s.giveBack(s.declOf(b.Type()))
+            # (read through an instance held in an element: its declaration pinned instead, the first time - O23b)
+            if not (s.pinPlace(b) and s.pin(s.declOf(b.Type()))): s.giveBack(s.declOf(b.Type()))
             s.giveBackPlace(b)
         }
         case typed.Lvalue.Elem(_, _, e): s.giveBackPlace(e.Base)
@@ -14804,8 +15071,28 @@ fn (s mut Scoper&) giveBackUnresolved(c typed.Call&, ct Term, t Term) {
         case _: false
     }
     if not unresolved or not s.unnamedInstance(c.Args[ct.p], ct.w, 0): return
-    s.giveBack(s.declOf(c.Args[ct.p].Type()))
+    # (an instance read out of an element: its declaration pinned instead, the first time - O23b per instance)
+    d := s.declOf(c.Args[ct.p].Type())
+    if s.pinnable(c.Args[ct.p], 0) and s.pin(d): return
+    s.giveBack(d)
     s.giveBackExpr(c.Args[ct.p])
+}
+
+# ... whether x's instance may be one pinning binds (O23b per instance): read out of an element, a call's result (an
+# element's copy a callee hands back, O13c), or a local holding one so
+fn (s mut Scoper&) pinnable(x typed.Expr&, depth I64) Bool {
+    if depth > 8: return false
+    v :~ unPassed(s.unAway(s.unPromoted(x)))
+    if typed.Call.Of(v) is not null: return true
+    p :~ match v {
+        case typed.Expr.Read(_, _, q, _), typed.Expr.Borrow(_, _, q), typed.Expr.Take(_, _, q): q
+        case _: return false
+    }
+    if s.pinPlace(p): return true
+    l := wholeLocal(p)
+    if l < 0 or s.B!.Locals[l].Kind == typed.LocalKind.Param: return false
+    init :~ try s.inits.Get(l) catch { return false }
+    return s.pinnable(init, depth + 1)
 }
 
 # O23b: whether x reads an instance reached through a path naming none - an element, a field of another instance, a
@@ -14849,7 +15136,7 @@ fn (s mut Scoper&) giveBackDerived(t Term) {
             # ... and the declaration whose field it was read through, deeper along the parameter's path, or above an
             # underestimate
             if p >= 0 { s.giveBack(try s.derivedDecl.Get(pair.Pair<I64, I64>(s.Id * 65536 + p, w)) catch default -1) }
-            if p < 0 and -p - 1 < s.underDecl.Len(): s.giveBack(s.underDecl[-p - 1])
+            if p < 0 and -p - 1 < s.underDecl.Len() and not (s.underPin.Has(-p - 1) and s.pin(s.underDecl[-p - 1])) { s.giveBack(s.underDecl[-p - 1]) }
         }
         case _ { }
     }
@@ -15802,7 +16089,16 @@ fn (s mut Scoper&) sigOf(comp Array<I64>&) String {
 
 # what the round a judging is made in decides of it
 fn (s mut Scoper&) ctxText(report Bool) String {
-    return $"r" + $(1 if report else 0) + " g" + $(1 if s.fieldGather else 0) + " p" + $(1 if s.partsOn else 0)
+    return $"r" + $(1 if report else 0) + " g" + $(1 if s.fieldGather else 0) + " p" + $(1 if s.partsOn else 0) + $s.pinWord()
+}
+
+# the pinned declarations (O23b per instance), as a word of a judging's context: "" for none
+fn (s mut Scoper&) pinWord() String {
+    if s.pinnedD.Len() == 0: return ""
+    ws Vec<String&>
+    for d in s.pinnedD.Keys(): ws.Push(s.declWord(d))
+    ws.Sort(fn(a String&, b String&) Bool { return a < b })
+    return $" n" + $hashText(ws.Join(","))[:12]
 }
 
 # the whole-program sets every judging may read, as words: the fields any body assigns after construction, the bodies a

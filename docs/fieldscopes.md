@@ -2,8 +2,9 @@
 
 **Decided 2026-11-23 (the user: "Yes, build this"), built on wt-fieldscopes.** Found tracing why the compiler's lower
 and emit phases grow from 2.5 to 4.3 GB on a cold self-build. Option B is written out in full below ("Option B in
-full"); what was built - O23b at the declaration's grain rather than per instance - and what it measured are in
-HISTORY.md (2026-11-23, "a shared field has a binding of its own") and SPEC's C2d, O28 and O23b.
+full"); what was built - O23b at the declaration's grain rather than per instance, then (wt-o23bi, 2026-11-26) B.1's
+per-instance equality for instances held in elements - and what it measured are in HISTORY.md (2026-11-23, "a shared
+field has a binding of its own"; 2026-11-26, "O23b per instance") and SPEC's C2d, O28 and O23b.
 
 ## What holds the memory
 

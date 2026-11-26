@@ -377,7 +377,8 @@ where it stands - lent, rendered - across a later operand's let-go was no view t
 values holding no reference by type; `readOf` now records it, the place keeping, as any field's array place does.
 Closed by wt-globalfill; checks' freeing globalviews.)
 
-- **O23b's equality, per declaration, not per instance** (field scopes option B, wt-fieldscopes, 2026-11-23): where
+- **O23b's equality, per declaration, not per instance - closed for instances held in elements** (field scopes option
+  B, wt-fieldscopes, 2026-11-23; wt-o23bi, 2026-11-26): where
   an instance is reached through an element, another instance's field, a global, an `any` or an unfollowed capture, and
   a store, build or call there needs its shared field's binding, the declaration keeps none for the whole program - C2d's
   equality comes back for every instance of the type, so storage built through such a field lives as long as the
@@ -396,15 +397,29 @@ Closed by wt-globalfill; checks' freeing globalviews.)
   into an element included, as an obligation its callers discharge, O22) asks that its binding be exactly the place's
   scope; a read through such a path is then exact at its container's scope (`fieldTerm` returns `partsTerm(base)`, not
   an underestimate) and nothing is given back; instances held by locals, parameters and results stay relaxed. No
-  run-time cost. Accepts a superset (in every program accepted today the stored copy already has I = V). Not built:
-  the in-body exact relation between a parameter's derived scope and a place's (`fit`'s exact derived case refuses it
-  today) needs derived obligations of exactness, a section-8 round of its own (Opus xhigh). Measured: fieldscopeflat
+  run-time cost. Accepts a superset (in every program accepted today the stored copy already has I = V). Measured: fieldscopeflat
   with one `stash` beside it (`ps.Push(Pass(c, Out(0))); x := Ctx(); q := ps[0]; q.link(x)`) gives Pass back and grows
   320 MB over 20,000 turns (flat without it). The self-build gives back ten declarations (views:Viewer, interp:Exec,
   eval:Machine, emit:Emitter, names:Resolver, scope:Scoper, load:Loader, listing:Writer, check:Checker,
   generic:Program), all through a context reached through another's field (`v.P.L.Diags.Error(...)`), each built once
   a run - nothing to free there. builtref (2.5) is no O23b case: `P.r String&` is never promoted (no store through it);
   its gap is a reference field owning what a call builds for it, option (a) of its entry.
+  **Built for instances held in elements (wt-o23bi, 2026-11-26; SPEC O23b).** A declaration a read through an element
+  would give back is *pinned* instead (scope.olang `pin`, a WantField of -2; given back only where a pinned one still
+  asks, or a store cannot show its binding). Pinned: an instance held by value in an element, or in a field held by
+  value of one held so (`pinPlace`), is bound at `partsTerm` of its place (`fieldTerm`; a local copied from one,
+  `bindLocal`; a result handing one back, `noteResBind` - Vec's `At`; an argument reading one, `derivedAt`), and every
+  store of an instance anywhere but into a whole local - `assign` (an `occupy` is one), an array literal's or fill's
+  element (`valMake`) - fits each shared field's binding exactly into the place's term (`pinStore`, C2d's error where it
+  cannot), a value holding one by value inside it too when it is read out of an element or a constructor's instance
+  given it as it is (`pinNested`: a Map's `MapEntry`). The binding of a parameter held by value inside a body is its
+  derived scope (`pinnedParam`), so `Vec.Push`'s `v.data[v.n].occupy(x)` records "D(x, C) exactly v's" for its callers
+  (O22): `fit`'s oblige already records an exact relation as two, and `derivedAt` resolves the argument's binding at
+  each call. Not pinned, given back as before: a read through a reference held in a field (the self-build's ten:
+  `v.P.L`, `x.M`, `fe.E.Lw`), a payload, an `any`, a capture; and a value nesting a pinned instance built otherwise. A
+  judging's record names the pinned set (`ctxText`), so a record judged under other pins is never taken. fieldscopeflat
+  with the stash (checks' fieldscopepin) is flat; the self-build pins nothing and gives back the same ten, its IR
+  unchanged (binary byte-identical), scope phase and peak within noise (3.2-3.4 s, 2692 -> 2703 MB).
 - **A lambda passed as a function value that builds through a captured helper's field - closed** (wt-fieldscopes,
   2026-11-23; closed by wt-fnvalbuild, 2026-11-25): the build gave the field's declaration back (O23b's equality)
   instead of reaching the binding by O29's run-time lookup, as a direct call through the same capture would, so every
@@ -762,10 +777,9 @@ other conditions say, for every map of the type: gaps17b flat.
 **Cost.** None at run time. Compile time: one `typed.LocalUses` walk and one text scan per body holding a viewer with a
 root, in the final walk only (measured with the self-build, 2.5's log entry).
 
-**O23b per value: not by this.** O23b's equality is a field's scope binding needed at run time where an instance is
-reached through an element, a global, an `any` or a capture; per instance it is a scope handle each instance would carry
-- a word per instance, which field scopes option B was built to avoid - not a condition a compile-time judgement can
-settle. It stays per declaration (2.4).
+**O23b per value: not by this.** O23b's equality is not a view's keep, so condition 6 per value does not reach it. It is
+per instance now by a compile-time equality at stores, for instances held in elements (2.4, wt-o23bi; no word per
+instance); a reference held in a field, a payload, an `any` or a capture still gives the declaration back.
 
 ## 3. Order of work (phase 2)
 
