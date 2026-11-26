@@ -2649,6 +2649,9 @@
 | status 0
 === run fieldscopepart.olang
 | status 0
+=== run fieldscopepin.olang
+| status 0
+| flat
 === run fieldscoperepoint.olang
 | status 0
 === run fieldscopereturn.olang
