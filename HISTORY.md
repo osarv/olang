@@ -44227,6 +44227,9 @@ patterns); then, with today's compiler, a parallel assignment to a reference tar
 see - read the `a, b = ...` statements whose targets are references and write `a, b ~ ...`; `olang fix` rewrites any `==
 null` left.
 
+Migrated (2026-11-26): olang itself (15e0cf864), oann (da82d61, 666e1c9), oagent (5081a4f, 6b219a9), and
+the user's private repositories.
+
 Tests: tests/assign.olang (a write through a reference into a struct, `==` through two references and through two that
 may be null, `:=` copying, a unique value's destructor run once by a write through a `mut` parameter, a write through a
 list's link read back after an arena churn; `Written` baked); checks cases e10cnulleq, e10deqany, s4fwritenull (fail),
