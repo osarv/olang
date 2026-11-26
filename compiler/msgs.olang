@@ -751,7 +751,6 @@ type Diag enum {
     LostParamWrite
     FreshParamRepoint
     LinkToValue
-    LinkFresh
     NullTestEq
     EqOfAny
     WriteThroughNull
@@ -1893,7 +1892,6 @@ fn LostLoopWrite(n String&, repoints Bool, counter Bool) r.Msg { return r.Msg(Di
 fn LostParamWrite(n String&, repoints Bool, through Bool) r.Msg { return r.Msg(Diag.LostParamWrite, "S4e", "the write to '" + n + "' is lost: nothing reads '" + n + "' after it", ("'" + n + "' was linked to the callee's own storage (S4f), so a write through it never reaches what the caller passed" if through else "'" + n + "' is a reference, and '~' links the callee's own copy of it (S4f), never writing what the caller passed" if repoints else "'" + n + "' is the callee's own copy (D9), and nothing reads it again"), ("write through '" + n + "' before linking it, or return the new value" if through else "write through the reference - '" + n + " = ...' or '" + n + ".f = ...' - or return the new value" if repoints else "return the new value, or take a 'mut' reference to change the caller's")) }
 fn FreshParamRepoint(n String&) r.Msg { return r.Msg(Diag.FreshParamRepoint, "S4e", "'" + n + "' is linked to a new value: the caller still sees what it passed", "'" + n + "' is a reference parameter, and '~' links the callee's own copy of it (S4f) - to storage built here, which the caller never sees", "write through the reference - '" + n + " = ...' or '" + n + ".f = ...' - return the new value, or build a scratch value in a local, 't := ...'") }
 fn LinkToValue(n String&, ty String&) r.Msg { return r.Msg(Diag.LinkToValue, "S4f", "'~' links a reference, and '" + n + "' holds a value (" + $ty + ")", "", "write '=' to store into '" + n + "'") }
-fn LinkFresh(text String&) r.Msg { return r.Msg(Diag.LinkFresh, "S4f", "':~' declares a reference to storage that exists, and '" + $text + "' is a new value", "a new value linked with '~' is built where the reference is held", "write ':=' to declare it a value of its own") }
 fn NullTestEq(neg Bool) r.Msg { return r.Msg(Diag.NullTestEq, "E10c", "the null test is written 'is null'", "'==' and '!=' compare contents, and null has none", "write 'x is not null'" if neg else "write 'x is null'") }
 fn EqOfAny(ty String&) r.Msg { return r.Msg(Diag.EqOfAny, "E10d", "'==' compares contents, and two " + $ty + " have none in common", "", "write 'is' to ask whether they name one object") }
 fn WriteThroughNull(text String&, ty String&, bang String&) r.Msg { return r.Msg(Diag.WriteThroughNull, "S4f", "'=' writes what '" + $text + "' names, and it is a " + $ty + ", which may be null", "", "test it first ('if x is not null'), write '" + $bang + "!', or link it with '~'") }

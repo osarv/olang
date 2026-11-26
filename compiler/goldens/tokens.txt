@@ -1512,8 +1512,8 @@ c992296504d41cd3 9d2ae17ba262a41e checks/cases/s20yieldheld.olang
 491571de6bcfcdb6 e812a3edcca154a8 checks/cases/s3busy.olang
 7b33c2b36ea5fc35 02e30ddea2dc5e68 checks/cases/s3idle.olang
 6e99701cffe66c98 95fc6e644bc349c7 checks/cases/s3joinnextline.olang
-66b372ed3ee59fc4 e9ad8851703a59bf checks/cases/s4fdefinefresh.olang
-74e754516d19204e cc379e910cb4143b checks/cases/s4flinkfresh.olang
+eddf55d4f8566dbc 3aeaa9e61f33e29a checks/cases/s4fdefinefresh.olang
+872077f834c84c74 be4b527870db96af checks/cases/s4flinkfresh.olang
 a71379e91e210fc7 986ea83688e6563c checks/cases/s4flinkvalue.olang
 6ebc2187db3568cf 3d629d3916cf81f5 checks/cases/s4fwritenull.olang
 82fdd7a65339f65a 07e863ec407d1370 checks/cases/s4fwritethrough.olang
@@ -2579,7 +2579,7 @@ e2e32b6bf736edf4 f2e3de4f89ad0d10 checks/fixtures/weak/good.olang
 ce25fc9dd3e6b3a6 85133eef16b63f75 compiler/build.olang
 86b0f621e0dc4ecd 59322b5bdf83538c compiler/cabi.olang
 7058f80ed1bd6dff 36ac28ef54ff03e2 compiler/cells.olang
-fc39297950c31cd8 68fd04f52c32a20b compiler/check.olang
+390bc7cbc09cfce7 f4b30da9b72135af compiler/check.olang
 adff471e17dc2601 918380bf03fece7d compiler/cond.olang
 153c4e2daca74910 29612636717c65ec compiler/definit.olang
 43346bfdaf1b9d3e e6acc679490084ae compiler/diag.olang
@@ -2605,7 +2605,7 @@ c57ed09cf7ebd444 4729b238f12f0aa4 compiler/lsp.olang
 4ae3a7800c5bae72 42a1226bb8e95e02 compiler/mcp.olang
 58d176a3e635da8e 17f4e1dc03b84b98 compiler/measure.olang
 64e7191aaade86a2 266e0cdd2017bef0 compiler/mir.olang
-ca8fac5baf8526f2 599b3e1a34474489 compiler/msgs.olang
+ad1ece667017dd58 0aa52767cb7e44a4 compiler/msgs.olang
 9c6534cef08bc7ca 3d7e0d372ce84e7d compiler/names.olang
 fc66faef5211dbff 206306da21572454 compiler/needs.olang
 3413eebc906e8793 9f656d8ad54bf6a2 compiler/notebook.olang
@@ -2720,7 +2720,7 @@ da0179c97f8ad5bc 5d751772cdacdd00 fuzz/repro/scopectornested.olang
 e61e1ea3dbb78291 6701971073a706d2 fuzz/repro/scopepayloadcopy.olang
 db8945d61d1da622 da12aa95f546f5f0 fuzz/repro/trygenericindex.olang
 b7abbff135b27450 4e7c79e12e6b4c0b fuzz/repro/trystmtarg.olang
-1c33f26689b70dd9 2d0a0e706ee1ea26 fuzz/scopegen.olang
+8c5630d228024609 577dde580acce641 fuzz/scopegen.olang
 3f26b197b54783c5 9ed5211f4f413842 std/arith.olang
 1b7326a0a6c59a81 b1196b42883f511f std/base64.olang
 b34d7704a70a94a2 774f94956a2e1011 std/bench.olang
@@ -2793,7 +2793,7 @@ cbf29ce484222325 cbf29ce484222325 tests/Lib.olang
 042fec190d0cf3a5 d53b79c0017f6c92 tests/any.olang
 1cdd1af517c189f1 4ad8efcf214fab0c tests/arraypat.olang
 2e650060c18283db 3b2b7b2993fa8677 tests/asserts.olang
-18d36b8d26f158be 72d8b4fc919ddd08 tests/assign.olang
+509475aeedf9224a 5fedf754a1e0f4bc tests/assign.olang
 07c2d18745a48d08 38d2ecb730e1cbb2 tests/axes.olang
 16600c57f3b4ae11 5d7f727babcda5a2 tests/barelits.olang
 b0a30f43fcdb1650 8382ebbad6d95b14 tests/become.olang

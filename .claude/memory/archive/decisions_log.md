@@ -3915,3 +3915,12 @@ Answered 2026-11-18 (the user, via the Orchestrator: "Go with B, yes"): no rule;
    Answered (the user, 2026-11-26, via the Orchestrator; superseded): neither - `=` assigns contents through a
    reference (ending the old value as a store does), `r ~ x` links a reference, `r :~ x` declares one (S4f); `==`
    compares contents, `is` tests one object (E10d), `is null` the null test (E10c). HISTORY "links and contents".
+
+6. (2026-11-26, wt-assign stage 2; HISTORY "links and contents, stage 2") `r ~ x` with `x` a new value (a constructor's
+   call, a literal, a call giving a value): the decision said an error, but the compiler alone holds 351 such links
+   (`p ~ typed.Lvalue.Deref(...)`), and a local plus a link for each would double those statements. Default in effect:
+   `~` builds the new value where the reference is held (E12c, the old repoint's placement); `:~` of a new value stays
+   an error (`:=` declares it). Recommendation: keep the default.
+   Answered (the user, 2026-11-26: "I think both r ~ and r :~ should be fine"): `r ~ x` of a new value kept (built in
+   the linked storage); `r :~ x` of one made legal (held by the declaring block as `r := x` would be). HISTORY
+   "`:~` of a new value, and `~` of one kept".

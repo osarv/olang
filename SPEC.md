@@ -5495,8 +5495,9 @@ link-decl  ::= IDENT ":~" expr STMNT_END
 
 A **new value** - a literal other than `null`, a constructor's call, a call giving a value, any value with no storage
 of its own (E12c) - after `~` is built where the reference is held, as a declaration's value is (E12c, O6): `n.next ~
-Node(2)` links `n.next` to a new node in the scope `n`'s instance lives in. After `:~` it is a compile-time error: `:=`
-declares a value of its own. `~` whose left side holds a value (not a reference) is a compile-time error: `=` stores
+Node(2)` links `n.next` to a new node in the scope `n`'s instance lives in. After `:~` it is held as `r := x` would hold
+it - in the declaring block, built, freed early and its destructor run as that local's value - and `r` is a writable
+reference to it: `r :~ Node(2)` is `n := Node(2)` then `r :~ n`, with `n` unnamed. `~` whose left side holds a value (not a reference) is a compile-time error: `=` stores
 into it. The place is evaluated before `x`, as for `=` (S4), and S4e holds for a reference parameter linked.
 
 `:=` (S1) **declares a value**: given a reference to storage that exists - another reference, a field reached through

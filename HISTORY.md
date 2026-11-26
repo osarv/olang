@@ -44231,3 +44231,18 @@ Tests: tests/assign.olang (a write through a reference into a struct, `==` throu
 may be null, `:=` copying, a unique value's destructor run once by a write through a `mut` parameter, a write through a
 list's link read back after an arena churn; `Written` baked); checks cases e10cnulleq, e10deqany, s4fwritenull (fail),
 s4fwritethrough (run), s4flinkfresh and s4fdefinefresh now about `:~`; checks' assign fixture holds null tests only.
+
+### `:~` of a new value, and `~` of one kept (S4f, the user's call 2026-11-26)
+
+Ledger question 6 asked about `r ~ x` with `x` a new value, which stage 2 had kept building where `r` is held against
+the first decision's "a fresh value is an error", and named `:~` of one still refused. The user: "I think both r ~ and
+r :~ should be fine". So `r ~ T()` stays as built (the new value in the linked place's scope), and `r :~ T()` is now
+legal: the checker (`Checker.linkFresh`) holds the value in a hidden local of the declaring block, given it exactly as
+`r := T()` would be (a value with destructors as its holder, an array at its inferred length), and declares `r` a
+writable reference to that local. Because it is an ordinary local, nothing else changed: scope inference, early
+freeing, destructors, codegen and the evaluator see a local and a link to it, so the value cannot dangle - a cursor
+kept past the block is refused as for `r := T()` (O25i), and a returned `r` is placed in the caller as a returned local
+is. The diagnostic `LinkFresh` had no other use and is gone. Tests: tests/assign.olang (`Fresh` baked by the evaluator
+beside the run time, a constructor's value read back after an arena churn, a destructor run once as the block closes);
+checks cases s4fdefinefresh and s4flinkfresh turned into run cases; the scope fuzzer (fuzz/scopegen.olang) declares
+half its new nodes with `:~`.

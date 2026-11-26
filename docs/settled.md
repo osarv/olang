@@ -139,9 +139,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   whole referent and ending the old value as a store does (a `?&` only where a test says it is not null, else
   `WriteThroughNull`) - and `a := b` defines a value (of a reference to existing storage, a copy of what it names; a
   unique or generational one stays a reference, T13b/T13d). References: `r ~ x` links `r` to `x` (a variable, a field,
-  what a reference names; never to a reference itself; a new value is built where `r` is held, mine - 351 such links in
-  the compiler alone), `r :~ x` declares a reference local (writable where `x` may be written; a new value refused,
-  `:=` declares it), `r ~ null` unlinks a `?&`. `==`/`!=` compare contents, through references too (a null equal only
+  what a reference names; never to a reference itself; a new value is built where `r` is held - the user's call
+  2026-11-26, "both r ~ and r :~ should be fine"), `r :~ x` declares a reference local (writable where `x` may be
+  written; a new value is held by the declaring block as `r := x` would hold it, `r` a writable reference to it - the
+  same call), `r ~ null` unlinks a `?&`. `==`/`!=` compare contents, through references too (a null equal only
   to a null; a reference held inside a value, to a type with no `Eq`, by identity - so back links and cycles end the
   walk, mine); `==` on two `any` is refused naming `is`; function values compare by identity. `a is b` / `a is not b`
   test one object, never calling `Eq`; `x is null` / `x is not null` the null test, `x is null` refused naming it. `is`
