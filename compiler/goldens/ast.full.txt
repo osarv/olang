@@ -103,6 +103,9 @@
 === checks/cases/g12spaced.olang
 | -- diagnostics
 | error G12 6:23
+=== checks/cases/isname.olang
+| -- diagnostics
+| error L9a 4:5
 === checks/cases/keywordlocal.olang
 | -- diagnostics
 | error L9a 4:5
@@ -518,12 +521,15 @@
 | CATCH 28:22-28:41
 | EXPR 27:5-27:38
 | EXPR 29:5-29:54
+| FN 21:1-24:2
 | FN 26:1-30:2
+| IF 22:5-22:27
 | IMPORT 3:1-3:16
+| RETURN 22:19-22:27
+| RETURN 23:5-23:19
 | VAR 28:5-28:41
 | -- diagnostics
 | error  16:16
-| error  22:10
 | error  7:9
 | error  9:26
 | error L9 5:1
