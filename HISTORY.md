@@ -44246,3 +44246,29 @@ is. The diagnostic `LinkFresh` had no other use and is gone. Tests: tests/assign
 beside the run time, a constructor's value read back after an arena churn, a destructor run once as the block closes);
 checks cases s4fdefinefresh and s4flinkfresh turned into run cases; the scope fuzzer (fuzz/scopegen.olang) declares
 half its new nodes with `:~`.
+
+## 2026-11-26: O23b per instance decided; a scope word cannot do it (the user's call; mine on the mechanism; wt-o23b)
+
+The user answered ledger questions 3-5 (via the Orchestrator, as recommended): 3, build per-instance freeing for the
+declarations O23b gives back, by a scope word carried in each instance; 4 and 5, record only - no run-time pin for a
+view across its own value's let-go, and views rooted at a parameter, field or global judged per declaration until a
+real program shows the growth.
+
+Building 3 began with a trace. OLANG_INFERDUMP's give-back line now names the declaration (`give back D module:Name |
+line`). Over the self-build ten declarations go back - Viewer, Exec, Machine, Emitter, Resolver, Scoper, Loader,
+Writer, Checker, Program - each through a context reached through another's field (`v.P.L.Diags.Error(...)`) and each
+built once a run, so nothing is kept there. Probes: a build through an element (`ps[0].note(i)`, `q := ps[0];
+q.note(i)`, the callee pushing text through `p.C`) gives nothing back - O29's run-time lookup serves it. What gives a
+declaration back is existing storage stored through the field of such an instance - `q := ps[0]; q.link(x)`, link's
+"x exactly D(p, C)" - a judgment that places `x` while compiling. A word in the instance holds the scope only while
+the program runs, so it cannot place `x`: built, it would cost a word per construction and free nothing. The
+per-instance form that frees is docs/fieldscopes.md B.1's own O23b: each store of such an instance into an unnamed
+place asks its binding exactly the place's scope, so a read through such a path is exact at its container's scope and
+nothing is given back - no run-time cost, a superset of the programs accepted today. Its missing piece is an exactness
+between a parameter's derived scope and a place's inside a body (a generic `Push` storing its argument into an
+element), which `fit` refuses today; it needs derived obligations of exactness that callers discharge (O22), a
+section-8 round of its own. Measured gap: checks' fieldscopeflat with one stash beside it (`ps.Push(Pass(c, Out(0)));
+x := Ctx(); q := ps[0]; q.link(x)`) gives Pass back and grows 320 MB over 20,000 turns.
+
+builtref, which the ledger named, is no O23b case: `P.r String&` is never promoted (nothing is stored through it). Its
+gap stays as docs/freeing.md 2.5 says: a reference field owning what a call builds for it (option (a)), not decided.

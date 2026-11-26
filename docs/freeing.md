@@ -385,6 +385,26 @@ Closed by wt-globalfill; checks' freeing globalviews.)
   per instance (with the per-instance buffer places, plan.md), not dropped for the declaration. (2.5, wt-perinst: not
   closed by condition 6 per value - what is per instance here is a scope handle each instance would carry, a word per
   instance; it stays per declaration.)
+  **Decided per instance (the user, 2026-11-26); the mechanism is compile-time, not a word (wt-o23b, measured).** The
+  ledger offered a scope word carried in each instance. Traced (OLANG_INFERDUMP, `give back D decl | line`), what gives a
+  declaration back is never a build or a hidden scope argument - those through an element, `ps[0].note(i)` or `q :=
+  ps[0]; q.note(i)`, keep the binding already (O29's lookup) - but a compile-time exactness: existing storage stored
+  through the field of an instance reached through such a path (`q := ps[0]; q.link(x)`, link's "x exactly D(p, C)"),
+  which decides where `x` is placed while compiling. A run-time word cannot place it, so a word frees nothing here.
+  What frees per instance is fieldscopes.md B.1's own O23b: every store of an instance of such a declaration into an
+  unnamed place (element, another instance's field, payload, global, `any`, unfollowed capture - a generic body's store
+  into an element included, as an obligation its callers discharge, O22) asks that its binding be exactly the place's
+  scope; a read through such a path is then exact at its container's scope (`fieldTerm` returns `partsTerm(base)`, not
+  an underestimate) and nothing is given back; instances held by locals, parameters and results stay relaxed. No
+  run-time cost. Accepts a superset (in every program accepted today the stored copy already has I = V). Not built:
+  the in-body exact relation between a parameter's derived scope and a place's (`fit`'s exact derived case refuses it
+  today) needs derived obligations of exactness, a section-8 round of its own (Opus xhigh). Measured: fieldscopeflat
+  with one `stash` beside it (`ps.Push(Pass(c, Out(0))); x := Ctx(); q := ps[0]; q.link(x)`) gives Pass back and grows
+  320 MB over 20,000 turns (flat without it). The self-build gives back ten declarations (views:Viewer, interp:Exec,
+  eval:Machine, emit:Emitter, names:Resolver, scope:Scoper, load:Loader, listing:Writer, check:Checker,
+  generic:Program), all through a context reached through another's field (`v.P.L.Diags.Error(...)`), each built once
+  a run - nothing to free there. builtref (2.5) is no O23b case: `P.r String&` is never promoted (no store through it);
+  its gap is a reference field owning what a call builds for it, option (a) of its entry.
 - **A lambda passed as a function value that builds through a captured helper's field - closed** (wt-fieldscopes,
   2026-11-23; closed by wt-fnvalbuild, 2026-11-25): the build gave the field's declaration back (O23b's equality)
   instead of reaching the binding by O29's run-time lookup, as a direct call through the same capture would, so every
@@ -727,7 +747,9 @@ program needs the old storage by its own text, so it keeps memory whatever the p
 form (`base.Push` with a view of `base` in use) outright. Keeping that value alone needs direction (a)'s pin, a cost at
 every store into the place, to spare the other values' growth in a program already keeping - recorded, not built. And a
 view whose root is a parameter, a global or a value not contained is judged per declaration: parameters may name one
-value (`fn f(a, b mut Vec<I64>&)` given the same Vec twice), a global is reached by any callee.
+value (`fn f(a, b mut Vec<I64>&)` given the same Vec twice), a global is reached by any callee. Both kept so (the user, 2026-11-26,
+ledger 4 and 5): no run-time pin; a view rooted at a parameter, field or global stays per declaration until a real
+program shows the growth, and then both are measured.
 
 **Owners per value for a slot place (`decide`'s owner rule).** An owner held in a sole place has all of its storage in one
 region, released through its anchors (types.Anchors), so the array places it holds keep. A slot place no anchor of the

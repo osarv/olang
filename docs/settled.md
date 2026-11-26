@@ -1015,7 +1015,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   binding, the declaration keeps none, for the whole program (today's equality) - a superset of the programs accepted
   before, never placing anything later; except a build through an unfollowed capture's field (a lambda passed as a
   function value no judging follows), built where the field's referent is found at run time (O29, wt-fnvalbuild). A freeing gap (docs/freeing.md 2.4): the equality O23b gives back is per declaration, not per
-  instance (the user wants freeing per instance). A closure's capture scopes are the plan's (`caps`) in the evaluator as in
+  instance. Decided per instance (the user, 2026-11-26), to be built as B.1's per-instance equality at stores into
+  unnamed places, judged while compiling - no scope word: what gives a declaration back is a compile-time exactness a
+  run-time word cannot settle (wt-o23b, measured). A closure's capture scopes are the plan's (`caps`) in the evaluator as in
   the native code, never the environment's for a capture held by value. The compiler's helpers: `lowering` holds the scope pass's plan by reference
   (`Lowerer.planFor`), `explain Lowerer.LowerKey` says "lw outlives return" alone, and the cold self-build's lower+emit
   peak fell 3814 -> 2990 MB.
@@ -1095,7 +1097,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   own value's let-go keeps the place for every value (no run-time mark: the per-value pin is a cost on every store into
   the place, not built). An owner's slot place no anchor of its type is at (a `Map`'s keys) no longer keeps with the
   owner: its keys are built in the owner's region, which the slot release leaves them to. O23b stays per declaration
-  (per instance it is a scope handle each instance carries).
+  until its per-instance equality is built (2.4). The pin and per-value views rooted at a parameter, field or global:
+  not built, kept so (the user, 2026-11-26).
   A let-go the compiler does not follow is a gap:
   `-memory` names it and `-memory -check` (B18a; `-check` alone in a build) fails the build on it. **Captures and local copies
   (2026-11-21, mine; docs/freeing.md):** a value a lambda captures is the lambda's own copy, its parts split, made in
