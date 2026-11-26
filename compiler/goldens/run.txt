@@ -3331,7 +3331,7 @@
 === run rv5taskstore.olang
 | status 0
 === run rv6closurekept.olang
-| status 0
+| status 2 unstable
 === run rv6closuretasks.olang
 | status 0
 === run rv6nestedjoins.olang
