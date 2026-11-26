@@ -138,7 +138,12 @@ table, the `checks` scenario `freeing` (its `gaps.olang` greps the row; every ea
 turn row (B18a: storage built outside a loop's turn that no place lets go of - `lower.olang`'s `liftedCopy`, `turnKept`,
 `keptResult` and `builtResult`, pushed to `LiftGaps`, which `olang.olang` prints and counts under `-check`) reads free's
 facts (`PreservedSite`, `ResBuilds`) and the scopes lowering builds in (`keptArgs`, a call's result scope): a change to where lowering builds an argument's copy
-or a call's value changes it, and docs/freeing.md section 4. A
+or a call's value changes it, and docs/freeing.md section 4. A closure a call makes for a function value local kept on
+some turns (`lower.olang`'s handsPlan, handMake, handCall, handCopy, handOver; docs/freeing.md 2.4) is built in a region
+its handles name and released by `mir.Stmt.Drop` (emit's `__olang_region_drop`, the evaluator's `closeRegion`); it rests
+on `free.ClosureResult` and the callee's relations (`scope.olang`'s ResultOwn, KeptInResult) and on where the plan puts
+a lambda's environment and a by-value argument it captures - a change to any of them changes it, and `closureKept`
+names what it leaves (checks' freeing closurekept, kept's closuresKept). A
 part built in slots (a `Map` entry's text, an array's text element: `free.olang` SlotPlace, SlotParts) is released by
 `mir.Stmt.ReleaseSlot` and modelled by the evaluator's slot scope (`eval.olang`, each allocation a region of its own):
 a change to one changes the other. A part place's value (O8f: an array a struct holds by value that is no slot place -

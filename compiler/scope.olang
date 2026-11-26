@@ -4897,6 +4897,42 @@ fn (s mut Scoper&) resultVarOf(fty types.TypeId) I64 {
     return -1
 }
 
+# O8f (freeing.md 2.4): whether body b's obligations leave its result scope its own - no relation holds it to outlive
+# anything, so what b builds there is reached through its result alone, and a caller may pass a region made for it
+fn (s mut Scoper&) ResultOwn(b I64) Bool {
+    if b < 0 or b >= s.Bodies.Len() or not s.sum(b).Done: return false
+    rv := s.resultVarOf(s.Bodies[b].Ty)
+    if rv < 0: return false
+    for r in s.sum(b).Rels {
+        if r.Hi == Term.Var(rv): return false
+        if r.Lo == Term.Var(rv) and (r.Exact or r.Bind): return false
+    }
+    return true
+}
+
+# ...and whether its by-value parameter k's storage is held, by its obligations, to outlive nothing but its result scope
+# (a lambda it hands back capturing it): a caller may build the argument where it builds the result. False where k has
+# no scope variable of its own
+fn (s mut Scoper&) KeptInResult(b I64, k I64) Bool {
+    if b < 0 or b >= s.Bodies.Len() or not s.sum(b).Done: return false
+    fty := s.Bodies[b].Ty
+    rv := s.resultVarOf(fty)
+    vars := s.P.T.ScopeVarsOf(fty)
+    # (no other parameter sharing its variable: one held in the same scope as it)
+    for i in range s.P.T.Items(s.P.T.Params(fty)).Len() {
+        if i != k and s.P.T.ShareOf(fty, i) == k: return false
+    }
+    found := false
+    for v in range vars.Len() {
+        if vars[v] != k: continue
+        found = true
+        for r in s.sum(b).Rels {
+            if r.Hi == Term.Var(v) and r.Lo != Term.Var(rv): return false
+        }
+    }
+    return found and rv >= 0
+}
+
 fn (s mut Scoper&) sumBuilds(callee I64, v I64) Bool {
     bs := s.sum(callee).Builds
     return v >= bs.Len() or bs[v]

@@ -4591,6 +4591,12 @@ fn (fe mut fnEm&) stmt(s mir.Stmt&) {
             fe.E.runtime("__olang_region_settle_in")
             fe.w("call void @__olang_region_settle_in(ptr " + $r + ", ptr " + $a + ")")
         }
+        case mir.Stmt.Drop(_, h) {
+            # O8f: a closure's region (freeing.md 2.4) released by its handle - nothing for 0
+            r := fe.let("inttoptr i64 " + $fe.load("i64", fe.localAt(h)) + " to ptr")
+            fe.E.runtime("__olang_region_drop")
+            fe.w("call void @__olang_region_drop(ptr " + $r + ")")
+        }
         case mir.Stmt.Write(_, b, how, x) {
             if fe.directRef(b) {
                 fe.pieceKinds.Push(how)

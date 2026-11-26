@@ -44013,6 +44013,54 @@ all new (`("n0").PadEnd(80, '-')`) keeps `Named.name`, a part place whose constr
 reported (`ctorParts`): a named keep, "its new value is not all new". Fixture: checks' freeing fillwalk (`limited`;
 `M=15` names the padded field).
 
+## 2026-11-26: a closure a call makes, in a region of its own (O8f, B18a; mine, within the user's "free when we can"; wt-fnregion)
+
+fnvalgrow (`g := closer(a); if i % 7 == 3: f = g`, `f` a function value local declared before the loop) built every
+turn's closure - its environment, the callee's copy of `a` - where `f` lives, since `g` may become `f`'s value; wt-revfix2
+named it (`closureKept`) and docs/freeing.md 2.4 laid out three ways to free it: (a) a copy of a closure's environment
+where it is stored - a third word in every function value and a copy no one wrote, against "copies are written"; (b)
+per-value regions for function value locals; (c) leave it named. Built (b), the recommendation: it changes no meaning
+and no visible cost (a region per construction, made where the closure's own allocation is), so it was decided as an
+implementation choice.
+
+How it works. Lowering looks, once per body with two function value locals or more, for a pair: `g` declared by a call
+to a function handing back only closures it makes (`free.ClosureResult`), `g` read only to call through and to give
+one `f`, `f` given nothing else and read only to call through, neither captured, lent or stored, no task, join or
+suspension in the body (`handsPlan`, a walk of its own over every statement and expression: a mention it does not know
+is "other" and the pair is dropped). Calls through either must take and hand back nothing holding a reference
+(`handSig`: a read-only reference to plain data at most, no error payload holding one) - so nothing of an environment
+outlives its closure through a call's result. At `f`'s declaration two handles are zeroed: the region the call made last
+that no one holds (`g`'s) and the one `f` holds. At the call (`handMake`), where the plan puts its result in `f`'s block's
+scope, outside the loop's turn: the pending region is released (`mir.Stmt.Drop`, a new statement: `__olang_region_drop`
+on the handle, the evaluator's `closeRegion`; nothing for 0) and a new one made, a kid of that scope, passed as the
+result scope. At `f = g` (`handOver`): where `g`'s handle is not 0, `f`'s region is released, `f`'s handle takes `g`'s,
+and `g`'s is zeroed - so a second `f = g` in one turn releases nothing.
+
+Soundness rests on the callee's relations: `scope.ResultOwn` - none holds its result scope to outlive anything (what it
+builds there is reached through its result alone; an exact or bound relation with another variable fails it too). The
+first build left the closure flat at half the growth: the argument (`mkA(i)`'s result, or the copy of `a`) was built by
+the caller where the plan put it, `f`'s block, because the callee keeps its by-value parameter in what it hands back.
+`Lowerer.HandsOnly` does not see a capture as handing back, so `scope.KeptInResult` asks the relations instead: every
+relation holding the parameter's variable to outlive something names the result's, and no other parameter shares it.
+Such an argument is then built in the region too - a copy (`handCopy`), a call whose result scope is its own given plain
+values (`handCall`), or a local declared by a call in `g`'s block and mentioned only as this argument (fnvalgrow's `a`,
+moved at its last use: the region is made at that local's call instead, `handEarly`, and the call making the closure
+finds it made) - and the callee's scope variable for the parameter is passed the region (its copy's parts were built
+there). Any other argument - one built deeper, `closer(twice(mkA(i)))` - leaves the call as it was, so `closureKept`
+still names it: `-check` stays honest. Measured: fnvalgrow and review 1125b's xmod/l1xmod (the closure from another
+module - the relations are the callee module's facts, B3i) from 40 MB / 394 MB at 20,000 / 200,000 turns to 12.9 MB;
+probes of a local lent to a call, returned, stored in a Vec or a global, a closure capturing a reference, the local
+given to a task (`-race` too), all agreeing across built, `-free late`, `-sanitize` and the evaluator, the escaping ones
+named. Every probe of batch1125b and batch1125 agrees; `-check`'s verdicts are unchanged but fnvalgrow's. The self-build
+frees 562 of its 1024 places (master's source: 560 of 1022 under either compiler); warm peak 2633 MB against master's
+2603 on its own source, within the run-to-run noise measured (2615-2640 for one compiler on one source).
+
+What it does not close: builtref (wt-revfix1's `rr := second(o.inner); o.inner = P(mkA(i), mkB(i), rr)`). The same
+handover would need the reference's place to be a local; there it is a field path (`o.inner.r`) let go of when `o.inner`
+or `o` is given another value and copied wherever `o` or `o.inner` is read whole - a handle per field path and a walk
+over every read of the struct, the per-place work of docs/fieldscopes.md and O23b. It stays named (`builtResult`).
+Fixtures: checks' freeing closurekept (`limited`, M=3 flat; `M=4` - the local lent to `apply(e)` - names the call), kept's
+closuresKept (baked and run).
 ## 2026-11-26: a text local given existing text each turn, finding 6's reason, a Vec that only grows (O8f, B18a; mine; wt-revfix3)
 
 Three items left open by wt-revfix1 and wt-revfix2 (docs/freeing.md 2.4).
