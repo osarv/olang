@@ -434,6 +434,7 @@
 | ok - heldRefs: gives a struct held in place, holding a reference beside its owners, a new instance each turn
 | ok - caseLocals: gives locals an enum case holding a parameter's reference
 | ok - keptArgs: gives a constructor whose instance is copied a value local's copy and a call's value each turn
+| ok - taskCaptures: keeps tasks' clause defaults made by handlers capturing a Vec of text, past their turn
 | ok - taskDefaults: keeps tasks' clause defaults, built where their results would be, past their turn
 === test tests/keptfacts.olang
 | status 0
