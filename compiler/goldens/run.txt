@@ -52,6 +52,8 @@
 | ok - '==' through references that may be null: a null equals only a null
 | ok - a write through a reference ends the old value once, and the new one where its holder lets go
 | ok - a write through a reference into a list, read back after an arena churn
+| ok - ':~' of a new value declares a reference to it, held in the block - at run time and while compiling
+| ok - ':~' of a new value with a destructor ends it once, as its block closes
 === test tests/axes.olang
 | status 0
 | ok - Matrix.Slice: rows, columns and the rest
@@ -3464,6 +3466,10 @@
 === run s3busy.olang
 | status 0
 | 1 5 1
+=== run s4fdefinefresh.olang
+| status 0
+=== run s4flinkfresh.olang
+| status 0
 === run s4fwritethrough.olang
 | status 0
 === run s5atbuilds.olang
