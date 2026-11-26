@@ -133,6 +133,19 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   a call returning a value) is an error whatever reads follow (S4e, `FreshParamRepoint`): `if not ok: p = S(..)` then
   a read left the caller with the old value. A repoint at existing storage (`p = q`, `p = p.next!`, a call returning a
   reference) is a cursor and stays; loop names (S9g) keep the read-after rule.
+- **Links and contents: `~`, `:~`, `is` (S4f, E10d, the user's decision 2026-11-26: "Let's do the tilde"; supersedes the
+  ledger's `p.Replace`).** Values: `a = b` assigns contents - through a reference too, writing the whole referent and
+  ending the old value as a store does - and `a := b` defines. References: `r ~ x` links `r` to `x` (a variable, a field,
+  what a reference names; never to a reference itself), `r :~ x` declares a reference local (writable where `x` may be
+  written, mine), `r ~ null` unlinks a `?&`; a new value after `~`/`:~` (a literal, a constructor's call, a call giving
+  a value) and `~` on a value are errors (`LinkFresh`, `LinkToValue`). `==`/`!=` compare contents, through references
+  too; `a is b` / `a is not b` test one object, never calling `Eq` (a value's place beside a reference is the object it
+  is, `r is v`; two values are an error, `IdentityOfValue`; two function values as `==`); `is` binds as `==` (mine).
+  Dereferencing is implicit; no references to references, no unary `&` or `*`. **Staged (2026-11-26, wt-assign):** stage
+  1 accepts the new spellings beside the old meanings (`=` on a reference still repoints, `==` on references without `Eq`
+  still identity, `== null` still the null test); `tools/assign_migrate` (in `olang fix`'s table, driven by the
+  checker's `OLANG_ASSIGNS=1` report) rewrites old code; stage 2 migrates the repository, flips `=` and `==`, and refuses
+  the old spellings with a hint (HANDOFF-assign.md).
 - **Every path of a function with a result must return (D10a)** - structural, loops never count, `for { }` with no
   `break` of its own leaves, a leaving `join` and a `noreturn` call count. `unreachable` is checked, never assumed
   (S16d), and behaves as a failed assert. `os.Exit(code)` for any status (B5b).
@@ -196,11 +209,14 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Expressions read as words (E28-E30, E32, the user's designs).** `a if c else b`; `x in c`/`x not in c` call
   `Has`/`Contains`; comparison chains for `< <= > >=` only; `x as E.Case` gives the payload (fails with
   `CaseError.WrongCase`, so `try e as C` or `(e as C)!`).
-- **The null test is `==` (E10c, the user's decision 2026-11-15: "I will just remove the is check. It should just be a
-  normal equals if that doesn't collide with some semantic meaning", reversing the `is null` of 2026-10-24).** A
-  comparison with the `null` literal, `x == null` / `x != null` (either side), is whether a `?&` reference, a function
-  value or an error value holds none; it never calls `Eq` (mine). On an operand that cannot be null, and `null == null`,
-  it is an error; narrowing keys on it as on any test. `is` is no keyword; `tools/nulltest_migrate` rewrites old code.
+- **The null test is `is null` (E10c, the user's decision 2026-11-26, 12:40 CET: an existence check is about whether
+  there is something to reference, so it belongs with `is`; reversing the `== null` of 2026-11-15, which had reversed
+  the `is null` of 2026-10-24).** `x is null` / `x is not null` (the literal on either side) is whether a `?&`
+  reference, a function value or an error value holds none; it never calls `Eq` (mine). On an operand that cannot be
+  null, and `null is null`, it is an error; narrowing keys on it as on any test (the parser makes it the same tree as a
+  comparison with the null literal, mine). `is` is a keyword again. Until stage 2 `x == null` is the same test; then it
+  is refused with a hint. `tools/nulltest_migrate` is out of `olang fix`'s table (it would undo today's form);
+  `tools/assign_migrate` rewrites `== null`.
 - **Case tests and narrowing (E32, S8d, the user's decision 2026-10-24: "I want == always. It generalizes better into
   the payload case").** `e == Shape.Circle` tests the case, `e == Shape.Circle(3.0)` compares its payload, `_` matches
   any part. After a case test a local or parameter is narrowed so `e.r` reads the payload field; a field read where

@@ -44109,3 +44109,62 @@ The self-build frees 569 of its 1056 places at once - master's compiler on the s
 text locals are counted, 25 of them keeping and now named; warm peak 2608 MB for both (child maximum resident set,
 second run). `make fixedpoint`, `make consistency`, the freeing and earlyfree scenarios pass; the goldens moved for the
 fixture, kept's test and the new fields.
+
+## 2026-11-26: links and contents - `~`, `:~`, `is`, `is null` (S4f, E10d, E10c; the user's decision; wt-assign, stage 1)
+
+The user, 2026-11-26, after oagent's chatview could replace a whole value through a `mut T&` only field by field (the
+ledger's question 2, `p.Replace(v)`): first the comparisons (11:55 CET, "Yeah": `==`/`!=` compare contents, values and
+through references; `is`/`is not` test one object), then the assignment (12:05, "Let's do the tilde"): for values, `a = b`
+assigns contents - through a reference too, writing the whole referent and ending the old value as a store does - and
+`a := b` defines; for references, `r ~ x` links `r` to `x` (a variable, a field, a reference - to where it points; a new
+value is an error) and `r :~ x` declares a reference local. The null test went with `is` (12:40: an existence check is
+about whether there is something to reference): `x is null` / `x is not null`, and `x == null` refused with a hint.
+Dereferencing stays implicit, there are no references to references and no unary `&` or `*`. `is`/`is not` were kept
+over `~=`/`!~=`. This answers the ledger's question 2 (`p.Replace`) - `p = v` now says it - and moves E10c back to where
+it stood on 2026-10-24, for a reason the 2026-11-15 reversal did not have: `is` carries identity again, so the null
+test is one of its questions rather than a keyword for one question.
+
+Staged as E10c was in 2026-11-15: stage 1 (this entry) adds the new spellings with their final meaning while the old
+ones keep theirs, so the repository builds unchanged; stage 2 (HANDOFF-assign.md) migrates it with the tool below,
+flips `=` and `==`, refuses the old spellings with hints and writes the seed again.
+
+What landed in stage 1. The scanner reads `is` as a keyword again (`Tok.Is`; a field may be named by it, L9a) and `:~`
+as one token (`Tok.DefineLink`; nothing in the repository wrote `:~`); `~` after an operand at a statement's head is an
+assignment operator (`isAssignOp`, so `try r ~ ...` and a `for`'s clauses take it too) - prefix `~` stays bitwise not,
+and the formatter spaces it as a binary operator after an operand. `is` and `is not` (`Tok.IsNot`, made by the parser)
+bind at precedence 4 with `==` (mine: E10c's `is` of October stood at 5; at 4 the migration is a swap of the operator,
+nothing parenthesized, and `not x is null` reads as `not x == null` did). The parser makes `x is null` the same tree as a
+comparison with the null literal (`Binary(EqEq, x, null)`), so S8e's narrowing walk, the evaluator, `case null` and
+every pass reading a null test read it unchanged; stage 2 refuses `== null` in the parser, where the written token is
+still known. `a is b` on anything else is `Binary(Is|IsNot)`, checked by `Checker.identity`: two references of one
+type compare their storage (`PrimOp.Same`), never calling `Eq`; a value's place beside a reference is the object it is,
+borrowed read-only (`r is v`, mine - "is r linked to v"); a value with no place, or two values, is `IdentityOfValue`
+(E10d); two function values compare as `==` does (T21). `ast.VarDecl.Link` marks `:~`: `Checker.linkTo` types the
+value, keeps a reference as it is (`:=` of a reference declares a reference local today), borrows a value's place -
+writable where the place may be written (a body's own local, a `mut` global, through a writable reference, a field of
+these; mine), read-only otherwise - and refuses a new value (`LinkFresh`: a literal other than `null`, a constructor's
+call, a value promoted into storage of its own, E12c). `r ~ x` is `Stmt.Assign` with `Tok.Tilde`: `Checker.assign`
+stores as `=` does on a reference place and refuses `~` on a value (`LinkToValue`) and a new value (`LinkFresh`, from
+the text and from the store's typed value); `r ~ null` unlinks a `?&`. Nothing changes after the checker: the typed
+tree of `r ~ x` is the repoint `r = x` made, so scopes, freeing, codegen and the evaluator need nothing of their own
+(tests/assign.olang's baked global and top-level assert are decided by the evaluator beside the run time).
+
+The rewrite, `tools/assign_migrate` (driven, last in `olang fix`'s table), needs types: only an `=` whose left side is a
+reference repoints, and only a `==` between references without `Eq` is identity. With `OLANG_ASSIGNS=1` the checker
+notes each such operator (`Checker.oldForm`, reported as `assigns: PATH:LINE:COL: KIND` as OLANG_TOTALS is): `repoint`
+(`=` given a reference place), `define` (`:=` of storage that exists by a reference - a reference read, a field
+through one, a call giving a reference - not a new value), `identity` (`==`/`!=` elaborated as `PrimOp.Same` on two
+references); a site a generic body's instances note differently is `?`, listed for a person. The null tests are
+rewritten on the text (the compiler's scanner, Markdown's olang blocks and code spans of a file named): E10c's
+tools/nulltest_migrate (442475871) run backwards, with nothing to parenthesize now that `is` binds as `==`. The tool is
+idempotent - the new spellings are noted by nothing. `tools/nulltest_migrate` left `olang fix`'s table: run on code of
+today it would undo its null tests. In stage 1 `olang fix` runs the driven tools only on files the compiler reports an
+error in, so it reaches assign_migrate once stage 2 makes the old spellings errors; until then the tool is run by hand.
+On the corpus checks/fixtures/assign (the fix scenario): 3 links, 2 reference locals, 2 identity tests, 3 null tests,
+the program's output unchanged, a second run changing nothing; on a copy of six test files with `?&`: 9 links (fields
+and elements of reference type, a lambda's), 16 null tests, the tests passing after.
+
+Tests: tests/assign.olang (a cursor `:~`/`~` along a list, `a :~ list` written through, `is`/`is not` beside an `Eq` by
+contents, links through a field and an element, `~ null`; a baked global and a decided top-level assert); checks cases
+s4flinkvalue, s4flinkfresh, s4fdefinefresh, e10disvalues; isname now fails (`is` is a keyword); the aistudy sieve's
+local `is` renamed `prime`. The language server's completion words and the Neovim syntax have `is` again.

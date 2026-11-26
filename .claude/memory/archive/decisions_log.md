@@ -3907,3 +3907,11 @@ Answered 2026-11-18 (the user, via the Orchestrator: "Go with B, yes"): no rule;
    Answered (the user, 2026-11-25, via the Orchestrator): accessors - supplied per-member methods for an anonymous C
    union, `u.Member()` returning a copy of the member's bytes as its type and `u.SetMember(v)` writing them; copy
    semantics only, no reference to a member, no punning; extern/C types only. First user: oagent home/'s GPIO debounce.
+
+2. (2026-11-24, asked via the Orchestrator; from oagent's chatview.View.Relay) Replacing a whole value through a
+   `mut T&` can only be written field by field (S4a: `p = v` repoints the parameter). Add a supplied method
+   (`p.Replace(v)`, running the old value's destructor) or keep field by field? Default: field by field (and S4e now
+   refuses pointing a reference parameter at a fresh value). Recommendation: the supplied method, so `=` keeps one meaning.
+   Answered (the user, 2026-11-26, via the Orchestrator; superseded): neither - `=` assigns contents through a
+   reference (ending the old value as a store does), `r ~ x` links a reference, `r :~ x` declares one (S4f); `==`
+   compares contents, `is` tests one object (E10d), `is null` the null test (E10c). HISTORY "links and contents".

@@ -21,11 +21,6 @@ archive/decisions_log.md on 2026-11-08, to keep the context every session and ag
 
 Open questions:
 
-2. (2026-11-24, asked via the Orchestrator; from oagent's chatview.View.Relay) Replacing a whole value through a
-   `mut T&` can only be written field by field (S4a: `p = v` repoints the parameter). Add a supplied method
-   (`p.Replace(v)`, running the old value's destructor) or keep field by field? Default: field by field (and S4e now
-   refuses pointing a reference parameter at a fresh value). Recommendation: the supplied method, so `=` keeps one meaning.
-
 3. (2026-11-26, via the Orchestrator; docs/freeing.md 2.4 "O23b's equality, per declaration") Where an instance is
    reached through an element, a global, an `any` or a capture, a shared field's scope binding is dropped for the whole
    declaration, so storage built through that field lives as long as the longest-lived instance's (builtref). Freeing
