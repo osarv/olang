@@ -85,8 +85,12 @@ Order matters - old code must never silently change meaning:
 ## Surprises and decisions taken
 
 - `is` binds at 4 (with `==`), not at 5 as October's `is` did: the migration is then an operator swap only.
-- The parser normalizes `x is null` into the `==`-with-null tree; unparse and `-dump` show `== null` for it. If stage
-  2 wants the written form back (diagnostics quoting via unparse), add a flag rather than a new Expr case.
+- The parser normalizes `x is null` into the `==`-with-null tree; unparse tells the two spellings apart by the text
+  between the operands (`writer.opWritten`, for astdiff's round trip). Once `== null` is refused, opWritten can always
+  write `is`.
+- This file sits at the repository's root, so `make consistency` (and `make quick`) fails on it alone ("none of the
+  root's files") until stage 2 deletes it; everything else in `make quick` passed (2026-11-26, after
+  `apt-get install libclang-rt-18-dev` - without it the race, fuzz and checked-build scenarios fail to link).
 - `r ~ null` unlinks a `?&` (allowed - null is no storage, but not a new value either; mine).
 - `r is v` with `v` a value place is allowed (is r linked to v); two values, or a value with no place, are errors.
 - `:~` is for locals (and a for's first clause); a top-level global `:~` is not read by load.olang (none exist).
