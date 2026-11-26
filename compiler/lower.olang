@@ -599,6 +599,19 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     freeing Bool = false            # whether this body frees early what sole places let go of (O8d, free.Frees)
     regions Map<I64, mir.LocalId>   # the regions made for sites being lowered (plan.RegionKind), by site
     spawnHeld Map<I64, mir.LocalId> # O8d, P1g: by a local spawns let go of (free.SpawnLets), the region its value is in
+    # O8f (2.4): a closure a call makes, in a region of its own (handsPlan): f -> g, g -> f, the call's site -> g, and
+    # by local the handle of the region it holds (f) or the call made last that no one holds (g)
+    handsDone Bool = false
+    handF Map<I64, I64>
+    handG Map<I64, I64>
+    handSite Map<I64, I64>
+    handH Map<I64, mir.LocalId>
+    handArgs Map<I64, mir.LocalId>   # ... by site, the region the call or a copy given it as an argument builds into,
+    handAt Map<I64, mir.ScopeRef>    # where the plan put it otherwise (f's block's scope)
+    handCalls Map<I64, typed.Call&>  # ... by site, g's call
+    handEarly Map<I64, I64>          # ... the call declaring a local g's call is given whole -> g's call's site
+    handMoved Map<I64, I64>          # ... that local -> its call's site
+    handMade Map<I64, Bool>          # g's calls whose region an earlier call made, until lowered
     regionPar Map<I64, mir.ScopeRef> # ... and the scope each is a kid of (a split copy's other parts go there)
     feedRegions Map<I64, Bool>       # ... the sites of feeders' declarations (free.FeedSite), whose regions stay made
     # O29: the reference arguments lowered, and their operands - a scope found from one is found from its operand
@@ -2170,6 +2183,7 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
                 ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(hs), mir.Rvalue.Use(mir.Operand.Const(mir.I64T, 0))))
                 ln.spawnHeld.Put(I64(l), hs)
             }
+            if ln.freeing: ln.handsAt(mir.LocalId(I32(l)), sp)
             ln.homeKept(l)
             ln.feedHome(l, init)
             if ln.B.Locals[I64(l)].Unset {
@@ -2236,6 +2250,7 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
                 ln.emit(mir.Stmt.Assign(sp, ln.mk(p), mir.Rvalue.Use(v)))
                 if old != mir.NoLocal: ln.releaseAt(old, rel, sp)
             }
+            if ln.freeing: ln.handOver(target, sp)
             if ln.B.Of == typed.BodyOf.Global and not ln.dead: ln.globalHeld(sp, target)
         }
         case typed.Stmt.Eval(sp, x) { ln.evalStmt(sp, x) }
@@ -5931,6 +5946,433 @@ fn (ln mut lowering&) closureKept(callee mir.Callee, fty types.TypeId, scopes mi
     }
 }
 
+# ---- O8f (docs/freeing.md 2.4): a closure a call makes, in a region of its own ----
+#
+# A function value local g declared by a call to a function handing back only closures it makes (free.ClosureResult),
+# whose result scope nothing in its obligations holds to outlive anything (scope.ResultOwn: what it builds there is
+# reached through its result alone), read only to call through and to give one function value local f declared outside
+# the loop's turn the call is in - f given no other value and read only to call through, neither of the two captured,
+# lent, stored elsewhere, nor in a body with tasks or a generator's suspension: each run of the call builds into a region
+# of its own, a kid of f's block's scope, released at the next run of the call where g was not given to f, and handed to
+# f where it was - f releasing the one it held. Calls through either hand back and take nothing holding a reference
+# (handSig), so nothing of a closure's environment outlives the closure. Two handles, zero at f's declaration: the
+# region the call made last that no one holds (g's), the one f holds (f's)
+
+type handWalk struct(T mut types.Table&, P mut generic.Program&) {
+    T
+    P
+    other Map<I64, Bool>    # a local mentioned any other way than as a call's function value, a hand-over or its target
+    gives Map<I64, I64>     # g -> the f it is given to (-2 for two)
+    takes Map<I64, I64>     # f -> the g it is given (-2 for two, or for another value)
+    lets Map<I64, I64>      # a local declared by a body's call -> the call's site
+    calls Map<I64, typed.Call&>  # ... the call
+    direct Map<I64, Bool>   # ... where the call is the declaration's whole value
+    uses Map<I64, I64>      # by local, its mentions but its declaration
+    off Bool = false        # tasks or a suspension: nothing here is followed
+    target I64 = -1         # the local the Assign walked writes whole (Lvalue.Target reads it)
+}
+
+fn (ln mut lowering&) funcLocal(l I64) Bool {
+    ty := ln.B.Locals[l].Ty
+    if ln.T.IsRef(ty): ty = ln.T.Referent(ty)
+    return ln.T.KindOf(ty) == types.Kind.Func
+}
+
+# the hand-overs of B (once per body, where it frees early): handF f -> g, handG g -> f, handSite the call's site -> g
+fn (ln mut lowering&) handsPlan() {
+    if ln.handsDone or not ln.freeing or ln.B.Root == null: return
+    ln.handsDone = true
+    w mut handWalk& = handWalk(ln.T, ln.L.P)
+    w.block(ln.B.Root!)
+    if w.off: return
+    for e in w.gives {
+        g, f := e.Key, e.Value
+        if f < 0 or w.other.Has(g) or w.other.Has(f) or f == g or not w.lets.Has(g) or w.gives.Has(f): continue
+        if not ln.funcLocal(g) or not ln.funcLocal(f) or ln.B.Locals[f].Kind != typed.LocalKind.Var: continue
+        if (try w.takes.Get(f) catch default -1) != g: continue
+        gs := try w.lets.Get(g) catch default -1
+        gc := try w.calls.Get(g) catch { continue }
+        ln.handF.Put(f, g)
+        ln.handG.Put(g, f)
+        ln.handSite.Put(gs, g)
+        ln.handCalls.Put(gs, gc)
+        # (a local g's call is given whole, mentioned nowhere else, declared by a call in g's block: moved at that use)
+        for x in gc.Args {
+            a := readLocal(x)
+            if a < 0 or (try w.uses.Get(a) catch default 0) != 1 or not w.direct.Has(a) or ln.B.Locals[a].In != ln.B.Locals[g].In: continue
+            ls := try w.lets.Get(a) catch { continue }
+            ln.handEarly.Put(ls, gs)
+            ln.handMoved.Put(a, ls)
+        }
+    }
+}
+
+fn (w mut handWalk&) block(bl typed.Block?&) {
+    if bl == null: return
+    for st in bl.Stmts: w.stmt(st)
+}
+
+fn (w mut handWalk&) stmts(ss Array<typed.Stmt&>&) {
+    for st in ss: w.stmt(st)
+}
+
+fn (w mut handWalk&) stmt(st typed.Stmt&) {
+    match st {
+        case typed.Stmt.Let(_, l, x) {
+            c := typed.Call.Of(x)
+            if c != null and typed.CalleeBody(c) >= 0 and c.Site >= typed.SiteId(0) {
+                w.lets.Put(I64(l), I64(c.Site))
+                w.calls.Put(I64(l), c)
+                if awayless(x) == typed.Expr.Call: w.direct.Put(I64(l), true)
+            }
+            w.expr(x)
+        }
+        case typed.Stmt.Assign(_, p, x) { w.assign(p, x) }
+        case typed.Stmt.Eval(_, x), typed.Stmt.Reraise(_, x, _) { w.expr(x) }
+        case typed.Stmt.Return(_, x) { w.expr(x) }
+        case typed.Stmt.Yield(_, x) { w.expr(x) }
+        case typed.Stmt.Suspend(_, _), typed.Stmt.Join(_, _), typed.Stmt.Spawn(_, _) { w.off = true }
+        case typed.Stmt.If(_, i) {
+            w.expr(i.Test)
+            w.block(i.Then)
+            w.block(i.Else)
+        }
+        case typed.Stmt.Loop(_, body, post) {
+            w.block(body)
+            w.block(post)
+        }
+        case typed.Stmt.Exit(_, _, msg) { w.expr(msg) }
+        case typed.Stmt.Assert(_, c, msg) {
+            w.expr(c)
+            w.expr(msg)
+        }
+        case typed.Stmt.Block(_, bl), typed.Stmt.Defer(_, bl) { w.block(bl) }
+        case typed.Stmt.Jump(_, _, _), typed.Stmt.Raise(_, _, _) { }
+    }
+}
+
+# a store: a whole local given a function value local's read is a hand-over; given anything else, it takes another value
+fn (w mut handWalk&) assign(p typed.Lvalue&, x typed.Expr&) {
+    f := match p {
+        case typed.Lvalue.Local(_, _, l): I64(l)
+        case _: -1
+    }
+    if f < 0 {
+        w.place(p)
+        w.expr(x)
+        return
+    }
+    g := match x {
+        case typed.Expr.Read(_, _, typed.Lvalue.Local(_, _, l), _): I64(l)
+        case _: -1
+    }
+    if g < 0 {
+        w.takes.Put(f, -2)
+        was := w.target
+        w.target = f
+        w.expr(x)
+        w.target = was
+        return
+    }
+    had := try w.gives.Get(g) catch default f
+    w.gives.Put(g, f if had == f else -2)
+    took := try w.takes.Get(f) catch default g
+    w.takes.Put(f, g if took == g else -2)
+}
+
+fn (w mut handWalk&) place(p typed.Lvalue&) {
+    match p {
+        case typed.Lvalue.Local(_, _, l) {
+            w.other.Put(I64(l), true)
+            w.uses.Put(I64(l), (try w.uses.Get(I64(l)) catch default 0) + 1)
+        }
+        case typed.Lvalue.Global(_, _, _, _) { }
+        case typed.Lvalue.Deref(_, _, r) { w.expr(r) }
+        case typed.Lvalue.Field(_, _, b, _) { w.place(b) }
+        case typed.Lvalue.Elem(_, _, e) {
+            w.place(e.Base)
+            w.expr(e.Index)
+        }
+        case typed.Lvalue.Payload(_, _, pd) { w.place(pd.Base) }
+        case typed.Lvalue.Temp(_, _, v, _) { w.expr(v) }
+        case typed.Lvalue.Target(_, _) { if w.target >= 0: w.other.Put(w.target, true) }
+    }
+}
+
+fn (w mut handWalk&) expr(x typed.Expr?&) {
+    if x == null: return
+    match x {
+        case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _) { }
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p), typed.Expr.Take(_, _, p) { w.place(p) }
+        case typed.Expr.Promote(_, _, pr) { w.expr(pr.X) }
+        case typed.Expr.Call(_, _, c) { w.call(c) }
+        case typed.Expr.Make(_, _, m) {
+            for it in m.Items: w.expr(it)
+            w.expr(m.Length)
+        }
+        case typed.Expr.Collect(_, _, c) {
+            w.expr(c.Reserve)
+            w.block(c.Loop)
+            w.expr(c.Grown)
+        }
+        case typed.Expr.Prim(_, _, _, _, args) {
+            for a in args: w.expr(a)
+        }
+        case typed.Expr.Slice(_, _, sl) {
+            w.place(sl.Base)
+            w.expr(sl.Lo)
+            w.expr(sl.Hi)
+        }
+        case typed.Expr.Cond(_, _, k) {
+            w.expr(k.C)
+            w.expr(k.A)
+            w.expr(k.B)
+        }
+        case typed.Expr.Seq(_, _, q) {
+            w.stmts(q.Stmts)
+            w.expr(q.X)
+        }
+        case typed.Expr.Match(_, _, m) {
+            w.stmts(m.Held)
+            for a in m.Arms: w.arm(a)
+            if m.NoMatch != null: w.arm(m.NoMatch!)
+        }
+        case typed.Expr.Try(_, _, tr) {
+            w.expr(tr.X)
+            for c in tr.Clauses {
+                w.block(c.Code)
+                for d in c.Defaults: w.expr(d)
+            }
+        }
+        case typed.Expr.Fn(_, _, f) { w.fnVal(f) }
+        case typed.Expr.Text(_, _, tx) {
+            for pc in tx.Pieces {
+                match pc {
+                    case typed.Piece.Render(y): w.expr(y)
+                    case _ { }
+                }
+            }
+        }
+        case typed.Expr.Away(_, _, y) { w.expr(y) }
+    }
+}
+
+fn (w mut handWalk&) arm(a typed.Arm&) {
+    for alt in a.Alts {
+        w.expr(alt.Test)
+        for bd in alt.Binds: w.expr(bd.From)
+    }
+    w.expr(a.Guard)
+    w.block(a.Code)
+    w.expr(a.Value)
+}
+
+fn (w mut handWalk&) fnVal(f typed.FnVal&) {
+    match f {
+        case typed.FnVal.Named(_) { }
+        case typed.FnVal.Lambda(_, caps, _) {
+            for c in caps: w.expr(c.Outer)
+        }
+        case typed.FnVal.Adapter(_, r, _) { w.expr(r) }
+    }
+}
+
+# a call: through a local's function value read as it is, that local not mentioned otherwise - where the call hands
+# back and takes nothing holding a reference (handSig)
+fn (w mut handWalk&) call(c typed.Call&) {
+    match c.Target {
+        case typed.Callee.Value(x) {
+            l := match x {
+                case typed.Expr.Read(_, _, typed.Lvalue.Local(_, _, id), _): I64(id)
+                case _: -1
+            }
+            if l < 0: w.expr(x)
+            else if not w.handSig(x.Type()): w.other.Put(l, true)
+        }
+        case _ { }
+    }
+    for a in c.Args: w.expr(a)
+}
+
+# whether a call through a function value of type ty can leave nothing of its environment anywhere but in the closure:
+# its result, its error payloads and its parameters hold no reference - but read-only references to what holds none
+fn (w mut handWalk&) handSig(ty types.TypeId) Bool {
+    t := w.T
+    fty := t.Referent(ty) if t.IsRef(ty) else ty
+    if t.KindOf(fty) != types.Kind.Func or t.SharesRefs(t.Result(fty)): return false
+    for p in t.Items(t.Params(fty)) {
+        if not t.SharesRefs(p): continue
+        if not t.IsRef(p) or (t.PermOf(p) & types.Writable) != 0 or t.SharesRefs(t.Referent(p)): return false
+    }
+    for e in t.Items(t.Errors(fty)) {
+        pt := w.P.PayloadOf(t.ErrOf(e))
+        if pt != types.UnknownT and t.SharesRefs(pt): return false
+    }
+    return true
+}
+
+# at f's declaration: its handle and its g's, zero
+fn (ln mut lowering&) handsAt(l mir.LocalId, sp source.Span) {
+    ln.handsPlan()
+    g := try ln.handF.Get(I64(l)) catch default -1
+    if g < 0: return
+    for k in Array<I64>[I64(l), g] {
+        h := ln.temp(mir.I64T, sp)
+        ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(h), mir.Rvalue.Use(mir.Operand.Const(mir.I64T, 0))))
+        ln.handH.Put(k, h)
+    }
+}
+
+# the call declaring g, before its arguments (or the call declaring a local g's call is given whole, at its last use -
+# `a := mkA(i); g := closer(a)`, handEarly: the region is made there, a's value built in it): the region its last run made
+# that f was not given released, and a new one made, a kid of f's block's scope - where the plan puts its result, outside
+# the loop's turn the call is in. What it builds for its result goes there (handCall), and so does each by-value argument
+# its obligations keep nowhere but where its result lives (scope.KeptInResult: a closure's capture) where the plan builds
+# it in that scope: a copy, the result of a call whose result scope is its own (scope.ResultOwn), or such a local's
+# value - so the closure and what it captured are all in the region
+fn (ln mut lowering&) handPre(c typed.Call&) {
+    site := I64(c.Site)
+    early := try ln.handEarly.Get(site) catch default -1
+    if early >= 0 {
+        gc := try ln.handCalls.Get(early) catch { return }
+        if ln.handMake(gc): ln.handMade.Put(early, true)
+        return
+    }
+    if ln.handMade.Remove(site): return
+    if ln.handSite.Has(site): ln.handMake(c)
+}
+
+fn (ln mut lowering&) handMake(c typed.Call&) Bool {
+    g := try ln.handSite.Get(I64(c.Site)) catch default -1
+    if g < 0 or ln.dead: return false
+    f := try ln.handG.Get(g) catch default -1
+    h := try ln.handH.Get(g) catch default mir.NoLocal
+    b2 := typed.CalleeBody(c)
+    if f < 0 or h == mir.NoLocal or not ln.L.Free!.ClosureResult(b2) or not ln.L.Free!.Sc.ResultOwn(b2): return false
+    fty := ln.L.Bodies[b2].Ty
+    vs := ln.T.ScopeVarsOf(fty)
+    at := mir.ScopeRef.Program
+    for j in range vs.Len() {
+        if vs[j] == types.ResultVar: at = ln.scopeRef(ln.plan.Passed(c.Site, j))
+    }
+    if not ln.outsideTurn(at) or at != ln.scopeRef(typed.Scope.Block(ln.B.Locals[f].In)): return false
+    ps := ln.T.Items(ln.T.Params(fty))
+    for i in range c.Args.Len() {
+        if i >= ps.Len() or not ln.handArg(c.Args[i], ps[i], b2, i): return false
+    }
+    sp := ln.B.Sp
+    ln.emit(mir.Stmt.Drop(sp, h))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(h), mir.Rvalue.Region(at)))
+    ln.handArgs.Put(I64(c.Site), h)
+    ln.handAt.Put(I64(c.Site), at)
+    for i in range c.Args.Len().Min(ps.Len()) {
+        if ln.T.IsRef(ps[i]) or not ln.L.Free!.Sc.KeptInResult(b2, i): continue
+        k := match awayless(c.Args[i]) {
+            case typed.Expr.Call(_, _, ac): I64(ac.Site) if typed.CalleeBody(ac) >= 0 else -1
+            case typed.Expr.Make(_, _, m): I64(m.Site) if m.Kind == typed.MakeKind.Copy else -1
+            case _: -1
+        }
+        moved := try ln.handMoved.Get(readLocal(c.Args[i])) catch default -1
+        for q in Array<I64>[k, moved] {
+            if q < 0: continue
+            ln.handArgs.Put(q, h)
+            ln.handAt.Put(q, at)
+        }
+    }
+    return true
+}
+
+# whether argument x of handMake's call (body b2, parameter i of type pt) builds nothing the region would not take: a
+# constant or a place read or borrowed as it is; or, for a by-value parameter kept nowhere but where the result is, a copy,
+# a local moved there (handMoved), or a call whose result scope is its own given only such plain values. Any other - its
+# storage built where the plan put it, f's block's scope, each turn - leaves the closure named (closureKept)
+fn (ln mut lowering&) handArg(x typed.Expr&, pt types.TypeId, b2 I64, i I64) Bool {
+    y := awayless(x)
+    match y {
+        case typed.Expr.Lit(_, _, _), typed.Expr.Data(_, _, _, _): return true
+        case typed.Expr.Read(_, _, p, _), typed.Expr.Borrow(_, _, p) { if plainPlace(p) and (ln.T.IsRef(pt) or not ln.T.OwnsParts(pt)) and not ln.handMoved.Has(readLocal(y)): return true }
+        case _ { }
+    }
+    if ln.T.IsRef(pt) or not ln.L.Free!.Sc.KeptInResult(b2, i): return false
+    if ln.handMoved.Has(readLocal(y)): return true
+    return match y {
+        case typed.Expr.Make(_, _, m): m.Kind == typed.MakeKind.Copy and m.Items.Len() == 1 and quietArg(m.Items[0])
+        case typed.Expr.Call(_, _, ac): ln.L.Free!.Sc.ResultOwn(typed.CalleeBody(ac)) and ln.plainArgs(ac)
+        case _: false
+    }
+}
+
+# whether a call's arguments are values holding no storage, each a constant, a place's read or plain arithmetic of them
+fn (ln mut lowering&) plainArgs(c typed.Call&) Bool {
+    for a in c.Args {
+        if ln.T.OwnsParts(a.Type()) or ln.T.SharesRefs(a.Type()) or not plainValue(a): return false
+    }
+    return true
+}
+
+# the local argument x reads whole, or copies (a copy lowering may make a move at its last use, D9i), -1 for none
+fn readLocal(x typed.Expr&) I64 {
+    return match awayless(x) {
+        case typed.Expr.Read(_, _, typed.Lvalue.Local(_, _, id), _): I64(id)
+        case typed.Expr.Make(_, _, m): readLocal(m.Items[0]) if m.Kind == typed.MakeKind.Copy and m.Items.Len() == 1 else -1
+        case _: -1
+    }
+}
+
+fn awayless(x typed.Expr&) typed.Expr& {
+    return match x {
+        case typed.Expr.Away(_, _, y): awayless(y)
+        case _: x
+    }
+}
+
+# handPre's call, or a call it gives an argument of: its result scope, where the plan put it in f's block's scope, the
+# region made for the closure
+fn (ln mut lowering&) handCall(site typed.SiteId, fty types.TypeId, scopes mir.Range, b2 I64) {
+    h := try ln.handArgs.Get(I64(site)) catch default mir.NoLocal
+    if h == mir.NoLocal or ln.dead or not ln.L.Free!.Sc.ResultOwn(b2): return
+    at := try ln.handAt.Get(I64(site)) catch { return }
+    vs := ln.T.ScopeVarsOf(fty)
+    own := ln.handSite.Has(I64(site))
+    sc := ln.L.Free!.Sc
+    for j in range vs.Len().Min(I64(scopes.N)) {
+        if ln.F.Refs[I64(scopes.At) + j] != at: continue
+        # (and, for the call making the closure, where a by-value argument it captures has its references: it is held
+        # nowhere but where the result is, so what the callee builds there goes with the closure)
+        if vs[j] == types.ResultVar or (own and vs[j] >= 0 and sc.KeptInResult(b2, vs[j])): ln.F.Refs[I64(scopes.At) + j] = mir.ScopeRef.Held(h)
+    }
+}
+
+# a copy handPre gives its call as an argument: built in the region, where the plan put it in f's block's scope
+fn (ln mut lowering&) handCopy(site typed.SiteId, at mir.ScopeRef) mir.ScopeRef {
+    h := try ln.handArgs.Get(I64(site)) catch default mir.NoLocal
+    if h == mir.NoLocal: return at
+    was := try ln.handAt.Get(I64(site)) catch { return at }
+    return mir.ScopeRef.Held(h) if was == at else at
+}
+
+# f given g: where g's region is no one's yet, f's old one released and f holding g's
+fn (ln mut lowering&) handOver(target typed.Lvalue&, sp source.Span) {
+    f := match target {
+        case typed.Lvalue.Local(_, _, l): I64(l)
+        case _: -1
+    }
+    g := try ln.handF.Get(f) catch default -1
+    if g < 0 or ln.dead: return
+    hf := try ln.handH.Get(f) catch default mir.NoLocal
+    hg := try ln.handH.Get(g) catch default mir.NoLocal
+    if hf == mir.NoLocal or hg == mir.NoLocal: return
+    some := ln.prim(typed.PrimOp.Ne, types.BoolT, Array<mir.Operand>[mir.Operand.Copy(mir.Lvalue.L(hg)), ln.constI64(0)], sp)
+    yes, no := ln.F.NewBlock(), ln.F.NewBlock()
+    ln.end(mir.Term.Branch(some, yes, no))
+    ln.start(yes)
+    ln.emit(mir.Stmt.Drop(sp, hf))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(hf), mir.Rvalue.Use(mir.Operand.Copy(mir.Lvalue.L(hg)))))
+    ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(hg), mir.Rvalue.Use(ln.constI64(0))))
+    ln.goto(no)
+    ln.start(no)
+}
+
 # whether evaluating argument x changes nothing: a constant, a plain place's read (plainPlace), or a copy of one
 fn quietArg(x typed.Expr&) Bool {
     return match x {
@@ -5947,6 +6389,7 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
     if c.Zero and c.Args.Len() == 0: return ln.zero(ty, sp, c.Site)
     callee, fty := ln.callee(c.Target, sp, c.Site)
     if ln.dead: return mir.Operand.None
+    if ln.freeing and callee == mir.Callee.Fn: ln.handPre(c)
     args := ln.args(c, callee, fty)
     if ln.dead: return mir.Operand.None
     match callee {
@@ -5955,6 +6398,7 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
     }
     res := t.Result(fty)
     scopes := ln.passedFor(callee, fty, c.Site)
+    if ln.freeing and callee == mir.Callee.Fn: ln.handCall(c.Site, fty, scopes, typed.CalleeBody(c))
     if ln.keptArgs.Has(I64(c.Site)): ln.keptResult(callee, fty, scopes, sp)
     ln.builtResult(callee, fty, scopes, typed.CalleeBody(c), sp)
     ok := ln.F.NewBlock()
@@ -7582,6 +8026,7 @@ fn (ln mut lowering&) make(m typed.Make&, ty types.TypeId, sp source.Span) mir.O
             at := ln.madeAt(m.Site)
             # (a copy read only until its call returns, or until a kept constructor's instance's copy is made: keptArgs)
             if ln.keptArgs.Has(I64(m.Site)) and ln.levels.Len() > 0 and not heldRef(at): at = mir.ScopeRef.Scope(ln.top().S)
+            if ln.freeing: at = ln.handCopy(m.Site, at)
             ln.turnKept(I64(m.Site), ty, at, sp)
             sv := ln.splitCopy(I64(m.Site), v, ty, at, sp)
             if sv != mir.Operand.None: return sv

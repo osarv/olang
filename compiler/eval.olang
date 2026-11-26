@@ -4223,6 +4223,15 @@ fn (m mut Machine&) stmtAt(fi I64, fk I64, i I64) {
                 return
             }
         }
+        case mir.Stmt.Drop(sp, h) {
+            m.atK(fk, sp)
+            r := m.heldScope(fi, h)
+            if r != 0 and m.live(r) and m.scopes[r & slotMask].Kind == sRegion {
+                m.closeRegion(r)
+                m.fs[fi].Pending = true
+                return
+            }
+        }
         case mir.Stmt.Write(sp, b, how, x) {
             m.atK(fk, sp)
             m.write(fi, b, how, x)
