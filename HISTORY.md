@@ -44012,3 +44012,48 @@ all new (`("n0").PadEnd(80, '-')`) keeps `Named.name`, a part place whose constr
 `reported` never counted it - 52 MB, no row, before and after. A part place a constructor's copy gives text is now
 reported (`ctorParts`): a named keep, "its new value is not all new". Fixture: checks' freeing fillwalk (`limited`;
 `M=15` names the padded field).
+
+## 2026-11-26: a text local given existing text each turn, finding 6's reason, a Vec that only grows (O8f, B18a; mine; wt-revfix3)
+
+Three items left open by wt-revfix1 and wt-revfix2 (docs/freeing.md 2.4).
+
+**A text local given existing text each turn.** `last := ""`, then `last = rows[1]` (a view call's value), `last = r` (a
+reference), `last = s` (a local), `walked = row` (a walk's name) or `cut = rows[0][0:5]` (a slice) each turn grew ~64
+bytes a turn while `-memory -check` passed: lowering copies existing text given to a text local - T7b's whole
+replacement of an immut array, or D9h's copy of a view call's value - into the local's storage, its block's arena, and
+`free.reported` counted an owner local's place only where some store owns storage (a site, a move), which these do not.
+wt-revfix1 had tried reporting every such place and backed off because walkcopy, walkref, bindcopy and fieldagain then
+reported keeps "while flat"; measured further, they are not flat - their texts are short, so walkcopy grows 12.6 to 17.5
+MB from 200,000 to 2,000,000 turns - and every shape is lowering's copy, none a move of a local the scope pass lifted (the
+entry's guess). So the copy is made for the place: an assignment of a place read, a slice or a view call's value to an
+owner local of immut text whose elements hold nothing is a new store kind, SCopy (`free.copyStore`, recorded by
+statement in `copyStores`), which fails no condition by itself. Lowering, where the place is decided sole (its guard),
+makes a region in the local's storage (`lower.copyRegion`), builds the copy there - a view call's D9h copy directly
+(`copySite`/`copyHere` in viewCall's branch), any other value copied once (`copied`) - stores it, releases the old value
+as a sole owner local's let-go does, and settles the region by the new value (`copyStore`); where it is not sole the
+handle is the local's storage, as before. An owner local given a value not made for it - SFail, `last =
+("s" + $i).PadEnd(40, '.')`, PadEnd handing back storage it was given, built where `last` lives - is now reported where
+it keeps: it owns that storage all the same. The first bug on the way: `copied` took the view-call site's -1 ("a read")
+for "already copied", so a read's value was stored uncopied and the next let-go released another place's region - the
+self-build crashed, which caught it.
+
+**Finding 6.** `rows[i % 10] = S2.mk(i)`, `S2.mk` returning `S2(a, b)`: the store into a struct held in place judged its
+leaves' new value by the call, and only a constructor's call passed - any other was "existing storage", a keep named
+for a false reason in a flat program (twoowners, ctorwrite). A function handing back only new values of the type
+(`resFresh`) gives the leaves what its own stores made, judged in it (retCtorOf, letCtorOf, a copy's untracked), so
+`walker.copyInto` now treats its call as a constructor's: no store at the call. Every place of both frees at once, the
+outputs unchanged.
+
+**builtResult's over-report.** A call handing back a reference to text it builds, its result scope outside the loop's
+turn, is a turn row (wt-revfix1) - but fix.olang:181 pushes each file's text into a `Vec<String&>` on purpose, and
+`-check` would fail such a program. A reference that only goes into a collection that never lets go of one while it
+lives is held until its scope closes, which is where it was built: `lower.pushedInto` leaves the row out for a call's
+value (through conversions, a promotion, a try) pushed straight onto a `Vec` local of the body given no other value,
+written no other way, kept by no call or alias, and lent writably only to the prelude's `Push`. A Vec that may shrink
+(`Pop`, `Clear`, an element given another reference) keeps the row.
+
+Checks: freeing textagain (`limited`: the five text shapes, finding 6's instance into an array's element, references
+pushed onto a turn's Vec - flat under 8 MB at 200,000 turns, 71 MB on master, whose -check named only the pushed call);
+kept's textsAgain (read back after a churn, baked by the evaluator). Every probe of batch1125b and batch1125 agrees across
+built, `-free late`, `-sanitize` and the evaluator; -check results are unchanged but k2twotargets, which now names 'b' (a
+task's result given each turn) beside 'a'. The review's w1walkesc and w2bindesc are flat (64.8 MB at 1,000,000 on master).

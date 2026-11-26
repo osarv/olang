@@ -1199,7 +1199,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   writing through no parameter and reaching no global, lets go only of what it built (`free.ownGoes`; elemarg).
   A local moved at its last mention into an element may own several parts' arrays (a Map filled by `Put`) where every
   place it holds is sole (`free.MovesLeaves`; mapfill); a local the scope pass built outside a loop's turn for such a
-  move that lowering copies is a B18a gap (`lower.liftedCopy`), as is a call's closure built outside a loop's turn for a function value kept there (`lower.closureKept`; freeing it is 2.4's open design). A Map copy's entries split as Put builds them, an
+  move that lowering copies is a B18a gap (`lower.liftedCopy`), as is a call's closure built outside a loop's turn for a function value kept there (`lower.closureKept`; freeing it is 2.4's open design). A text local given existing text by an assignment (a place read, a slice, a view call's value) holds lowering's copy made for it, in a region of its own where its place is sole, released at its next value (`free.SCopy`, `lower.copyStore`); an owner local given a value not made for it is reported where it keeps; a call's built reference pushed onto a Vec local that only grows is no turn row (`lower.pushedInto`; wt-revfix3). A Map copy's entries split as Put builds them, an
   entry's owner value not sole copied by its parts (`lower.regionCopy`; mapcopies, wt-gaps3).
   A view call's value given to a by-value parameter its callee keeps nowhere but in what it hands back
   (`lower.HandsOnly`), the result held by a value local of no reference beyond its parts (`h := giveField(v[j])`): At's
