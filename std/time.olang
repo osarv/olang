@@ -351,7 +351,7 @@ fn LocalOffset(wall I64 = Wall()) I64 {
     t[0] = secs
     if TargetOs == "windows" {
         # B12f: msvcrt's %z is the zone's name: the offset is the local reading taken as UTC, less the instant
-        local := ctime._localtime64(t)
+        local :~ ctime._localtime64(t)
         return ctime._mkgmtime64(local!) - secs
     } else {
         return offsetOf(t)
