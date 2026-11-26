@@ -21,6 +21,11 @@ Stopped by the Orchestrator's pacing guard; no new items until it restarts this 
 3. freeing.md 2.4 leftovers: wt-secondval d04c93943, wt-checkfalse e182d9887, wt-twoowners 92b56017c, wt-copygaps 3dd2d0b21, wt-origins 302e9d7cd (origins per path) merged; wt-liftcopy 0477c98f6 merged (a kept constructor's viewed arguments built in the turn; turn rows (LiftGaps) name storage built outside its loop turn; readArgCopy for non-constructor callees; one named self-build row left, lower.olang:393, runs once); storage given back to a retired worker's home; (a task's catch default: closed by wt-taskdefault fff70dac1 for one-target spawns whose handler captures only numbers - several targets or storage captures still keep).
 4. Full verify green on wt-liftcopy 5e82ff967 (= master 0477c98f6) and 302e9d7cd (twoowners, copygaps, origins). Logs of the steward go to /home/user/steward-logs (verify wipes build/).
 
+## Review 1125b (2026-11-25, /home/user/review/batch1125b/NOTES.txt): no use after free; false -check passes
+- wt-revfix1 running: findings 1 (wt-walkref's copy built in the caller's scope), 3 (origins + defer), 4 (origrefcall unreported), 6 (over-report).
+- Queued after wt-walkref merges: findings 2 (taskcapgrow: a clause default built from a captured Vec<String>, 135 MB/200k) and 5 (fnvalgrow, older: a closure given to an outer function-value local on some turns, built in the outer scope); wt-walkref's fill-and-walk keep (`Array<Row>(2, Row(..))`, honest).
+- wt-cunion running (C union accessors, the user's decision 2026-11-25).
+
 ## Notes
 - Disk fills fast (each worktree's build/ is 8-12 GB): delete build/ output and merged worktrees.
 - master's make quick had stale goldens/eval runs (std/time diag, canon, cshare) and pushtexts' second shape (40 MB) - seen, not mine.
