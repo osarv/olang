@@ -593,6 +593,9 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     viewing Bool = false    # the place lowered next is a slice's base or a borrow's (tempLocal)
     taskArgs Bool = false   # whether the arguments lowered next are a task's (bulk review 5, F7)
     taskCopy I64 = -1       # the call whose value a task's by-value argument is: its copy (D9h) made in the join's scope (O8f)
+    copySite I64 = -1       # copyStore's view call, its copy (D9h) made in copyHere
+    pushedSite I64 = -1     # the call whose value the argument lowered is, pushed onto a Vec that only grows (pushedInto)
+    copyHere mir.LocalId = mir.NoLocal
     adoptSite typed.SiteId = typed.SiteId(-1)    # a fresh array promoted (promote): made at the reference's scope
     adoptAt mir.ScopeRef = mir.ScopeRef.Program
     plan typed.Plan& = given  # the scope pass's plan for B where planned, else the Lowerer's stand-in
@@ -2222,12 +2225,18 @@ fn (ln mut lowering&) stmtIn(s typed.Stmt&) {
             p := ln.place(target)
             ln.targets.Push(p)
             pre := ln.readFirst(target, p, value, sp)
-            v := ln.slotted(target, value, sp)
-            if v == mir.Operand.None: v = ln.fit(ln.val(value), value, target.Type(), sp)
+            h := ln.copyRegion(target, sp)
+            v := ln.slotted(target, value, sp) if h == mir.NoLocal else mir.Operand.None
+            if h != mir.NoLocal { v = ln.copied(value, target.Type(), h, sp) }
+            else if v == mir.Operand.None { v = ln.fit(ln.val(value), value, target.Type(), sp) }
             try ln.targets.Pop() catch { }
             if pre {
                 try ln.olds.Pop() catch { }
                 try ln.oldLocals.Pop() catch { }
+            }
+            if h != mir.NoLocal {
+                if not ln.dead: ln.copyStore(target, ln.mk(p), v, h, sp)
+                return
             }
             if p.Pk >= 0 {
                 if not ln.dead: ln.packedWrite(p, v, sp)
@@ -5723,7 +5732,10 @@ fn (ln mut lowering&) args(c typed.Call&, callee mir.Callee, ty types.TypeId) mi
         if task and (byValue or ro) and ln.L.preserves(body, i) and ln.L.Free != null and not ln.L.Free!.RefsBeyond(t.Result(ty)) {
             ln.taskCopy = promotedSite(a)
         }
+        wasPushed := ln.pushedSite
+        if i == 1: ln.pushedSite = ln.pushedInto(c, body, a)
         if v == mir.Operand.None: v = ln.val(a)
+        ln.pushedSite = wasPushed
         ln.taskCopy = wasCopy
         if i < ps.Len(): v = ln.fit(v, a, ps[i], a.Span())
         # (a helper of a reference type, E10's null-aware "==" of two array references, takes references to them)
@@ -5753,6 +5765,54 @@ fn (ln mut lowering&) handedOver(a typed.Expr&, gone mut Vec<typed.Stmt&>&) type
         }
         case _ { return a }
     }
+}
+
+# O8f (2.4, a text local given existing text each turn - free.SCopy): the region an owner local's copy of the existing
+# text it is assigned is made in - a region of its own in the local's storage where its place is decided sole, a
+# handle of that storage where not (the copy made there, kept, as before) - NoLocal for any other assignment
+fn (ln mut lowering&) copyRegion(target typed.Lvalue&, sp source.Span) mir.LocalId {
+    if not ln.freeing or ln.dead or target != typed.Lvalue.Local: return mir.NoLocal
+    fr := ln.L.Free!
+    if fr.CopyStore(I64(ln.B.Id), I64(sp.Start)) < -1: return mir.NoLocal
+    l := target.id
+    g := ln.guardOf(fr.LocalPlaceOf(I64(ln.B.Id), I64(l)))
+    if g == free.NotSole: return mir.NoLocal
+    rest := ln.storageOf(l)
+    h := ln.temp(mir.I64T, sp)
+    ln.guarded(h, g, mir.Rvalue.Region(rest), rest, sp)
+    return h
+}
+
+# copyRegion's value: the existing text copied into region h once - by the view call it is (D9h, viewCall's copy made
+# there), else here
+fn (ln mut lowering&) copied(value typed.Expr&, ty types.TypeId, h mir.LocalId, sp source.Span) mir.Operand {
+    was, wasH := ln.copySite, ln.copyHere
+    site := ln.L.Free!.CopyStore(I64(ln.B.Id), I64(sp.Start))
+    ln.copySite = site
+    ln.copyHere = h
+    v := ln.fit(ln.val(value), value, ty, sp)
+    done := site >= 0 and ln.copySite < 0
+    ln.copySite, ln.copyHere = was, wasH
+    if ln.dead or done: return v
+    return ln.arrayCopy(v, ty, sp, mir.ScopeRef.Held(h))
+}
+
+# copyRegion's store: the local's old value released where its place is sole (releases), once it holds the copy; the
+# region settled by it - released at once where the copy holds nothing (empty text)
+fn (ln mut lowering&) copyStore(target typed.Lvalue&, dst mir.Lvalue, v mir.Operand, h mir.LocalId, sp source.Span) {
+    if target != typed.Lvalue.Local: return
+    rel := ln.releases(target, true, ln.B.Room(sp))
+    old := mir.NoLocal
+    if rel.Len() > 0 {
+        old = ln.temp(target.Type(), sp)
+        ln.emit(mir.Stmt.Assign(sp, mir.Lvalue.L(old), mir.Rvalue.Use(mir.Operand.Copy(dst))))
+    }
+    ln.emit(mir.Stmt.Assign(sp, dst, mir.Rvalue.Use(v)))
+    if old != mir.NoLocal: ln.releaseAt(old, rel, sp)
+    g := ln.guardOf(ln.L.Free!.LocalPlaceOf(I64(ln.B.Id), I64(target.id)))
+    after := ln.whenSole(g, true, sp) if g >= 0 else mir.NoBlock
+    ln.emit(mir.Stmt.Settle(sp, h, dst))
+    if after != mir.NoBlock: ln.joinAt(after)
 }
 
 # a value given storage for a reference local it is assigned to (`u = u.Inner()`) put in the local's own stack slot of
@@ -5914,9 +5974,11 @@ fn (ln mut lowering&) keptResult(callee mir.Callee, fty types.TypeId, scopes mir
 # B18a: a call handing back a reference to storage its callee builds for it (free.ResBuilds - `rr := second(o.inner)`'s
 # promoted text) into a result scope outside the loop's turn the call is in leaves that storage there turn after turn: a
 # reference a place holds owns nothing, so no place lets go of it - a gap -memory -check fails on (LiftGaps)
-fn (ln mut lowering&) builtResult(callee mir.Callee, fty types.TypeId, scopes mir.Range, b2 I64, sp source.Span) {
+# (but not one pushed straight onto a Vec of this body that only grows while it lives - pushedInto: every reference it
+# hands back is held there until that scope closes, kept on purpose - fix.olang's `parts.Push(try os.ReadFile(p) ...)`)
+fn (ln mut lowering&) builtResult(c typed.Call&, callee mir.Callee, fty types.TypeId, scopes mir.Range, b2 I64, sp source.Span) {
     if not ln.freeing or callee != mir.Callee.Fn or ln.levels.Len() == 0 or not ln.T.IsRef(ln.T.Result(fty)): return
-    if not ln.L.Free!.ResBuilds(b2): return
+    if not ln.L.Free!.ResBuilds(b2) or I64(c.Site) == ln.pushedSite: return
     vs := ln.T.ScopeVarsOf(fty)
     for j in range vs.Len().Min(I64(scopes.N)) {
         if vs[j] != types.ResultVar: continue
@@ -5925,6 +5987,59 @@ fn (ln mut lowering&) builtResult(callee mir.Callee, fty types.TypeId, scopes mi
         if not ln.outsideTurn(at) or at == mir.ScopeRef.Var: return
         ln.L.LiftGaps.Push($ln.L.P.L.Diags.Locate(ln.file, I64(sp.Start)) + ": what a call builds for the reference it hands back keeps until its scope closes: it is built outside the loop's turn the call is in, and no place lets go of it")
         return
+    }
+}
+
+# O8f (2.4, builtResult's over-report): the site of the call value a is - through conversions, a try and its defaults -
+# where a is what call c (callee body) pushes onto a Vec local of this body that only grows while it lives: given no
+# other value, written no other way, kept by no call or reference, lent writably only to the prelude's Push - so each
+# reference pushed is held until its scope closes, kept on purpose; -1 for any other
+fn (ln mut lowering&) pushedInto(c typed.Call&, body I64, a typed.Expr&) I64 {
+    if not ln.freeing or body < 0 or c.Args.Len() != 2 or not ln.preludePush(body): return -1
+    l := lentLocal(c.Args[0])
+    x := pushedCall(a)
+    if l < 0 or x == null or x.Site < typed.SiteId(0) or not ln.L.Free!.ResBuilds(typed.CalleeBody(x)): return -1
+    u := typed.LocalUses.Uses(ln.T, ln.B)
+    if u.Whole[l] or u.WrOther[l] or u.EscHard[l]: return -1
+    for j in range u.AliasOf.Len() {
+        if u.AliasOf[j] == l: return -1
+    }
+    for j in range u.LendAt.Len() {
+        if u.LendAt[j] == l and not ln.preludePush(u.LendBody[j]): return -1
+    }
+    return I64(x.Site)
+}
+
+# whether body b is the prelude's Push (a Vec's)
+fn (ln mut lowering&) preludePush(b I64) Bool {
+    if b < 0 or b >= ln.L.Bodies.Len(): return false
+    of := ln.L.Bodies[b].Of
+    if of != typed.BodyOf.Fn: return false
+    fi := ln.L.P.InstanceFn(of.instance)
+    m := ln.L.P.FnModule(fi)
+    return ln.L.P.L.Names.Text(ln.L.P.FnDecl(fi).Name) == "Push" and m >= 0 and m < ln.L.P.L.Mods.Len() and ln.L.P.L.Mods[m].Identity == "std/prelude/vec"
+}
+
+# the local a writable lend names whole, -1 for any other argument
+fn lentLocal(a typed.Expr&) I64 {
+    return match a {
+        case typed.Expr.Borrow(_, _, q), typed.Expr.Read(_, _, q, _): match q {
+            case typed.Lvalue.Local(_, _, id): I64(id)
+            case _: -1
+        }
+        case typed.Expr.Away(_, _, y): lentLocal(y)
+        case _: -1
+    }
+}
+
+# the call a value is, through conversions, promotions and a try (its defaults new values of their own), null for none
+fn pushedCall(x typed.Expr&) typed.Call?& {
+    return match x {
+        case typed.Expr.Call(_, _, c): c
+        case typed.Expr.Away(_, _, y): pushedCall(y)
+        case typed.Expr.Promote(_, _, pr): pushedCall(pr.X)
+        case typed.Expr.Try(_, _, t): pushedCall(t.X!) if t.X != null else null
+        case _: null
     }
 }
 
@@ -6406,7 +6521,7 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
     scopes := ln.passedFor(callee, fty, c.Site)
     if ln.freeing and callee == mir.Callee.Fn: ln.handCall(c.Site, fty, scopes, typed.CalleeBody(c))
     if ln.keptArgs.Has(I64(c.Site)): ln.keptResult(callee, fty, scopes, sp)
-    ln.builtResult(callee, fty, scopes, typed.CalleeBody(c), sp)
+    ln.builtResult(c, callee, fty, scopes, typed.CalleeBody(c), sp)
     ok := ln.F.NewBlock()
     dest := mir.NoLocal
     if res != types.VoidT and res != types.NoreturnT { dest = ln.temp(ty if ty != types.VoidT else res, sp) }
@@ -6438,6 +6553,12 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
         if ln.L.ViewDump { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(sp.Start)) + ": " + $("read" if ln.reads.Has(I64(c.Site)) else "kept") + $(" stable" if ln.stableViews(c) else "")) }
         # (E31d: a value whose copy runs a declared Copy is copied whatever reads it)
         inPlace := not t.RunsCopy(ty) and (ln.vlSites.Has(I64(c.Site)) or (ln.reads.Has(I64(c.Site)) and ln.stableViews(c)))
+        # (O8f, 2.4: an owner local's copy of the existing text it is assigned, made in copyStore's region)
+        if ln.copySite >= 0 and I64(c.Site) == ln.copySite {
+            ln.copySite = -1
+            ln.L.ViewCopies++
+            return ln.arrayCopy(mir.Operand.Copy(mir.Lvalue.L(dest)), ty, sp, mir.ScopeRef.Held(ln.copyHere), true)
+        }
         if inPlace or ln.freshCtor(c) {
             ln.L.ViewReads++
         } else {

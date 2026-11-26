@@ -437,6 +437,7 @@
 | ok - twoOwners: copies a constructor's instance of two Maps into an element each turn
 | ok - copyReads: reads elements where they stand beside their replacement, and views a by-value argument's copy
 | ok - heldRefs: gives a struct held in place, holding a reference beside its owners, a new instance each turn
+| ok - textsAgain: gives text locals existing text each turn, an element a function's instance, and a Vec references it built
 | ok - copiesAndDefers: builds into a local's own copy of an element holding a reference in the copy's block, beside a defer
 | ok - caseLocals: gives locals an enum case holding a parameter's reference
 | ok - closuresKept: keeps the closure a call made on the turns a function value local takes it, past its turn

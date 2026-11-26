@@ -371,6 +371,38 @@ fn copiesAndDefers(n I64) I64 {
     return s * 10 + deferred + o.inner.a[1].Len() * 1000000
 }
 
+# a text local given existing text each turn - an element, a reference, a local, a walk's name, a slice - holds its own
+# copy, made for it and let go of at its next value; a function's new instance stored into an array's element; and
+# references a call builds pushed onto a Vec that only grows (O8f, 2.4)
+fn padded(i I64) String& { return $"p" + $i + " padded" }
+
+fn textsAgain(n I64) I64 {
+    last := ""
+    other String
+    walked := ""
+    cut String
+    two := Array<TwoMaps>(2, TwoMaps.Of(0))
+    parts Vec<String&>
+    s := 0
+    for i in range n {
+        rs := Vec<String>["r" + $i, "q" + $(i * 3), "z" + $(i * 7)]
+        last = rs[1]
+        r String& = rs[2]
+        other = r
+        s += last.Len() + other.Len()
+        t := $"t" + $(i * 11)
+        last = t
+        for row in rs: walked = row
+        cut = rs[0][0:1]
+        two[i % 2] = TwoMaps.Of(i)
+        parts.Push(padded(i))
+    }
+    churn()
+    if last != "t" + $((n - 1) * 11) or other != "z" + $((n - 1) * 7) or walked != other or cut != "r": return -1
+    for x in parts: s += x.Len()
+    return s * 100 + (try two[(n - 1) % 2].a.Get("a" + $(n - 1) + "-2") catch default -1)
+}
+
 # a value local's copy and a call's value given to a constructor whose instance views them and is copied as the call
 # returns (O8f, 2.4): built in the turn, read only until that copy is made, never where the instance's local lives
 fn twoOf(i I64) Vec<I64> {
@@ -576,6 +608,10 @@ test taskDefaults "keeps tasks' clause defaults, built where their results would
     assert taskDefaults(8) == "w0p1bw2p3bw4p5bw6p7b;p4c,p4,;p5a,p5,;u6,;p7a,p7,"
 }
 
+test textsAgain "gives text locals existing text each turn, an element a function's instance, and a Vec references it built" {
+    assert textsAgain(10) == 14492
+}
+
 test copiesAndDefers "builds into a local's own copy of an element holding a reference in the copy's block, beside a defer" {
     assert copiesAndDefers(10) == 3003350
 }
@@ -593,6 +629,7 @@ assert heldRefs(10) == 4205100
 assert keptArgs(10) == 4305234
 assert taskDefaults(8) == "w0p1bw2p3bw4p5bw6p7b;p4c,p4,;p5a,p5,;u6,;p7a,p7,"
 assert copiesAndDefers(10) == 3003350
+assert textsAgain(10) == 14492
 assert taskCaptures(6) == ";o,;o4,1,;u6,"
 
 # a closure a call makes each turn, capturing its by-value Vec of text, given on some turns to a function value local
