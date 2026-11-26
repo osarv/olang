@@ -121,7 +121,8 @@ type store struct(PlaceId I64, Body I64, File I64, Sp source.Span, Kind I64, Of 
     Body
     File
     Sp
-    Kind     # SOk (null, constant data), SFresh (built at Site), SMove (moved out of place Of), SFail
+    Kind     # SOk (null, constant data), SFresh (built at Site), SMove (moved out of place Of), SCopy (lowering's copy, made
+             # for it), SFail
     Of
     Site
     X        # the value, for its parts built with it
@@ -132,6 +133,7 @@ SOk I64 = 0
 SFresh I64 = 1
 SMove I64 = 2
 SFail I64 = 3
+SCopy I64 = 4   # existing text an owner local is given by an assignment, copied by lowering for it (copyStores)
 
 # a let-go of a place: a place given another value (direct), a vacate statement, a moved value dropped, or a call that
 # may do one of those
@@ -352,6 +354,7 @@ type Free struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>, Sc mut sco
     mustRes Vec<I64>
     resFresh Vec<Bool>
     resBuilds Vec<Bool>   # by body: all its result is new, and some of it storage it builds (ResBuilds)
+    copyStores Map<pair.Pair<I64, I64>, I64>   # SCopy's stores by (body, statement start): the view call copied, else -1
     # by body: whether it may register a destructor in one of its scope variables - its result, its instance, a
     # parameter's scope - so in a region a call of it builds into (F4): a destructor still to run when the region's
     # place would let go of it (O16, condition 4)
@@ -2332,6 +2335,7 @@ type walker struct(F mut Free&, Id I64, Final Bool) {
     # place - made right there for the one owner or array leaf it holds (copyInto). check.storeOver holds it in a Held
     # local first (by local, the copy); the copy whose site is exempt from untracked, the held local read as the store's
     heldCopy Map<I64, typed.Expr&>
+    assigning Bool = false     # the store being judged is an assignment's to an owner local (made's SCopy)
     # ... and check.writeBack's new value held before the store (x[i].n = $"..."), built where its use puts it - the
     # store's new storage
     heldNew Map<I64, typed.Expr&>
@@ -3214,7 +3218,9 @@ fn (w mut walker&) assignTo(sp source.Span, p typed.Lvalue&, x typed.Expr&) {
             if k >= 0: w.wholeField(k, x)
             ol := w.ownLocal(I64(l))
             if ol >= 0 {
+                w.assigning = true
                 w.store(ol, x, o, sp, w.localName(I64(l)))
+                w.assigning = false
                 w.go(ol, LAssign, p.Span(), source.Span(0, 0), -1)
                 w.goParts(ol, p.Span())
                 # (review4's h5: a split local's elements' parts, released by its walk - SplitLocal)
@@ -3785,6 +3791,19 @@ fn (w mut walker&) copyInto(lvs Vec<leaf>&, ty types.TypeId, x typed.Expr&, o mu
         # (an instance viewing only unique values moved out of parameters holds them whole, no copy: what their leaves
         # are given is judged at the call, by the constructor's parWhole)
         if f.viewsOf(b2) != 0 and not typed.ViewsMoved(c!, f.viewsOf(b2)): w.viewCtor(lvs, c!, x, sp)
+        out Vec<I64>
+        w.quiet++
+        args Vec<Vec<I64>>
+        for a in c!.Args: args.Push(w.expr(a))
+        for y in f.resFrom[b2]: f.through(y, args, out)
+        w.quiet--
+        return out
+    }
+    # (review 1125b finding 6: a function handing back only new values of the type - `S2.mk(i)` returning `S2(a, b)` -
+    # gives the leaves values its own stores made, judged in it as a constructor's are (retCtorOf, letCtorOf, its
+    # copies' untracked): no store here, as for a constructor's call)
+    if b2 >= 0 and f.Bodies[b2].Root != null and f.resFresh[b2] and t.Results(f.Bodies[b2].Ty).Len() == 1 and
+       t.Same(t.Repr(t.Results(f.Bodies[b2].Ty)[0]), t.Repr(ty)) {
         out Vec<I64>
         w.quiet++
         args Vec<Vec<I64>>
@@ -6200,6 +6219,7 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
     of := -1
     site := -1
     why := ""
+    existing := false
     # (constant text an immut array local is given: held as it is, ConstLocal)
     if f.isNamed(k) and f.arr[k] and f.P.Immut(f.valTy[k]) and ConstRead(x) {
         f.stores.Push(store(k, w.Id, file, sp, SOk, of, site, x, null))
@@ -6304,6 +6324,7 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
                     of = k
                 }
                 if kind == SFail: why = $"its new value is existing storage: '" + $w.text(x.Span()) + "'; give it new storage - a constructor call, '$...', 'Copy()'"
+                existing = kind == SFail
             }
         }
     }
@@ -6317,6 +6338,11 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
         kind = SFail
         why = "its new value is kept in another place too"
     }
+    # (2.4, a text local given existing text each turn: lowering's copy of it is made for the place - copyStore)
+    if existing and w.assigning and not multi and f.copyStore(k, x) {
+        kind = SCopy
+        if w.Final and w.quiet == 0: f.copyStores.Put(pair.Pair(w.Id, I64(sp.Start)), f.viewCallSite(x))
+    }
     f.stores.Push(store(k, w.Id, file, sp, kind, of, site, x, null))
     if kind == SFail {
         rf, rsp := file, sp
@@ -6326,6 +6352,35 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
         }
         f.keep(k, RMade, rf, rsp, why)
     }
+}
+
+# O8f (2.4, a text local given existing text each turn): whether owner local place k, of immut text (an array of plain
+# elements), given existing storage x by an assignment - a place read, a slice, a view call's value (D9h) - takes a
+# copy lowering makes for it alone (lower.copyStore: built in a region of its own where k is decided sole, settled by
+# the value, released by the next let-go): a store made for the place (SCopy). A call handing back storage it was given
+# builds its result where the place's storage is, no copy of it: kept, and said
+fn (f mut Free&) copyStore(k I64, x typed.Expr&) Bool {
+    if not f.isOwnLocal(k) or not f.arr[k] or f.owner[k] or not f.P.Immut(f.valTy[k]): return false
+    t := f.T()
+    r := t.Repr(f.valTy[k])
+    if t.KindOf(r) != types.Kind.Array or t.HoldsRefs(t.Elem(r)) or t.OwnsParts(t.Elem(r)) or t.IsRef(x.Type()): return false
+    return copiedRead(x) or f.viewCallSite(x) >= 0
+}
+
+# whether x is a place read or a slice, through conversions away
+fn copiedRead(x typed.Expr&) Bool {
+    return match x {
+        case typed.Expr.Read(_, _, _, _), typed.Expr.Slice(_, _, _): true
+        case typed.Expr.Away(_, _, y): copiedRead(y)
+        case _: false
+    }
+}
+
+# lower.copyStore: whether the assignment at at in body b is SCopy's, and the view call it copies (-1 for a read), -2
+# for none
+fn (f Free&) CopyStore(b I64, at I64) I64 {
+    if not f.Done: return -2
+    return try f.copyStores.Get(pair.Pair(b, at)) catch default -2
 }
 
 # O8f (2.4's first gap): the Make a conversion widens - a fixed array's fill or literal given where an array of a
@@ -10056,6 +10111,9 @@ fn (f mut Free&) reported(k I64) Bool {
     owns := false
     for st in f.stores {
         if st.PlaceId == k and (st.Site >= 0 or st.Kind == SFresh or st.Kind == SMove or st.X != null and f.widened(st.X) != null): owns = true
+        # (2.4: an owner local's value it is given - a copy lowering makes for it, or a value not made for it, which
+        # lowering copies or builds where the local's storage is - is storage there all the same)
+        if st.PlaceId == k and f.isOwnLocal(k) and (st.Kind == SCopy or st.Kind == SFail): owns = true
     }
     # (a constructor's copy made for it, or a copy made at a store into a struct held in place, gives it storage of its
     # own all the same, where no site names it: what it keeps for is reported - viewCtor, copyLeaves)
