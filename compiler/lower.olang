@@ -5982,6 +5982,12 @@ fn (ln mut lowering&) funcLocal(l I64) Bool {
 fn (ln mut lowering&) handsPlan() {
     if ln.handsDone or not ln.freeing or ln.B.Root == null: return
     ln.handsDone = true
+    # (two function value locals at least, else nothing to walk)
+    n := 0
+    for i in range ln.B.Locals.Len() {
+        if ln.funcLocal(i): n++
+    }
+    if n < 2: return
     w mut handWalk& = handWalk(ln.T, ln.L.P)
     w.block(ln.B.Root!)
     if w.off: return
