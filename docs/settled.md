@@ -886,7 +886,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   initializer's scope; exactness is required only where something can be stored through (O25g). Copies of
   reference-holding values keep their references where the source's are (O25h) - a `:=`, a walk's name and a match
   binding owning storage beside them included: the copy's own storage is its block, its claim the source's references'
-  term (scope.ownCopy's copyLocal; wt-walkref, 2026-11-25), so an element referring into its own array is copied out.
+  term (scope.ownCopy's copyLocal; wt-walkref, 2026-11-25), so an element referring into its own array is copied out;
+  what is stored into a part of the copy holding no reference is built in that block too (scope.ownPart; wt-revfix1).
 - **A reference local typed per assignment (O25i; NLL DECIDED 2026-11-03, the user: "Yes, there's no point in omitting
   this").** A reference local, parameter or function-valued local gets a version at its declaration and every whole
   assignment, holding the value's exact scope; each read is judged by the versions reaching it.

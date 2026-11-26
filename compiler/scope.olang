@@ -393,6 +393,7 @@ type Scoper struct(P mut generic.Program&, Bodies Vec<mut typed.Body&>) {
     resultVar I64 = -1                     # the result scope's index in Vars, -1 for none
     held Map<I64, typed.Expr&>             # a held local's temporary initializer, built where its one use puts it
     splitHome Map<I64, Term>               # a for-in's hidden borrow of a split value: where its references live (O17a)
+    ownCopies Map<I64, Bool>               # locals holding their own copy of storage with references (ownCopy's copyLocal)
     inits Map<I64, typed.Expr&>            # by local: its declaration's initializer, for the notes
     # by local never assigned after its declaration: the construction bindings of the instance it holds or refers to,
     # one per constructor parameter in bindTerms from bindFrom (O23a); ctorSite, ctorFrom the constructor call last judged
@@ -3556,6 +3557,7 @@ fn (s mut Scoper&) judge(b I64, report Bool) {
     s.setTerms.Clear()
     s.held.Clear()
     s.splitHome.Clear()
+    s.ownCopies.Clear()
     s.inits.Clear()
     s.bindFrom.Clear()
     s.bindTerms.Clear()
@@ -5104,6 +5106,7 @@ fn (s mut Scoper&) peekBorrow(p typed.Lvalue&) Term {
 
 # a place's parts' term (parts) or its storage's, as partsTerm and storOf give them, where that needs no judging
 fn (s mut Scoper&) peekPlace(p typed.Lvalue&, parts Bool) Term {
+    if parts and s.ownPart(p) >= 0: return s.stors[s.ownPart(p)]
     return match p {
         case typed.Lvalue.Local(_, _, id): s.whereLives(id) if parts else s.stors[I64(id)]
         case typed.Lvalue.Global(_, _, _, _): Term.Program
@@ -8104,6 +8107,7 @@ fn (s mut Scoper&) letInferred(l typed.LocalId, loc typed.Local, x typed.Expr?&,
     if part { s.tempLand = 1 if land and lift == Term.None else 0 }
     s.lastGenArg = Term.None
     s.copyLocal = s.refCopy(x)
+    if s.copyLocal: s.ownCopies.Put(I64(l), true)
     v := s.val(x, dest)
     s.copyLocal = false
     s.promoteLocal = -1
@@ -9333,6 +9337,10 @@ fn (s mut Scoper&) isStruct(t types.TypeId) Bool {
 # where the references a place's parts hold live (O20, O25h, O5): through a reference, where it leads; a value local's
 # references; a global's, the program's; a field viewing q's referent where its binding says (C2d, O23a), else its container's
 fn (s mut Scoper&) partsTerm(p typed.Lvalue&) Term {
+    # (a part of a local's own copy holding no reference is the copy's own storage, its block - whatever the references
+    # beside it name, O25h)
+    ol := s.ownPart(p)
+    if ol >= 0: return s.stors[ol]
     match p {
         case typed.Lvalue.Local(_, _, id) {
             # D9b: its own copy's elements - in the frame, or where R3 makes the copy for it to be kept (O14, O28)
@@ -9356,6 +9364,24 @@ fn (s mut Scoper&) partsTerm(p typed.Lvalue&) Term {
 # what field i of the struct at base holds lives in: a bare field where the instance's references are; one written
 # viewing q's referent, where q's argument lived (C2d, O23a) - read through a reference parameter p, the derived scope D(p, q); else
 # where the instance is, an underestimate (O23) that is read but never built into nor shown to be outlived
+# the local whose own copy (ownCopies) p is a part of, reached through fields, payloads and elements, where p holds no
+# reference (its storage the copy's, built in the copy's block); -1 for anything else
+fn (s mut Scoper&) ownPart(p typed.Lvalue&) I64 {
+    if s.ownCopies.Len() == 0 or s.P.T.SharesRefs(p.Type()): return -1
+    l := ownRoot(p)
+    return l if l >= 0 and s.ownCopies.Has(l) else -1
+}
+
+fn ownRoot(p typed.Lvalue&) I64 {
+    return match p {
+        case typed.Lvalue.Local(_, _, id): I64(id)
+        case typed.Lvalue.Field(_, _, b, _): ownRoot(b)
+        case typed.Lvalue.Elem(_, _, e): ownRoot(e.Base)
+        case typed.Lvalue.Payload(_, _, pl): ownRoot(pl.Base)
+        case _: -1
+    }
+}
+
 fn (s mut Scoper&) fieldTerm(base typed.Lvalue&, i I64) Term {
     bt := base.Type()
     if s.isRef(bt) and throughElem(base) {
@@ -10879,8 +10905,9 @@ fn (s mut Scoper&) arm(a typed.Arm?&, dest Term) Val {
         for bd in alt.Binds {
             s.copyLocal = s.refCopy(bd.From)
             v := s.val(bd.From, Term.None)
-            s.copyLocal = false
             l := I64(bd.To)
+            if s.copyLocal: s.ownCopies.Put(l, true)
+            s.copyLocal = false
             # a binding is a local of its clause's block (S13b); alternatives binding one name from different scopes
             # bind it where neither is known (S13c, O12)
             s.stors[l] = s.blockTerm(s.B!.Locals[l].In)

@@ -1,0 +1,47 @@
+import "std/io"
+
+# B18a (review 1125b): a call handing back a reference to text it builds for it (`second` promotes the element it reads)
+# whose result scope is where the reference is stored - a struct's reference field outside the loop, `o.inner = P(...,
+# rr)` - builds that text there each turn, and no place lets go of it: a reference owns nothing. -memory -check names
+# the call and fails (LiftGaps); built, -free late, -sanitize and the evaluator agree
+N I64 = 2000
+
+type P struct(a Vec<String>, b Vec<I64>, r String&) {
+    a
+    b
+    r
+}
+
+type O struct(inner P, n I64) {
+    inner
+    n
+}
+
+fn mkA(i I64) Vec<String> {
+    v Vec<String>
+    for k in range 3: v.Push(("s" + $(i + k)).PadEnd(100, '.'))
+    return v
+}
+
+fn mkB(i I64) Vec<I64> {
+    v Vec<I64>
+    for k in range 40: v.Push(i * k)
+    return v
+}
+
+fn second(p P&) String& { return p.a[1] }
+
+fn main() {
+    base := "base"
+    o := O(P(mkA(0), mkB(0), base), 0)
+    t := 0
+    last := ""
+    for i in range N {
+        rr := second(o.inner)
+        o.inner = P(mkA(i), mkB(i), rr)
+        junk := mkA(i + 3)
+        t += o.inner.r.Len() + junk[0].Len()
+        last = o.inner.r
+    }
+    io.PutLn($t + " " + last[0:5] + " " + $last.Len())!
+}

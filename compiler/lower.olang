@@ -5896,6 +5896,23 @@ fn (ln mut lowering&) keptResult(callee mir.Callee, fty types.TypeId, scopes mir
     }
 }
 
+# B18a: a call handing back a reference to storage its callee builds for it (free.ResBuilds - `rr := second(o.inner)`'s
+# promoted text) into a result scope outside the loop's turn the call is in leaves that storage there turn after turn: a
+# reference a place holds owns nothing, so no place lets go of it - a gap -memory -check fails on (LiftGaps)
+fn (ln mut lowering&) builtResult(callee mir.Callee, fty types.TypeId, scopes mir.Range, b2 I64, sp source.Span) {
+    if not ln.freeing or callee != mir.Callee.Fn or ln.levels.Len() == 0 or not ln.T.IsRef(ln.T.Result(fty)): return
+    if not ln.L.Free!.ResBuilds(b2): return
+    vs := ln.T.ScopeVarsOf(fty)
+    for j in range vs.Len().Min(I64(scopes.N)) {
+        if vs[j] != types.ResultVar: continue
+        # (one of this body's own scopes or the program's: a caller's, the result handed on, is the caller's to judge)
+        at := ln.F.Refs[I64(scopes.At) + j]
+        if not ln.outsideTurn(at) or at == mir.ScopeRef.Var: return
+        ln.L.LiftGaps.Push($ln.L.P.L.Diags.Locate(ln.file, I64(sp.Start)) + ": what a call builds for the reference it hands back keeps until its scope closes: it is built outside the loop's turn the call is in, and no place lets go of it")
+        return
+    }
+}
+
 # whether evaluating argument x changes nothing: a constant, a plain place's read (plainPlace), or a copy of one
 fn quietArg(x typed.Expr&) Bool {
     return match x {
@@ -5921,6 +5938,7 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
     res := t.Result(fty)
     scopes := ln.passedFor(callee, fty, c.Site)
     if ln.keptArgs.Has(I64(c.Site)): ln.keptResult(callee, fty, scopes, sp)
+    ln.builtResult(callee, fty, scopes, typed.CalleeBody(c), sp)
     ok := ln.F.NewBlock()
     dest := mir.NoLocal
     if res != types.VoidT and res != types.NoreturnT { dest = ln.temp(ty if ty != types.VoidT else res, sp) }
