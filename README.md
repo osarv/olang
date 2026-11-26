@@ -4,6 +4,42 @@ A compiled language with C's performance and no manual memory management: memory
 a function that can fail says so in its signature, and anything that can be computed while compiling is. `PRINCIPLES.md`
 says what it is for, `SPEC.md` is the language reference, and `CLAUDE.md` records the design decisions.
 
+## A taste
+
+```
+type Point struct(x I64, y I64) {
+    x
+    y
+}
+
+type HalfError error {
+    Odd
+}
+
+# a function that can fail says so in its signature
+fn half(n I64) I64 ? HalfError {
+    if n % 2 != 0: error HalfError.Odd
+    return n / 2
+}
+
+fn main() {
+    a := Point(1, 2)
+    b := Point(3, 4)
+    r :~ a                       # r is a reference to a
+    r.x = 10                     # writes a.x
+    r ~ b                        # r now refers to b
+    r = Point(3, 4)              # "=" writes the value r refers to
+    assert r is b and r == b     # "is": same object; "==": same contents
+    n := try half(7) catch HalfError.Odd default -1
+    squares := Array<I64>[i * i for i in range 5]
+    Println($a.x + " " + $n + " " + $squares)  # 10 -1 Array<I64>[0, 1, 4, 9, 16]
+}
+```
+
+Values are written with `=` and compared with `==`; a reference is linked with `~` (declared with `:~`) and two
+references are the same object when `a is b`; `x is null` is the null test. Nothing is freed by hand: storage lives in
+the scope that made it, and the compiler proves no reference outlives it. `olang fix` brings older code up to date.
+
 ## Building the compiler
 
 You need x86-64 Linux (WSL works: keep the checkout in the Linux file system, such as `~/olang`, not under `/mnt/c`)
@@ -123,7 +159,7 @@ failing cell with status 1; `-continue` runs the rest.
 
 ```
 make quick    # the whole test suite on the compiler already built
-make verify   # the gate: a clean bootstrap and the whole suite (about 6 minutes on 4 cores, up to 5 GB of memory)
+make verify   # the gate: a clean bootstrap and the whole suite (up to 5 GB of memory)
 ```
 
 The top of the `makefile` lists the rest.
@@ -135,6 +171,4 @@ larger change, open an issue first so the design can be discussed before the cod
 
 ## Licence
 
-olang is licensed under either of the MIT licence ([LICENSE-MIT](LICENSE-MIT)) or the Apache License, Version 2.0
-([LICENSE-APACHE](LICENSE-APACHE)), at your option. Unless you state otherwise, a contribution you submit for
-inclusion in olang is licensed under both, without any additional terms or conditions.
+olang is licensed under the Apache License, Version 2.0; see [LICENSE](LICENSE).
