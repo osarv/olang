@@ -93,3 +93,4 @@ here and pushes; removes it (or marks it done with the merge commit) when merged
 - OLang Cloud (2026-11-25): olang wt-cunion - supplied per-member accessors for an anonymous C union (u.Member() copy, u.SetMember(v)); the user's decision via the Orchestrator
 - OLang Cloud (2026-11-25): olang wt-walkref merged (be90b8dc7, full verify green); wt-revfix1 (review 1125b findings 1, 3, 4) and wt-revfix2 (findings 2, 5) running
 - OLang Cloud (2026-11-26): olang wt-cunion merged (7c6e81776) - X18a C union member accessors; wt-revfix1/wt-revfix2 in full verify before merge
+- OLang Cloud (2026-11-26): olang wt-revfix1 + wt-revfix2 merged (e2de6b2de, full verifies green); wt-revfix3 (-check honesty: text locals, over-reports) and wt-fnregion (per-value regions for function-value locals) started

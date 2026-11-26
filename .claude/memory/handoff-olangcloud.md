@@ -22,13 +22,13 @@ Stopped by the Orchestrator's pacing guard; no new items until it restarts this 
 4. Full verify green on wt-liftcopy 5e82ff967 (= master 0477c98f6) and 302e9d7cd (twoowners, copygaps, origins). Logs of the steward go to /home/user/steward-logs (verify wipes build/).
 
 ## Review 1125b (2026-11-25, /home/user/review/batch1125b/NOTES.txt): no use after free; false -check passes
-- wt-revfix1 (findings 1, 3 fixed; 4 named) and wt-revfix2 (2 and the fill-and-walk fixed; 5 named) each in a full verify
-  in its worktree, then merged by stewards in that order (logs /home/user/steward-logs/verify-revfix{1,2}.log).
-- Next round (revfix3, after both merge): a text local given existing text each turn (~64 B/turn, -check passes falsely;
-  freeing.md 2.4 "A text local given existing text"), finding 6's over-report (twoowners/ctorwrite), builtResult's
-  over-report for a Vec<String&> holding promoted texts on purpose (fix.olang:181).
-- Then a section-8 round: per-value regions for function-value locals (revfix2's option (b), fnvalgrow) - it would also
-  close revfix1's builtResult (finding 4, option (a)). Decided as mine (implementation, no meaning change).
+- wt-revfix1 merged (08dd7d3de) and wt-revfix2 merged (5048bcacd, goldens e2de6b2de), each after a full verify green
+  in its worktree (master = e2de6b2de holds every full-verified change; revfix1's first verify was OOM-killed with two
+  verifies and builds side by side - run ONE full verify at a time on this 15 GB machine).
+- Running from e2de6b2de: wt-revfix3 (a text local given existing text each turn - false -check pass; finding 6's
+  over-report; builtResult's over-report for a Vec<String&> kept on purpose) and wt-fnregion (per-value regions for
+  function-value locals, fnvalgrow; then builtResult/origrefcall if it falls out). Merge each after a full verify, one
+  at a time.
 - Threaded fixtures (taskcaps, taskdefault) measure flatness by VmHWM: under `ulimit -v 8192` threads exit 2 even flat.
 - wt-cunion merged (7c6e81776, goldens 526eb409a): X18a, `u.m()`/`u.set_m(v)` for C union number members (little-endian).
 
