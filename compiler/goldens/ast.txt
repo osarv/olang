@@ -2596,7 +2596,7 @@ af79947f7e5319da af5304de6cbc145c compiler/eval.olang
 eefaed92769b2b0a e712b1628a5b4f17 compiler/fetch.olang
 809b03e4153a5407 b79d21443ee8bea3 compiler/fix.olang
 b867c3eb9161cf25 bd548ea420a44ba9 compiler/fmt.olang
-5bd9d2e8f470c404 8ff67e7c16f4a56e compiler/free.olang
+af8b85b963862c9c 92723af3997d1cc4 compiler/free.olang
 dd300861d8c6791c 47c58ed9c2bf8233 compiler/generic.olang
 5325d0b0e7309e92 68d6127dbe31f847 compiler/interp.olang
 4540ff7efa9344b0 f7e7d7e9dda32d9d compiler/jupyter.olang

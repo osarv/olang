@@ -1,0 +1,42 @@
+# check: run
+# O8d: a handle - a struct of one reference, as std/list's List is - held in a struct's field, its reference one its
+# constructor was given (`foreign(rowsOf(g))`): the field's place is never sole, so its let-go releases nothing the
+# handle never owned - it released the caller's local grid, a crash at the callee's end (oann's gemm GemmLeft)
+type grid struct(rows I64) {
+    Data Array<F64> = Array<F64>(rows, 1.5)
+}
+
+type rowsOf struct(m grid&) {
+    m
+}
+
+type foreign<L> struct(x L) {
+    x
+}
+
+fn (f foreign<L>&) count() I64 { return f.x.m.Data.Len() }
+
+fn wrapped<L>(a L, out mut Array<F64>&) {
+    fa := foreign<L>(a)
+    out[0] = F64(fa.count())
+}
+
+fn plain(a rowsOf, out mut Array<F64>&) {
+    fa := foreign<rowsOf>(a)
+    out[1] = fa.x.m.Data[0]
+}
+
+fn lent() F64 {
+    g := grid(10)
+    out := Array<F64>(2)
+    wrapped(rowsOf(g), out)
+    plain(rowsOf(g), out)
+    g.Data[0] = 2.0
+    s := out[0] + out[1] + g.Data[0]
+    plain(rowsOf(g), out)
+    return s + out[1]
+}
+
+fn main() {
+    Println($lent())
+}

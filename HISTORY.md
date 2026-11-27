@@ -44346,3 +44346,16 @@ default's frame to those locals (defaultArg, ctorDefault). Kotlin and Scala allo
 checked where the type is written, no call there).
 Checking every default where it is written found two latent errors: checks' c2dcondfield and c2dmatchfield declared a
 constructor default `data Array<F64>& = null` (T2c: a reference never null) that no call used; the default is dropped.
+
+## 2026-11-27: a handle given its reference is not made for the place it is stored in (O8d; mine; wt-regiondrop)
+
+oann's kernels/gemm GemmLeft test segfaulted in `__olang_region_drop` at the end of GemmLeft, alone and on master:
+`fa := foreign<L>(a)`, L a handle (`type rowsOf struct(m Mat<F64>&)`, a struct of one reference) the caller built as
+`rowsOf(a)` around its own local matrix. The free pass decided foreign's field 0 - a handle place - sole: the store's
+value, a parameter, was judged at each call (parStored), and there freshSite took any constructor call as built at its
+site. That holds for a handle whose constructor builds what its reference names (std/list's `List()`), not for one
+whose reference is a constructor parameter: the region made for the site held nothing, and the place's let-go released
+the region the reference "was built in" - the caller's stack local. made() now judges such a store not made for the
+place (handleViews: a constructor call whose parameter is stored into the handle type's field place), so the place
+keeps and its let-go releases nothing; the reason says so in `-memory` ("its new value is a handle whose reference its
+constructor was given"). Checks' o8dhandlegiven (check: run) crashed before.

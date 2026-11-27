@@ -6313,6 +6313,10 @@ fn (w mut walker&) made(k I64, x typed.Expr&, sp source.Span, multi Bool) {
                 return
             }
             site, why = w.freshSite(x)
+            if site >= 0 and w.handleViews(k, x) {
+                site = -1
+                why = $"its new value is a handle whose reference its constructor was given: '" + $w.text(x.Span()) + "'"
+            }
             if site >= 0 {
                 kind = SFresh
             } else if why == "" {
@@ -6463,6 +6467,24 @@ fn (w mut walker&) freshSite(x typed.Expr&) I64, String {
         }
         case _ { return -1, "" }
     }
+}
+
+# whether x, stored into handle place k, is a constructor call whose instance's reference is one of its parameters
+# (parStored into the handle type's field place) - a handle naming storage built elsewhere, `rowsOf(a)`: no region of
+# its own holds what its reference names, so the place's let-go would release storage it never owned (a stack local,
+# another scope's chunk) - not made for the place
+fn (w mut walker&) handleViews(k I64, x typed.Expr&) Bool {
+    f :~ w.F
+    if not f.IsHandle(k): return false
+    c :~ typed.Call.Of(x)
+    if c is null: return false
+    b2 := typed.CalleeBody(c)
+    if b2 < 0 or w.T().Role(f.Bodies[b2].Ty) != types.RoleCtor: return false
+    q := f.placeKey(f.valTy[k], 0)
+    for e in f.parStored[b2] {
+        if q < 0 or (e & ((I64(1) << 32) - 1)) == q: return true
+    }
+    return false
 }
 
 fn (f mut Free&) fnName(b I64) String {
