@@ -1,0 +1,828 @@
+# http1 - HTTP/1.1 (RFC 9112) in olang over std/net: a message layer, a client and a small blocking server.
+#
+#     r := try http1.Response.Get("http://127.0.0.1:8080/status")            # a Response whatever its status
+#     if r.Status == 200: Println(String(r.Body))
+#     r2 := try http1.Response.Post(u, "application/json", body)
+#     r3 := try http1.Response.Send("PUT", u, Array<http1.Header>[http1.Header("Authorization", "Bearer x")], body)
+#
+#     fn hello(r http1.Request&) http1.Response { return http1.Response.Of(200, "hello " + r.Target) }
+#     l := try net.Listener.Listen(try net.Addr.Parse("0.0.0.0:8080"))
+#     try http1.Serve(l, hello)                                       # one task per connection
+#
+# The message layer is pure and works on bytes: Request.Parse and Response.Parse read a whole message (head, then the
+# body by Content-Length, chunked transfer coding, or - for a response - up to the end), Request.ParseHead and
+# Response.ParseHead read a head alone, Dechunk and Chunked decode and encode the chunked coding, Format writes a
+# message back (Content-Length added where the head gives no framing). Header names are compared without regard to
+# case (Header, Set). Limits are named arguments: a head longer than maxHead or a body longer than maxBody is TooLarge,
+# never read on. Malformed heads are refused (Error.Head names why): no folded lines, no field without a ':' or with a
+# space in its name, no control bytes, a request with both Transfer-Encoding and Content-Length or differing lengths.
+#
+# The client makes one request per connection ("Connection: close"), follows redirects (301, 302, 303, 307 and 308; ten
+# at most, 303 - and 301/302 after a POST - turned into a GET), and waits at most "timeout" for each read and write.
+#
+# TLS is not here: importing std/tls links libssl and libcrypto into the program, so a program that speaks only plain
+# HTTP - a server behind a proxy, a LAN device - would pay for it. Send refuses an https URL with Error.Scheme; std/https
+# makes the same requests over http and https alike, through Response.Exchange and Redirected below. Exchange takes any
+# connection whose Read and Write fail with this module's Error (Closed at the end of the stream, Timeout, Transport),
+# so a connection of another kind needs only a wrapper mapping its errors.
+#
+# The server: Serve accepts connections, and for each one - in a task of its own (spawn) - reads one request (at most
+# maxRequest bytes, else 413; a malformed one gets 400), calls the handler with it, writes its Response and closes.
+# A "HEAD" request gets the head alone; "Expect: 100-continue" is answered before the body is read.
+#
+# Imported with `import "std/http1"`.
+
+import "net"
+import "time"
+import "url"
+
+# why no message: Head - a head that is not HTTP/1.x (why says what is wrong); TooLarge - a head or body above its
+# limit; Chunk - a malformed chunked body; Closed - the connection ended before the message did; Timeout - a read or
+# write waited longer than allowed; Transport - the connection failed (why says how); Scheme - a URL whose scheme this
+# module does not fetch (https: std/https); Redirects - more redirects than allowed; NoHeader - Header found no field by
+# that name
+type Error error {
+    Head(why String)
+    TooLarge
+    Chunk
+    Closed
+    Timeout
+    Transport(why String)
+    Scheme(scheme String)
+    Redirects
+    NoHeader(name String)
+}
+
+# one header field
+type Header struct(Name String, Value String) {
+    Name
+    Value
+}
+
+# a request: the method, the target as the request line names it (a path and query, "/a?b=1"), the version's minor
+# number (1 for HTTP/1.1), the header fields in order and the body
+type Request struct(Method String = "GET", Target String = "/") {
+    Method
+    Target
+    Minor I64 = 1
+    Headers Vec<Header> = Vec<Header>()
+    Body String = ""
+}
+
+# a response: the status code, its reason phrase, the header fields in order and the body
+type Response struct(Status I64 = 200) {
+    Status
+    Reason String = ""
+    Headers Vec<Header> = Vec<Header>()
+    Body String = ""
+}
+
+# how a body is delimited
+type framing enum {
+    Empty
+    Length(n I64)
+    Chunked
+    ToClose
+}
+
+MaxHead I64 = 64 << 10
+MaxBody I64 = 64 << 20
+MaxRequest I64 = 1 << 20
+
+# ---- header fields ----
+
+fn sameName(a String&, b String&) Bool {
+    if a.Len() != b.Len(): return false
+    for i in range a.Len() {
+        if a[i].ToLower() != b[i].ToLower(): return false
+    }
+    return true
+}
+
+fn find(hs Vec<Header>&, name String&) String& ? Error.NoHeader {
+    for h in hs.View() {
+        if sameName(h.Name, name): return h.Value
+    }
+    error Error.NoHeader(String(name))
+}
+
+# the field named "name" set to value: the first such field's value replaced, the others removed; added at the end
+# where there is none
+fn set(hs mut Vec<Header>&, name String&, value String&) {
+    kept := Vec<Header>()
+    done := false
+    for h in hs.View() {
+        if not sameName(h.Name, name) {
+            kept.Push(h)
+        } else if not done {
+            kept.Push(Header(h.Name, String(value)))
+            done = true
+        }
+    }
+    if not done: kept.Push(Header(String(name), String(value)))
+    hs.Clear()
+    for h in kept.View(): hs.Push(h)
+}
+
+# the value of the first field named "name", in any case - failing with NoHeader when there is none
+fn (r Request&) Header(name String&) String& ? Error.NoHeader { return try find(r.Headers, name) }
+fn (r Response&) Header(name String&) String& ? Error.NoHeader { return try find(r.Headers, name) }
+
+# the field "name" given the value: replacing the one there, or added
+fn (r mut Request&) Set(name String&, value String&) { set(r.Headers, name, value) }
+fn (r mut Response&) Set(name String&, value String&) { set(r.Headers, name, value) }
+
+# a response with the status, the text as its body and the content type given
+fn Response.Of(status I64, body String&, contentType String& = "text/plain; charset=utf-8") Response {
+    r := Response(status)
+    r.Set("Content-Type", contentType)
+    r.Body = String(body)
+    return r
+}
+
+# ---- parsing ----
+
+# whether c may be in a token (a method, a field name): visible ASCII but for the delimiters RFC 9110 5.6.2 names
+fn tokenChar(c Char) Bool { return c > ' ' and c < 0x7F and not (c in "\"(),/:;<=>?@[\\]{}") }
+
+fn token(t String&) Bool { return t.Len() > 0 and t.Every(tokenChar) }
+
+# the head's lines, a "\r" before each "\n" dropped, the empty line ending the head and anything after it left out
+fn headLines(head String&) Array<String> {
+    out := Vec<String>()
+    for line in head.Split("\n") {
+        l :~ line[:line.Len() - 1] if line.EndsWith("\r") else line
+        if l.Len() == 0: break
+        out.Push(String(l))
+    }
+    return out.ToArray()
+}
+
+# the header fields of lines[1:] pushed to hs
+fn parseFields(lines Array<String>&, hs mut Vec<Header>&) ? Error.Head {
+    for i in range 1, lines.Len() {
+        l :~ lines[i]
+        if l[0] == ' ' or l[0] == '\t': error Error.Head("a folded field line: " + l)
+        colon := try l.FindByte(':') catch { error Error.Head("a field line without a ':': " + l) }
+        if not token(l[:colon]): error Error.Head("a field name that is no token: " + l)
+        value :~ l[colon + 1:].Trim()
+        for c in value {
+            if c < ' ' and c != '\t' or c == 0x7F: error Error.Head("a control byte in a field: " + l)
+        }
+        hs.Push(Header(String(l[:colon]), String(value)))
+    }
+}
+
+# the minor version of "HTTP/1.x"
+fn version(t String&) I64 ? Error.Head {
+    if t == "HTTP/1.1": return 1
+    if t == "HTTP/1.0": return 0
+    error Error.Head("not HTTP/1.0 or HTTP/1.1: " + t)
+}
+
+# a request's head - the request line and the field lines, up to the empty line - read
+fn Request.ParseHead(head String&) Request ? Error.Head {
+    lines := headLines(head)
+    if lines.Len() == 0: error Error.Head("no request line")
+    parts :~ lines[0].Split(" ")
+    if parts.Len() != 3 or not token(parts[0]) or parts[1].Len() == 0: error Error.Head("not a request line: " + lines[0])
+    for c in parts[1] {
+        if c <= ' ' or c == 0x7F: error Error.Head("a control byte in the target")
+    }
+    r := Request(String(parts[0]), String(parts[1]))
+    r.Minor = try version(parts[2])
+    try parseFields(lines, r.Headers)
+    return r
+}
+
+# a response's head - the status line and the field lines - read
+fn Response.ParseHead(head String&) Response ? Error.Head {
+    lines := headLines(head)
+    if lines.Len() == 0: error Error.Head("no status line")
+    first :~ lines[0]
+    if first.Len() < 12 or first.Len() > 12 and first[12] != ' ' or first[8] != ' ': error Error.Head("not a status line: " + first)
+    try version(first[:8])
+    code :~ first[9:12]
+    if not code.Every(fn(c Char) Bool { return c >= '0' and c <= '9' }): error Error.Head("not a status code: " + first)
+    r := Response(code.ParseInt()!)
+    if r.Status < 100: error Error.Head("not a status code: " + first)
+    r.Reason = String(first[13:]) if first.Len() > 13 else ""
+    try parseFields(lines, r.Headers)
+    return r
+}
+
+# a Content-Length's value: digits only, and the same in every field that gives one
+fn contentLength(hs Vec<Header>&) I64 ? Error.Head, Error.NoHeader {
+    n I64 = -1
+    for h in hs.View() {
+        if not sameName(h.Name, "Content-Length"): continue
+        v := try h.Value.ParseInt() catch { error Error.Head("a Content-Length that is no number: " + h.Value) }
+        if h.Value[0] == '+' or h.Value[0] == '-' or n >= 0 and v != n: error Error.Head("a Content-Length refused: " + h.Value)
+        n = v
+    }
+    if n < 0: error Error.NoHeader("Content-Length")
+    return n
+}
+
+# whether the last transfer coding named is chunked
+fn lastChunked(te String&) Bool {
+    codings :~ te.Split(",")
+    return codings[codings.Len() - 1].Trim().ToLower() == "chunked"
+}
+
+# how a request's body is delimited (RFC 9112 6.3): chunked, a length, or none - a request with both, or with another
+# coding last, is refused
+fn (r Request&) framing() framing ? Error.Head {
+    te :~ try r.Header("Transfer-Encoding") catch { return framing.Length(try contentLength(r.Headers) catch Error.NoHeader { return framing.Empty }) }
+    if (try contentLength(r.Headers) catch Error.NoHeader default -1) >= 0: error Error.Head("both Transfer-Encoding and Content-Length")
+    if not lastChunked(te): error Error.Head("a transfer coding other than chunked last: " + te)
+    return framing.Chunked
+}
+
+# how a response's body is delimited, as the answer to "method": none for HEAD, 1xx, 204 and 304; chunked; a length;
+# else up to the close
+fn (r Response&) framing(method String&) framing ? Error.Head {
+    if method == "HEAD" or r.Status < 200 or r.Status == 204 or r.Status == 304: return framing.Empty
+    te :~ try r.Header("Transfer-Encoding") catch { return framing.Length(try contentLength(r.Headers) catch Error.NoHeader { return framing.ToClose }) }
+    return framing.Chunked if lastChunked(te) else framing.ToClose
+}
+
+# ---- reading from a connection ----
+
+# bytes read and not yet taken
+type inbox struct() {
+    buf Vec<U8> = Vec<U8>()
+    at I64 = 0
+}
+
+# a connection that has ended: the reader of bytes already in hand
+type ended struct() { }
+
+fn (e mut ended&) Read(buf mut Array<U8>&) Array<U8>& ? Error { error Error.Closed }
+fn (e mut ended&) Write(data Array<U8>&) ? Error { error Error.Closed }
+
+type more error { Bytes }
+
+# the end of the head in v - just past its empty line - looking from "from"
+fn headEnd(v Array<U8>&, from I64) I64 ? more {
+    for i in range from, v.Len() {
+        if v[i] != '\n': continue
+        if i + 1 < v.Len() and v[i + 1] == '\n': return i + 2
+        if i + 2 < v.Len() and v[i + 1] == '\r' and v[i + 2] == '\n': return i + 3
+    }
+    error more.Bytes
+}
+
+# what c gives next appended
+fn (b mut inbox&) fill<C>(c mut C&) ? Error {
+    if b.at > 0 and b.at * 2 >= b.buf.Len() {
+        rest := b.buf.View()[b.at:].Copy()
+        b.buf.Clear()
+        b.buf.PushAll(rest)
+        b.at = 0
+    }
+    chunk := Array<U8>(16384)
+    b.buf.PushAll(try c.Read(chunk))
+}
+
+# a message's head, as text - the empty lines before it skipped (RFC 9112 2.2) - read up to its empty line
+fn (b mut inbox&) head<C>(c mut C&, max I64) String ? Error {
+    from := b.at
+    for {
+        for b.at < b.buf.Len() and (b.buf.At(b.at) == '\r' or b.buf.At(b.at) == '\n'): b.at++
+        from = from.Max(b.at)
+        end := try headEnd(b.buf.View(), from) catch more {
+            if b.buf.Len() - b.at > max: error Error.TooLarge
+            from = (b.buf.Len() - 2).Max(b.at)
+            try b.fill(c)
+            continue
+        }
+        if end - b.at > max: error Error.TooLarge
+        t := String(b.buf.View()[b.at:end])
+        b.at = end
+        return t
+    }
+    unreachable
+}
+
+# the next n bytes
+fn (b mut inbox&) take<C>(c mut C&, n I64) Array<U8> ? Error {
+    for b.buf.Len() - b.at < n: try b.fill(c)
+    out := b.buf.View()[b.at:b.at + n].Copy()
+    b.at += n
+    return out
+}
+
+# the next line, without its "\r\n" - at most max bytes
+fn (b mut inbox&) line<C>(c mut C&, max I64) String ? Error {
+    from := b.at
+    for {
+        v :~ b.buf.View()
+        nl := try String(v[from:]).FindByte('\n') catch {
+            if v.Len() - b.at > max: error Error.TooLarge
+            from = v.Len()
+            try b.fill(c)
+            continue
+        }
+        end := from + nl
+        t := String(v[b.at:end - 1 if end > b.at and v[end - 1] == '\r' else end])
+        b.at = end + 1
+        return t
+    }
+    unreachable
+}
+
+# everything up to the end of the stream
+fn (b mut inbox&) rest<C>(c mut C&, max I64) Array<U8> ? Error {
+    for {
+        if b.buf.Len() - b.at > max: error Error.TooLarge
+        try b.fill(c) catch Error.Closed { break }
+    }
+    out := b.buf.View()[b.at:].Copy()
+    b.at = b.buf.Len()
+    return out
+}
+
+# the value of the hex digit c, -1 when it is not one
+fn hexValue(c Char) I64 {
+    if c >= '0' and c <= '9': return I64(c) - I64('0')
+    if c >= 'a' and c <= 'f': return I64(c) - I64('a') + 10
+    if c >= 'A' and c <= 'F': return I64(c) - I64('A') + 10
+    return -1
+}
+
+# a chunk size line's number: hex digits before any ';' extension
+fn chunkSize(line String&) I64 ? Error.Chunk {
+    semi := try line.FindByte(';') catch default line.Len()
+    digits :~ line[:semi].Trim()
+    if digits.Len() == 0 or digits.Len() > 15: error Error.Chunk
+    n I64 = 0
+    for c in digits {
+        d := hexValue(c)
+        if d < 0: error Error.Chunk
+        n = n * 16 + d
+    }
+    return n
+}
+
+# a chunked body: chunks until the last (size 0), then the trailer fields, which are skipped
+fn (b mut inbox&) chunked<C>(c mut C&, max I64) Array<U8> ? Error {
+    out := Vec<U8>()
+    for {
+        n := try chunkSize(try b.line(c, 4096))
+        if n == 0: break
+        if out.Len() + n > max: error Error.TooLarge
+        out.PushAll(try b.take(c, n))
+        if (try b.line(c, 2)) != "": error Error.Chunk
+    }
+    for (try b.line(c, MaxHead)) != "" { }
+    return out.ToArray().Copy()
+}
+
+fn (b mut inbox&) body<C>(c mut C&, f framing, max I64) Array<U8> ? Error {
+    match f {
+        case framing.Empty { return Array<U8>(0) }
+        case framing.Length(n) {
+            if n > max: error Error.TooLarge
+            return try b.take(c, n)
+        }
+        case framing.Chunked { return try b.chunked(c, max) }
+        case framing.ToClose { return try b.rest(c, max) }
+    }
+}
+
+# the next request on c, its body read
+fn (b mut inbox&) request<C>(c mut C&, maxHead I64, maxBody I64) Request ? Error {
+    r := try Request.ParseHead(try b.head(c, maxHead))
+    r.Body = String(try b.body(c, try r.framing(), maxBody))
+    return r
+}
+
+# the next response on c, as the answer to a request of "method", its body read
+fn (b mut inbox&) response<C>(c mut C&, method String&, maxHead I64, maxBody I64) Response ? Error {
+    r := try Response.ParseHead(try b.head(c, maxHead))
+    r.Body = String(try b.body(c, try r.framing(method), maxBody))
+    return r
+}
+
+# a whole request read from data: its head, then its body as the head frames it
+fn Request.Parse(data Array<U8>&, maxHead I64 = MaxHead, maxBody I64 = MaxBody) Request ? Error {
+    b := inbox()
+    b.buf.PushAll(data)
+    return try b.request(ended(), maxHead, maxBody)
+}
+
+# a whole response read from data, as the answer to a request of "method" ("HEAD" frames no body)
+fn Response.Parse(data Array<U8>&, method String& = "GET", maxHead I64 = MaxHead, maxBody I64 = MaxBody) Response ? Error {
+    b := inbox()
+    b.buf.PushAll(data)
+    return try b.response(ended(), method, maxHead, maxBody)
+}
+
+# a chunked body decoded (the trailer fields skipped)
+fn Dechunk(data Array<U8>&, maxBody I64 = MaxBody) Array<U8> ? Error {
+    b := inbox()
+    b.buf.PushAll(data)
+    return try b.chunked(ended(), maxBody)
+}
+
+# body in the chunked transfer coding: chunks of at most "size" bytes, then the last chunk, no trailer
+fn Chunked(body Array<U8>&, size I64 = 8192) Array<U8> {
+    out := Vec<U8>()
+    for at in range 0, body.Len(), size {
+        n := size.Min(body.Len() - at)
+        out.PushAll((n.Format(16) + "\r\n").Bytes())
+        out.PushAll(body[at:at + n])
+        out.PushAll("\r\n".Bytes())
+    }
+    out.PushAll("0\r\n\r\n".Bytes())
+    return out.ToArray().Copy()
+}
+
+# ---- writing ----
+
+# the reason phrase RFC 9110 gives a status, "" for one it does not name here
+fn StandardReason(status I64) String& {
+    match status {
+        case 100 { return "Continue" }
+        case 200 { return "OK" }
+        case 201 { return "Created" }
+        case 202 { return "Accepted" }
+        case 204 { return "No Content" }
+        case 206 { return "Partial Content" }
+        case 301 { return "Moved Permanently" }
+        case 302 { return "Found" }
+        case 303 { return "See Other" }
+        case 304 { return "Not Modified" }
+        case 307 { return "Temporary Redirect" }
+        case 308 { return "Permanent Redirect" }
+        case 400 { return "Bad Request" }
+        case 401 { return "Unauthorized" }
+        case 403 { return "Forbidden" }
+        case 404 { return "Not Found" }
+        case 405 { return "Method Not Allowed" }
+        case 408 { return "Request Timeout" }
+        case 409 { return "Conflict" }
+        case 413 { return "Content Too Large" }
+        case 429 { return "Too Many Requests" }
+        case 431 { return "Request Header Fields Too Large" }
+        case 500 { return "Internal Server Error" }
+        case 501 { return "Not Implemented" }
+        case 502 { return "Bad Gateway" }
+        case 503 { return "Service Unavailable" }
+        case 504 { return "Gateway Timeout" }
+        case _ { return "" }
+    }
+}
+
+# whether the fields frame a body themselves
+fn framed(hs Vec<Header>&) Bool {
+    return (try find(hs, "Content-Length") catch default "") != "" or (try find(hs, "Transfer-Encoding") catch default "") != ""
+}
+
+fn writeFields(out mut Vec<U8>&, hs Vec<Header>&) {
+    for h in hs.View(): out.PushAll((h.Name + ": " + h.Value + "\r\n").Bytes())
+}
+
+# the request as bytes: the request line, the fields, a Content-Length where the fields frame no body and there is one
+# (or the method is POST, PUT or PATCH), the empty line, the body
+fn (r Request&) Format() Array<U8> {
+    out := Vec<U8>()
+    out.PushAll((r.Method + " " + r.Target + " HTTP/1." + $r.Minor + "\r\n").Bytes())
+    writeFields(out, r.Headers)
+    sized := r.Body.Len() > 0 or r.Method == "POST" or r.Method == "PUT" or r.Method == "PATCH"
+    if sized and not framed(r.Headers): out.PushAll(("Content-Length: " + $r.Body.Len() + "\r\n").Bytes())
+    out.PushAll("\r\n".Bytes())
+    out.PushAll(r.Body)
+    return out.ToArray().Copy()
+}
+
+# the response's head as bytes - the status line (the reason StandardReason gives where it has none), the fields, a
+# Content-Length where the fields frame no body (but for 1xx, 204 and 304), the empty line
+fn (r Response&) FormatHead() Array<U8> {
+    out := Vec<U8>()
+    reason :~ r.Reason if r.Reason != "" else StandardReason(r.Status)
+    out.PushAll(("HTTP/1.1 " + $r.Status + " " + reason + "\r\n").Bytes())
+    writeFields(out, r.Headers)
+    bodied := r.Status >= 200 and r.Status != 204 and r.Status != 304
+    if bodied and not framed(r.Headers): out.PushAll(("Content-Length: " + $r.Body.Len() + "\r\n").Bytes())
+    out.PushAll("\r\n".Bytes())
+    return out.ToArray().Copy()
+}
+
+# the response as bytes: its head, then the body
+fn (r Response&) Format() Array<U8> {
+    out := Vec<U8>()
+    out.PushAll(r.FormatHead())
+    out.PushAll(r.Body)
+    return out.ToArray().Copy()
+}
+
+# ---- the client ----
+
+# a TCP connection whose Read and Write fail with this module's Error
+type plain unique struct(conn net.Conn) {
+    conn
+}
+
+fn mapNet(e net.Error) ? Error {
+    match e {
+        case net.Error.Closed { error Error.Closed }
+        case net.Error.Timeout { error Error.Timeout }
+        case _ { error Error.Transport($e) }
+    }
+}
+
+fn (p mut plain&) Read(buf mut Array<U8>&) Array<U8>& ? Error {
+    return try p.conn.Read(buf) catch net.Error e {
+        try mapNet(e)
+        unreachable
+    }
+}
+
+fn (p mut plain&) Write(data Array<U8>&) ? Error {
+    try p.conn.Write(data) catch net.Error e { try mapNet(e) }
+}
+
+# the request req written to c, and the response read - interim 1xx responses skipped
+fn Response.Exchange<C>(c mut C&, req Request&, maxHead I64 = MaxHead, maxBody I64 = MaxBody) Response ? Error {
+    try c.Write(req.Format())
+    b := inbox()
+    for {
+        r := try b.response(c, req.Method, maxHead, maxBody)
+        if r.Status >= 200 or r.Status == 101: return r
+    }
+    unreachable
+}
+
+# a host as a URL writes it: an IPv6 address in brackets
+fn hostText(h String&) String { return "[" + h + "]" if ':' in h else String(h) }
+
+# what a Host field holds for u: the host, and the port where one was written
+fn hostField(u url.Url&) String { return hostText(u.Host) + ":" + u.Port if u.Port != "" else hostText(u.Host) }
+
+# the host and port to dial for u, "host:port" ("[::1]:80" for an IPv6 host)
+fn Dialed(u url.Url&) String ? url.Error.NoPort {
+    return hostText(u.Host) + ":" + $(try u.PortNumber())
+}
+
+# a request of "method" for u: its target, Host (the port written only where it is not the scheme's default),
+# "Connection: close", the fields given (a Host or Connection among them replacing the ones made) and the body
+fn Request.To(method String&, u url.Url&, headers Array<Header>&, body Array<U8>&) Request {
+    r := Request(String(method), u.Target())
+    r.Set("Host", hostField(u))
+    r.Set("Connection", "close")
+    for h in headers: r.Set(h.Name, h.Value)
+    r.Body = String(body)
+    return r
+}
+
+# the fields but those named "name"
+fn without(hs Vec<Header>&, name String&) Vec<Header> {
+    kept := Vec<Header>()
+    for h in hs.View() {
+        if not sameName(h.Name, name): kept.Push(h)
+    }
+    return kept
+}
+
+# whether a status redirects (301, 302, 303, 307, 308)
+fn Redirects(status I64) Bool { return status == 301 or status == 302 or status == 303 or status == 307 or status == 308 }
+
+# where the redirecting response r, the answer to req for "at", leads - and req made the request to send there: a
+# 303, and a 301 or 302 after a POST, turned into a GET without a body; Host set for the new URL; an Authorization
+# field dropped where the host changes. Fails with Head when r names no Location
+fn Redirected(r Response&, at url.Url&, req mut Request&) url.Url ? Error.Head, url.Error {
+    loc :~ try r.Header("Location") catch { error Error.Head("a redirect without a Location") }
+    next := try at.Resolve(loc)
+    if r.Status == 303 or (r.Status == 301 or r.Status == 302) and req.Method == "POST" {
+        req.Method = "GET"
+        req.Body = ""
+        req.Headers = without(without(req.Headers, "Content-Type"), "Content-Length")
+    }
+    req.Target = next.Target()
+    req.Set("Host", hostField(next))
+    if next.Host != at.Host: req.Headers = without(req.Headers, "Authorization")
+    return next
+}
+
+# one request, req, over a new TCP connection to the http URL u - no redirect followed - each read and write waiting
+# at most timeout
+fn Response.Once(u url.Url&, req Request&, timeout time.Duration, maxBody I64 = MaxBody) Response ? Error, url.Error, net.Error {
+    if u.Scheme != "http": error Error.Scheme(u.Scheme)
+    p := plain(try net.Conn.Dial(try net.Addr.Resolve(try Dialed(u))))
+    p.conn.SetTimeout(timeout)
+    return try Response.Exchange(p, req, maxBody = maxBody)
+}
+
+# the response to a request of "method" to the http URL "target", with the fields and body given; redirects followed
+# up to "redirects" times (Redirects past it), each read and write waiting at most "timeout"; an https URL, given or
+# redirected to, fails with Scheme (std/https makes both)
+fn Response.Send(method String&, target String&, headers Array<Header>&, body Array<U8>&, timeout time.Duration = time.Duration.Seconds(30), redirects I64 = 10, maxBody I64 = MaxBody) Response ? Error, url.Error, net.Error {
+    u := try url.Url.Parse(target)
+    req := Request.To(method, u, headers, body)
+    for _ in range redirects + 1 {
+        r := try Response.Once(u, req, timeout, maxBody)
+        if not Redirects(r.Status): return r
+        u = try Redirected(r, u, req)
+    }
+    error Error.Redirects
+}
+
+# the response to a GET of url, with the fields given
+fn Response.Get(target String&, headers Array<Header>& = Array<Header>(0), timeout time.Duration = time.Duration.Seconds(30)) Response ? Error, url.Error, net.Error {
+    return try Response.Send("GET", target, headers, Array<U8>(0), timeout = timeout)
+}
+
+# the response to a POST of body to url as contentType, with the fields given
+fn Response.Post(target String&, contentType String&, body Array<U8>&, headers Array<Header>& = Array<Header>(0), timeout time.Duration = time.Duration.Seconds(30)) Response ? Error, url.Error, net.Error {
+    all := Vec<Header>()
+    all.Push(Header("Content-Type", String(contentType)))
+    for h in headers: all.Push(h)
+    return try Response.Send("POST", target, all.ToArray(), body, timeout = timeout)
+}
+
+# ---- the server ----
+
+# one connection served: its request read, answered and closed. A malformed request gets 400, one above the limit 413,
+# none at all (the client closed, or the timeout passed) nothing
+fn serveOne(p plain, handler fn&(r Request&) Response, maxRequest I64, timeout time.Duration) {
+    p.conn.SetTimeout(timeout)
+    b := inbox()
+    req := try b.requestOf(p, maxRequest) catch Error.TooLarge {
+        refuse(p, 413, "the request is too large\n")
+        return
+    } catch Error.Head, Error.Chunk {
+        refuse(p, 400, "a malformed request\n")
+        return
+    } catch { return }
+    resp := handler(req)
+    resp.Set("Connection", "close")
+    try p.Write(resp.FormatHead() if req.Method == "HEAD" else resp.Format()) catch { }
+}
+
+# a request refused with "status": the response written, then what the client still sends read and dropped (a
+# megabyte at most) until it closes - so the close does not reset the connection before the client reads the answer
+fn refuse(p mut plain&, status I64, why String&) {
+    try p.Write(Response.Of(status, why).Format()) catch { return }
+    p.conn.CloseWrite()
+    buf := Array<U8>(16384)
+    for _ in range 64: try p.Read(buf) catch { return }
+}
+
+# the request on c, "Expect: 100-continue" answered before its body is read; head and body at most max bytes
+fn (b mut inbox&) requestOf(p mut plain&, max I64) Request ? Error {
+    r := try Request.ParseHead(try b.head(p, max))
+    if (try r.Header("Expect") catch default "").ToLower() == "100-continue": try p.Write("HTTP/1.1 100 Continue\r\n\r\n".Bytes())
+    r.Body = String(try b.body(p, try r.framing(), max))
+    return r
+}
+
+# connections accepted from l and served, each in a task of its own: its request read (at most maxRequest bytes, head
+# and body), handler called, the response written and the connection closed; each read and write waits at most
+# timeout. Runs until Accept fails - or, where "connections" is given, until that many were accepted and served
+fn Serve(l mut net.Listener&, handler fn&(r Request&) Response, maxRequest I64 = MaxRequest, timeout time.Duration = time.Duration.Seconds(30), connections I64 = -1) ? net.Error {
+    accepted I64 = 0
+    join {
+        for connections < 0 or accepted < connections {
+            accepted++
+            spawn serveOne(plain(try l.Accept()), handler, maxRequest, timeout)
+        }
+    }
+}
+
+# ---- the tests ----
+
+if TestBuild {
+
+test "a request read from bytes, and written back" {
+    raw := "\r\nPOST /a/b?x=1 HTTP/1.1\r\nHost: example.com\r\ncontent-length: 5\r\nX-Two:  spaced value \r\n\r\nhelloEXTRA"
+    r := Request.Parse(raw.Bytes())!
+    assert r.Method == "POST" and r.Target == "/a/b?x=1" and r.Minor == 1 and r.Headers.Len() == 3
+    assert r.Header("HOST")! == "example.com" and r.Header("x-two")! == "spaced value" and r.Body == "hello"
+    try r.Header("Cookie") catch Error.NoHeader e { assert e.name == "Cookie" } catch { unreachable }
+    assert String(r.Format()) == "POST /a/b?x=1 HTTP/1.1\r\nHost: example.com\r\ncontent-length: 5\r\nX-Two: spaced value\r\n\r\nhello"
+    g := Request.Parse("GET / HTTP/1.0\nA: b\n\n".Bytes())!
+    assert g.Minor == 0 and g.Body.Len() == 0 and String(g.Format()) == "GET / HTTP/1.0\r\nA: b\r\n\r\n"
+    p := Request("PUT", "/x")
+    p.Set("Content-Type", "text/plain")
+    p.Set("content-type", "application/json")
+    assert p.Headers.Len() == 1 and String(p.Format()) == "PUT /x HTTP/1.1\r\nContent-Type: application/json\r\nContent-Length: 0\r\n\r\n"
+}
+
+test "a response read from bytes: by length, chunked, to the close, and none" {
+    r := Response.Parse("HTTP/1.1 404 Not Found\r\nContent-Length: 3\r\n\r\nabcdef".Bytes())!
+    assert r.Status == 404 and r.Reason == "Not Found" and String(r.Body) == "abc"
+    c := Response.Parse("HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip, chunked\r\n\r\n5\r\nhello\r\n7;ext=1\r\n, world\r\n0\r\nT: x\r\n\r\n".Bytes())!
+    assert String(c.Body) == "hello, world"
+    e := Response.Parse("HTTP/1.0 200\r\n\r\nup to the close".Bytes())!
+    assert e.Status == 200 and e.Reason == "" and String(e.Body) == "up to the close"
+    h := Response.Parse("HTTP/1.1 200 OK\r\nContent-Length: 10\r\n\r\n".Bytes(), "HEAD")!
+    assert h.Body.Len() == 0 and Response.Parse("HTTP/1.1 204 No Content\r\n\r\nx".Bytes())!.Body.Len() == 0
+    o := Response.Of(201, "made")
+    assert String(o.Format()) == "HTTP/1.1 201 Created\r\nContent-Type: text/plain; charset=utf-8\r\nContent-Length: 4\r\n\r\nmade"
+    back := Response.Parse(o.Format())!
+    assert back.Status == 201 and String(back.Body) == "made" and back.Header("content-type")! == "text/plain; charset=utf-8"
+}
+
+test "chunked coding: encoded, decoded, and its edge cases" {
+    body := "the quick brown fox jumps over the lazy dog".Bytes()
+    enc := Chunked(body, 16)
+    assert String(enc) == "10\r\nthe quick brown \r\n10\r\nfox jumps over t\r\nb\r\nhe lazy dog\r\n0\r\n\r\n"
+    assert Dechunk(enc)! == body and String(Chunked(Array<U8>(0))) == "0\r\n\r\n" and Dechunk("0\r\n\r\n".Bytes())!.Len() == 0
+    assert String(Dechunk("A\r\n0123456789\r\n0\r\n\r\n".Bytes())!) == "0123456789"
+    assert String(Dechunk("3 ; a=b\r\nabc\r\n0\r\nX: 1\r\nY: 2\r\n\r\n".Bytes())!) == "abc"
+    for bad in Array<String&>["x\r\nabc\r\n0\r\n\r\n", "3\r\nabcd\r\n0\r\n\r\n", "\r\n", "1234567890123456\r\n", "-1\r\n"] {
+        try Dechunk(bad.Bytes()) catch Error.Chunk { continue } catch { }
+        unreachable $bad
+    }
+    for cut in Array<String&>["5\r\nab", "3\r\nabc\r\n", "3\r\nabc\r\n0\r\n"] {
+        try Dechunk(cut.Bytes()) catch Error.Closed { continue } catch { }
+        unreachable $cut
+    }
+    try Dechunk("10\r\n0123456789abcdef\r\n0\r\n\r\n".Bytes(), maxBody = 8) catch Error.TooLarge { } catch { unreachable }
+}
+
+test "malformed heads are refused, long ones too" {
+    bads := Array<String&>["GET /\r\n\r\n", "GET / HTTP/2.0\r\n\r\n", "GET  / HTTP/1.1\r\n\r\n", "G(T / HTTP/1.1\r\n\r\n"
+        "GET / HTTP/1.1\r\nNo colon\r\n\r\n", "GET / HTTP/1.1\r\nA: b\r\n folded\r\n\r\n", "GET / HTTP/1.1\r\nBad name: x\r\n\r\n"
+        "GET / HTTP/1.1\r\n: x\r\n\r\n", "GET / HTTP/1.1\r\nA: b\x01c\r\n\r\n", "POST / HTTP/1.1\r\nContent-Length: x\r\n\r\n"
+        "POST / HTTP/1.1\r\nContent-Length: 1\r\nContent-Length: 2\r\n\r\nab", "POST / HTTP/1.1\r\nContent-Length: -1\r\n\r\n"
+        "POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\nContent-Length: 3\r\n\r\n", "POST / HTTP/1.1\r\nTransfer-Encoding: gzip\r\n\r\n"]
+    for bad in bads {
+        try Request.Parse(bad.Bytes()) catch Error.Head { continue } catch { }
+        unreachable $bad
+    }
+    for bad in Array<String&>["HTTP/1.1 20 OK\r\n\r\n", "HTTP/1.1 2000 OK\r\n\r\n", "HTTP/1.1 abc OK\r\n\r\n", "HTTP/3 200 OK\r\n\r\n", "ICY 200 OK\r\n\r\n"] {
+        try Response.Parse(bad.Bytes()) catch Error.Head { continue } catch { }
+        unreachable $bad
+    }
+    long := "GET / HTTP/1.1\r\nX: " + "a".Repeat(200) + "\r\n\r\n"
+    try Request.Parse(long.Bytes(), maxHead = 100) catch Error.TooLarge { } catch { unreachable }
+    try Request.Parse("GET / HTTP/1.1\r\nX: abc".Bytes()) catch Error.Closed { } catch { unreachable }
+    try Request.Parse("POST / HTTP/1.1\r\nContent-Length: 99\r\n\r\n".Bytes(), maxBody = 10) catch Error.TooLarge { } catch { unreachable }
+}
+
+test "redirects make the next request" {
+    at := url.Url.Parse("http://a.example/x/y")!
+    req := Request.To("POST", at, Array<Header>[Header("Authorization", "k"), Header("Content-Type", "text/plain")], "body".Bytes())
+    assert req.Header("Host")! == "a.example" and req.Header("connection")! == "close"
+    r := Response(302)
+    r.Set("Location", "../z?q=1")
+    next := Redirected(r, at, req)!
+    assert $next == "http://a.example/z?q=1" and req.Method == "GET" and req.Body.Len() == 0 and req.Target == "/z?q=1"
+    try req.Header("Content-Type") catch Error.NoHeader { } catch { unreachable }
+    r.Set("Location", "http://[::1]:8080/w")
+    r.Status = 307
+    assert $Redirected(r, next, req)! == "http://[::1]:8080/w" and req.Header("Host")! == "[::1]:8080"
+    try req.Header("Authorization") catch Error.NoHeader { } catch { unreachable }
+    try Redirected(Response(301), at, req) catch Error.Head { } catch { unreachable }
+    try Response.Send("GET", "https://example.com/", Array<Header>(0), Array<U8>(0)) catch Error.Scheme e { assert e.scheme == "https" } catch { unreachable }
+}
+
+# the loopback server's routes
+fn Response.routes(r Request&) Response {
+    if r.Target == "/old": return Response.redirect("/new")
+    if r.Method == "POST": return Response.Of(200, "got " + String(r.Body) + " as " + (try r.Header("Content-Type") catch default "?"))
+    return Response.Of(200, r.Method + " " + r.Target)
+}
+
+fn Response.redirect(to String&) Response {
+    r := Response(301)
+    r.Set("Location", to)
+    return r
+}
+
+test "the server on loopback answers the client" {
+    l := net.Listener.Listen(net.Addr(net.IP.Loopback4(), 0))!
+    base := "http://127.0.0.1:" + $l.Addr()!.Port
+    join {
+        spawn Serve(l, Response.routes, maxRequest = 1024, timeout = time.Duration.Seconds(5), connections = 7)!
+        g := Response.Get(base + "/hello?x=1", timeout = time.Duration.Seconds(5))!
+        assert g.Status == 200 and String(g.Body) == "GET /hello?x=1" and g.Header("Connection")! == "close"
+        p := Response.Post(base + "/p", "text/plain", "data".Bytes())!
+        assert String(p.Body) == "got data as text/plain"
+        m := Response.Get(base + "/old")!
+        assert m.Status == 200 and String(m.Body) == "GET /new"
+        h := Response.Send("HEAD", base + "/h", Array<Header>(0), Array<U8>(0))!
+        assert h.Status == 200 and h.Body.Len() == 0 and h.Header("Content-Length")! == "7"
+        raw := net.Conn.Dial(l.Addr()!)!
+        raw.Write("GARBAGE\r\n\r\n".Bytes())!
+        bad := Response.Parse(readAll(raw))!
+        assert bad.Status == 400
+        big := Response.Post(base + "/big", "text/plain", "x".Repeat(4000).Bytes())!
+        assert big.Status == 413
+    }
+}
+
+fn readAll(c net.Conn&) Array<U8> {
+    out := Vec<U8>()
+    buf := Array<U8>(1024)
+    for {
+        got :~ try c.Read(buf) catch { break }
+        out.PushAll(got)
+    }
+    return out.ToArray().Copy()
+}
+
+}
