@@ -1,0 +1,164 @@
+# uuid - universally unique identifiers (RFC 9562): a Uuid is 16 bytes. V4() is random (122 random bits), V7() holds the
+# Unix time in milliseconds in its first 48 bits and random bits after, so ids made later sort after ids made earlier
+# (within one millisecond the order is random). Text is the canonical form, 32 lowercase hex digits in 8-4-4-4-12
+# groups: `$u` and u.Str() write it, Parse reads it strictly (exactly that shape, either case of digit) and fails with
+# Error.Invalid otherwise. Imported with `import "std/uuid"`.
+#
+# Random bits come from the operating system's source, /dev/urandom (Linux, macOS). On Windows the source is
+# BCryptGenRandom in bcrypt.dll, which is not bound here: V4 and V7 fail with Error.NoEntropy there. Uuid.FromBytes
+# and Parse work everywhere.
+
+import "std/io"
+import "std/os"
+import "std/time"
+
+type Error error {
+    Invalid                  # text that is not a canonical UUID, or bytes that are not 16
+    NoEntropy                # the system's random source could not be read
+}
+
+type Uuid struct(Bytes Array<U8>) {
+    Bytes
+}
+
+digits String = "0123456789abcdef"
+
+# the UUID of exactly 16 bytes
+fn Uuid.FromBytes(b Array<U8>&) Uuid ? Error.Invalid {
+    if b.Len() != 16: error Error.Invalid
+    own := Array<U8>(16)
+    for i in range 16: own[i] = b[i]
+    return Uuid(own)
+}
+
+fn random(n I64) Array<U8> ? Error.NoEntropy {
+    buf := Array<U8>(n)
+    f := try os.File.Open("/dev/urandom") catch os.Error { error Error.NoEntropy }
+    got I64 = 0
+    for got < n {
+        part := Array<U8>(n - got)
+        r := try f.Read(part) catch io.Error { error Error.NoEntropy }
+        if r.Len() == 0: error Error.NoEntropy
+        for i in range r.Len(): buf[got + i] = r[i]
+        got += r.Len()
+    }
+    return buf
+}
+
+# a random (version 4) UUID
+fn Uuid.V4() Uuid ? Error.NoEntropy {
+    b := try random(16)
+    return Uuid.stamp(b)
+}
+
+# a time-ordered (version 7) UUID made at "ms" milliseconds since 1970 (default: now)
+fn Uuid.V7(ms I64 = time.Wall() / 1000000) Uuid ? Error.NoEntropy {
+    b := try random(16)
+    for i in range 6: b[i] = U8((ms >> I64(8 * (5 - i))) & 0xFF)
+    return Uuid.stamp(b, 7)
+}
+
+# b with the version nibble and the RFC 9562 variant bits set
+fn Uuid.stamp(b Array<U8>, version U8 = 4) Uuid {
+    b[6] = (b[6] & 0x0F) | (version << 4)
+    b[8] = (b[8] & 0x3F) | 0x80
+    return Uuid(b)
+}
+
+# the version number, the high nibble of byte 6
+fn (u Uuid&) Version() I64 { return I64(u.Bytes[6] >> 4) }
+
+# the canonical text
+fn (u Uuid&) Str() String {
+    out := Array<Char>(36)
+    o I64 = 0
+    for i in range 16 {
+        if i == 4 or i == 6 or i == 8 or i == 10 {
+            out[o] = '-'
+            o++
+        }
+        out[o] = digits[u.Bytes[i] >> 4]
+        out[o + 1] = digits[u.Bytes[i] & 15]
+        o += 2
+    }
+    return String(out)
+}
+
+fn nibble(c Char) U8 ? Error.Invalid {
+    if c >= '0' and c <= '9': return U8(c - '0')
+    if c >= 'a' and c <= 'f': return U8(c - 'a') + 10
+    if c >= 'A' and c <= 'F': return U8(c - 'A') + 10
+    error Error.Invalid
+}
+
+# the UUID a canonical text writes - failing with Invalid for any other shape (braces, urn:, missing hyphens)
+fn Uuid.Parse(t String&) Uuid ? Error.Invalid {
+    if t.Len() != 36: error Error.Invalid
+    b := Array<U8>(16)
+    o I64 = 0
+    for i in [8, 13, 18, 23] {
+        if t[i] != '-': error Error.Invalid
+    }
+    for i in range 36 {
+        if i == 8 or i == 13 or i == 18 or i == 23: continue
+        v := try nibble(t[i])
+        if o % 2 == 0: b[o / 2] = v << 4
+        else: b[o / 2] = b[o / 2] | v
+        o++
+    }
+    return Uuid(b)
+}
+
+fn (u Uuid&) Time() I64 {
+    t I64 = 0
+    for i in range 6: t = (t << 8) | I64(u.Bytes[i])
+    return t
+}
+
+if TestBuild {
+
+test "parse and format round trip, with a known vector" {
+    u := Uuid.Parse("123e4567-e89b-12d3-a456-426614174000")!
+    assert u.Str() == "123e4567-e89b-12d3-a456-426614174000" and u.Version() == 1
+    assert u.Bytes[0] == 0x12 and u.Bytes[15] == 0x00 and u.Bytes[8] == 0xa4
+    assert Uuid.Parse("123E4567-E89B-12D3-A456-426614174000")!.Str() == u.Str()
+    text := $u
+    assert text == "123e4567-e89b-12d3-a456-426614174000"
+}
+
+test "parsing is strict" {
+    for bad in Array<String&>[
+        ""
+        "123e4567e89b12d3a456426614174000"
+        "{123e4567-e89b-12d3-a456-426614174000}"
+        "123e4567-e89b-12d3-a456-42661417400"
+        "123e4567-e89b-12d3-a456-42661417400g"
+        "123e4567_e89b-12d3-a456-426614174000"
+        "123e4567-e89b-12d3-a456-4266141740000"
+    ] {
+        try Uuid.Parse(bad) catch Error.Invalid { continue }
+        unreachable
+    }
+    try Uuid.FromBytes(Array<U8>(15)) catch Error.Invalid { return }
+    unreachable
+}
+
+test "version 4 is random with its version and variant bits" {
+    a := Uuid.V4()!
+    b := Uuid.V4()!
+    assert a.Version() == 4 and (a.Bytes[8] >> 6) == 2
+    assert a.Str() != b.Str() and Uuid.Parse(a.Str())!.Str() == a.Str()
+}
+
+test "version 7 sorts by time" {
+    a := Uuid.V7(1700000000000)!
+    b := Uuid.V7(1700000000001)!
+    c := Uuid.V7(1800000000000)!
+    assert a.Version() == 7 and (a.Bytes[8] >> 6) == 2
+    assert a.Time() == 1700000000000 and c.Time() == 1800000000000
+    assert a.Str() < b.Str() and b.Str() < c.Str()
+    assert a.Str()[0:8] == "018bcfe5" and a.Str()[9:13] == "6800"
+    assert Uuid.V7()!.Time() > 1700000000000
+}
+
+}
