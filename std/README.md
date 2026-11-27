@@ -26,6 +26,9 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `arith.olang` | arithmetic that fails instead of wrapping: `try arith.Add(a, b)`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`, shifts, `Pow`, and `Checked<T>` whose operators are these - `arith.Error`; `Saturating<T>`, an integer whose operators clamp at its limits instead of wrapping |
 | `utf8.olang` | Unicode code points: `Rune`, `Decode`/`Encode`, `Valid`, `Count`, `Runes` |
 | `base64.olang`, `hex.olang` | RFC 4648 base64 (standard and URL-safe) and hex, strict decoding |
+| `image.olang`, `imgdecode.olang` | `image.Image` (Width, Height, Channels 1/3/4, row-major 8-bit Pixels) and `image.Format.Of(bytes)`, which tells PNG from JPEG by the first bytes; `try imgdecode.Decode(bytes)` picks the decoder; `imgdecode.Error` |
+| `png.olang` | PNG decoding: `try png.Decode(bytes)` - every colour type, bit depths 1/2/4/8/16 (16 reduced to 8), all filters, Adam7, CRCs checked, tRNS ignored; `png.Error` |
+| `jpeg.olang` | JPEG decoding: `try jpeg.Decode(bytes)` - baseline and progressive Huffman, any sampling up to 4, restart intervals, greyscale, libjpeg's IDCT, fancy upsampling and YCbCr formula (pixels match libjpeg); arithmetic, 12-bit and CMYK are `jpeg.Error.Unsupported` |
 | `wav.olang` | RIFF WAVE audio: read PCM 8/16/24/32-bit and float 32/64 (incl. extensible) to interleaved F32, write 16-bit PCM or 32-bit float |
 | `uuid.olang` | UUIDs (RFC 9562): version 4 random and version 7 time-ordered, canonical text, strict Parse |
 | `sha256.olang`, `crc32.olang` | the SHA-256 digest (`Sum`, `Hex`, a streaming `Hasher`, `Hmac`) and the IEEE CRC-32 |

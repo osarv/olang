@@ -1,0 +1,32 @@
+# image - the decoded picture that std/png and std/jpeg give, and the format of an encoded file told by its first bytes.
+#
+#   img := try png.Decode(bytes)        # or jpeg.Decode(bytes); imgdecode.Decode(bytes) picks by Format
+#   img.Pixels[(y * img.Width + x) * img.Channels + c]
+#
+# Pixels are row-major, 8 bits a channel, the channels of a pixel side by side: Channels is 1 (grey), 3 (red, green,
+# blue) or 4 (red, green, blue, alpha). Imported with `import "std/image"`.
+
+type Image struct(Width I64, Height I64, Channels I64, Pixels Array<U8>) { Width, Height, Channels, Pixels }
+
+type Format enum {
+    Unknown
+    Png
+    Jpeg
+}
+
+# the format a file's first bytes announce (Format.Of(bytes)): the PNG signature or a JPEG's start-of-image marker
+fn Format.Of(b Array<U8>&) Format {
+    if b.Len() >= 8 and b[0] == 0x89 and b[1] == 0x50 and b[2] == 0x4E and b[3] == 0x47: return Format.Png
+    if b.Len() >= 3 and b[0] == 0xFF and b[1] == 0xD8 and b[2] == 0xFF: return Format.Jpeg
+    return Format.Unknown
+}
+
+if TestBuild {
+
+test "the formats are told by their first bytes" {
+    assert Format.Of(Array<U8>[0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]) == Format.Png
+    assert Format.Of(Array<U8>[0xFF, 0xD8, 0xFF, 0xE0]) == Format.Jpeg
+    assert Format.Of(Array<U8>[1, 2, 3]) == Format.Unknown
+}
+
+}

@@ -1,0 +1,207 @@
+# png - PNG decoding (RFC 2083 / the W3C PNG specification, 2nd edition).
+#
+#   img := try png.Decode(bytes)     # an image.Image: 8 bits a channel, Channels 1, 3 or 4
+#
+# Every colour type and bit depth is read: grey (1, 2, 4, 8, 16 bits) gives one channel, grey with alpha four (the grey
+# repeated, then alpha), RGB three, RGBA four, palette three (the palette's colours). 16-bit samples keep their high
+# byte. All five filters and Adam7 interlacing are undone. Every chunk's CRC-32 is checked; the tRNS chunk and the
+# other ancillary chunks (gamma, text, ...) are ignored, so a palette's transparency is not in the result. Malformed
+# input fails with `png.Error`. Imported with `import "std/png"`.
+
+import "std/crc32"
+import "std/flate"
+import "std/image"
+
+type Error error {
+    NotPng      # the PNG signature is missing
+    Truncated   # the file ends inside a chunk or before IEND, or the image data holds too few rows
+    BadChunk    # a chunk's CRC-32 differs, or a required chunk is missing, repeated or out of place
+    BadHeader   # a field of IHDR is out of range (size, bit depth for the colour type, compression, filter, interlace)
+    BadData     # the compressed image data is not a valid zlib stream, or a row names a filter that does not exist
+    TooBig      # the image is larger than 2^24 pixels on a side or 2^31 bytes in all
+}
+
+maxSide I64 = 1 << 24
+maxBytes I64 = 1 << 31
+
+fn be32(b Array<U8>&, p I64) I64 { return (I64(b[p]) << 24) | (I64(b[p + 1]) << 16) | (I64(b[p + 2]) << 8) | I64(b[p + 3]) }
+
+# the Paeth predictor of the three neighbours a (left), b (up) and c (up left)
+fn paeth(a I64, b I64, c I64) I64 {
+    p := a + b - c
+    pa := (p - a).Abs()
+    pb := (p - b).Abs()
+    pc := (p - c).Abs()
+    if pa <= pb and pa <= pc: return a
+    return b if pb <= pc else c
+}
+
+# undoes the filters of the h rows of stride bytes (each led by its filter byte) at raw[at:], in place
+fn unfilter(raw mut Array<U8>&, at I64, stride I64, h I64, bpp I64) ? Error {
+    for y in range h {
+        rs := at + y * (stride + 1)
+        f := I64(raw[rs])
+        d := rs + 1
+        up := d - stride - 1 # the row above's first byte (not read in the first row)
+        first := y == 0
+        if f == 0: continue
+        if f > 4: error Error.BadData
+        for i in range stride {
+            x := I64(raw[d + i])
+            a := I64(raw[d + i - bpp]) if i >= bpp else 0
+            b := 0 if first else I64(raw[up + i])
+            c := I64(raw[up + i - bpp]) if i >= bpp and not first else 0
+            if f == 1: x += a
+            else if f == 2: x += b
+            else if f == 3: x += (a + b) >> 1
+            else: x += paeth(a, b, c)
+            raw[d + i] = U8(x & 255)
+        }
+    }
+}
+
+# what is needed to turn rows of samples into pixels
+type Layout struct(Colour I64, Depth I64, Samples I64, Out I64, Palette Array<U8>) { Colour, Depth, Samples, Out, Palette }
+
+# the sample i of a row starting at row[p], scaled to 8 bits (a palette index is not scaled)
+fn sample(row Array<U8>&, p I64, i I64, l Layout&) I64 {
+    if l.Depth == 8: return I64(row[p + i])
+    if l.Depth == 16: return I64(row[p + 2 * i])
+    bit := i * l.Depth
+    shift := 8 - l.Depth - (bit & 7)
+    v := (I64(row[p + (bit >> 3)]) >> shift) & ((1 << l.Depth) - 1)
+    if l.Colour == 3: return v
+    return v * (255 / ((1 << l.Depth) - 1))
+}
+
+# one pass's rows (w pixels wide, h high, unfiltered at raw[at:]) written into the image at (x0 + x * dx, y0 + y * dy)
+fn place(raw Array<U8>&, at I64, w I64, h I64, l Layout&, out mut Array<U8>&, width I64, x0 I64, dx I64, y0 I64, dy I64) {
+    stride := (w * l.Samples * l.Depth + 7) / 8
+    oc := l.Out
+    for y in range h {
+        p := at + y * (stride + 1) + 1
+        o := ((y0 + y * dy) * width + x0) * oc
+        step := dx * oc
+        if l.Depth == 8 and dx == 1 and (l.Colour == 2 or l.Colour == 6 or l.Colour == 0) {
+            for i in range w * oc: out[o + i] = raw[p + i]
+            continue
+        }
+        for x in range w {
+            q := o + x * step
+            s := x * l.Samples
+            if l.Colour == 3 {
+                k := sample(raw, p, x, l) * 3
+                out[q] = l.Palette[k]
+                out[q + 1] = l.Palette[k + 1]
+                out[q + 2] = l.Palette[k + 2]
+            } else if l.Colour == 0 {
+                out[q] = U8(sample(raw, p, x, l))
+            } else if l.Colour == 4 {
+                g := U8(sample(raw, p, s, l))
+                out[q] = g
+                out[q + 1] = g
+                out[q + 2] = g
+                out[q + 3] = U8(sample(raw, p, s + 1, l))
+            } else {
+                for c in range oc: out[q + c] = U8(sample(raw, p, s + c, l))
+            }
+        }
+    }
+}
+
+# the bytes of the image data of a file whose chunks were read: the IDAT chunks (at [offset, length] pairs) joined
+fn joined(b Array<U8>&, parts Vec<I64>&, total I64) Array<U8> {
+    r := Array<U8>(total)
+    n I64 = 0
+    for k in range parts.Len() / 2 {
+        from := parts[2 * k]
+        len := parts[2 * k + 1]
+        for i in range len: r[n + i] = b[from + i]
+        n += len
+    }
+    return r
+}
+
+# the image a PNG file's bytes hold
+fn Decode(b Array<U8>&) image.Image ? Error {
+    if b.Len() < 8 or b[0] != 0x89 or b[1] != 0x50 or b[2] != 0x4E or b[3] != 0x47 or b[4] != 0x0D or b[5] != 0x0A or b[6] != 0x1A or b[7] != 0x0A: error Error.NotPng
+    pos I64 = 8
+    width I64 = 0
+    height I64 = 0
+    depth I64 = 0
+    colour I64 = 0
+    interlace I64 = 0
+    seenHeader := false
+    seenEnd := false
+    palette := Array<U8>(768)
+    paletteN I64 = 0
+    parts := Vec<I64>()
+    total I64 = 0
+    for not seenEnd {
+        if pos + 12 > b.Len(): error Error.Truncated
+        n := be32(b, pos)
+        if n > 0x7FFFFFFF or pos + 12 + n > b.Len(): error Error.Truncated
+        if crc32.Checksum(b[pos + 4 : pos + 8 + n]) != U32(be32(b, pos + 8 + n)): error Error.BadChunk
+        t := (I64(b[pos + 4]) << 24) | (I64(b[pos + 5]) << 16) | (I64(b[pos + 6]) << 8) | I64(b[pos + 7])
+        body := pos + 8
+        pos += 12 + n
+        if t == 0x49484452 { # IHDR
+            if seenHeader or n != 13: error Error.BadChunk
+            seenHeader = true
+            width = be32(b, body)
+            height = be32(b, body + 4)
+            depth = I64(b[body + 8])
+            colour = I64(b[body + 9])
+            interlace = I64(b[body + 12])
+            if b[body + 10] != 0 or b[body + 11] != 0 or interlace > 1: error Error.BadHeader
+            if width < 1 or height < 1: error Error.BadHeader
+            if width > maxSide or height > maxSide: error Error.TooBig
+            ok := depth == 8 or depth == 16 if colour == 2 or colour == 4 or colour == 6 else (depth == 1 or depth == 2 or depth == 4 or depth == 8 if colour == 3 else (depth == 1 or depth == 2 or depth == 4 or depth == 8 or depth == 16 if colour == 0 else false))
+            if not ok: error Error.BadHeader
+        } else if not seenHeader {
+            error Error.BadChunk
+        } else if t == 0x504C5445 { # PLTE
+            if n % 3 != 0 or n == 0 or n > 768: error Error.BadChunk
+            paletteN = n / 3
+            for i in range n: palette[i] = b[body + i]
+        } else if t == 0x49444154 { # IDAT
+            parts.Push(body)
+            parts.Push(n)
+            total += n
+        } else if t == 0x49454E44 { # IEND
+            seenEnd = true
+        }
+    }
+    if total == 0 or (colour == 3 and paletteN == 0): error Error.BadChunk
+    samples := 1 if colour == 0 or colour == 3 else (2 if colour == 4 else (3 if colour == 2 else 4))
+    outCh := 1 if colour == 0 else (4 if colour == 4 or colour == 6 else 3)
+    if width * height * outCh > maxBytes: error Error.TooBig
+    l := Layout(colour, depth, samples, outCh, palette)
+    raw := try flate.Unzlib(joined(b, parts, total)) catch flate.Error { error Error.BadData }
+    pixels := Array<U8>(width * height * outCh)
+    bpp := (samples * depth + 7) / 8
+    if interlace == 0 {
+        stride := (width * samples * depth + 7) / 8
+        if raw.Len() < height * (stride + 1): error Error.Truncated
+        try unfilter(raw, 0, stride, height, bpp)
+        place(raw, 0, width, height, l, pixels, width, 0, 1, 0, 1)
+        return image.Image(width, height, outCh, pixels)
+    }
+    # Adam7: seven passes over the image, each a smaller image of its own
+    xs := Array<I64>[0, 4, 0, 2, 0, 1, 0]
+    ys := Array<I64>[0, 0, 4, 0, 2, 0, 1]
+    dxs := Array<I64>[8, 8, 4, 4, 2, 2, 1]
+    dys := Array<I64>[8, 8, 8, 4, 4, 2, 2]
+    at I64 = 0
+    for k in range 7 {
+        pw := (width - xs[k] + dxs[k] - 1) / dxs[k]
+        ph := (height - ys[k] + dys[k] - 1) / dys[k]
+        if pw <= 0 or ph <= 0: continue
+        stride := (pw * samples * depth + 7) / 8
+        if raw.Len() < at + ph * (stride + 1): error Error.Truncated
+        try unfilter(raw, at, stride, ph, bpp)
+        place(raw, at, pw, ph, l, pixels, width, xs[k], dxs[k], ys[k], dys[k])
+        at += ph * (stride + 1)
+    }
+    return image.Image(width, height, outCh, pixels)
+}

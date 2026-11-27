@@ -1,0 +1,29 @@
+# imgdecode - decodes an image file of any format std knows: `img := try imgdecode.Decode(bytes)` looks at the first
+# bytes (image.Format.Of) and gives png.Decode's or jpeg.Decode's image.Image. A file of neither kind, or a decoder's own
+# refusal, fails with `imgdecode.Error`. Imported with `import "std/imgdecode"`.
+
+import "std/image"
+import "std/jpeg"
+import "std/png"
+
+type Error error {
+    Unknown # the first bytes are neither a PNG signature nor a JPEG start of image
+    Png     # png.Decode refused the file
+    Jpeg    # jpeg.Decode refused the file
+}
+
+fn Decode(b Array<U8>&) image.Image ? Error {
+    f := image.Format.Of(b)
+    if f == image.Format.Png: return try png.Decode(b) catch png.Error { error Error.Png }
+    if f == image.Format.Jpeg: return try jpeg.Decode(b) catch jpeg.Error { error Error.Jpeg }
+    error Error.Unknown
+}
+
+if TestBuild {
+
+test "the format decides the decoder" {
+    try Decode(Array<U8>[1, 2, 3]) catch Error.Unknown { return }
+    assert false
+}
+
+}

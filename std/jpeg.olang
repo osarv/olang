@@ -1,0 +1,748 @@
+# jpeg - JPEG decoding (ITU T.81 / JFIF), baseline and progressive Huffman.
+#
+#   img := try jpeg.Decode(bytes)    # an image.Image: 8 bits a channel, Channels 1 (greyscale) or 3 (red, green, blue)
+#
+# Read: SOF0 and SOF1 (sequential, 8-bit, Huffman) and SOF2 (progressive: spectral selection and successive
+# approximation, every kind of scan), one or three components with any sampling factors up to 4 (the subsampled
+# components are upsampled as libjpeg does: triangle filtering for 2x1, 2x2 and 1x2, replication otherwise), restart
+# intervals, tables redefined between scans. Three components are converted from YCbCr by the JFIF formula in libjpeg's
+# fixed-point arithmetic, so the pixels match libjpeg's (the same integer IDCT, "islow") bit for bit, except that an
+# Adobe marker saying "no transform" leaves RGB as it is. EXIF orientation, ICC profiles and thumbnails are ignored.
+# Arithmetic coding, 12-bit samples, lossless and hierarchical files, four components (CMYK) and a height given by DNL
+# fail with `jpeg.Error.Unsupported`; a file that ends inside the image data fails with Truncated, any other malformed
+# one with Corrupt. Imported with `import "std/jpeg"`.
+
+import "std/image"
+
+type Error error {
+    NotJpeg     # the start-of-image marker is missing
+    Truncated   # the file ends before the end of the image data
+    Corrupt     # a marker segment, a table or the entropy-coded data is invalid
+    Unsupported # arithmetic coding, 12-bit samples, lossless, hierarchical, four components, DNL
+    TooBig      # more than 2^28 pixels
+}
+
+maxPixels I64 = 1 << 28
+
+# the natural (row-major) index of the coefficient at each zigzag position
+zigzag Array<U8> = Array<U8>[0, 1, 8, 16, 9, 2, 3, 10, 17, 24, 32, 25, 18, 11, 4, 5, 12, 19, 26, 33, 40, 48, 41, 34, 27, 20, 13, 6, 7, 14, 21, 28, 35, 42, 49, 56, 57, 50, 43, 36, 29, 22, 15, 23, 30, 37, 44, 51, 58, 59, 52, 45, 38, 31, 39, 46, 53, 60, 61, 54, 47, 55, 62, 63]
+
+# a Huffman table: codes up to 9 bits by one lookup (length << 8 | symbol, 0 for none), longer ones by the canonical walk
+type Huff struct() {
+    Valid Bool = false
+    fast := Array<U16>(512)
+    maxcode := Array<I64>(17)
+    valptr := Array<I64>(17)
+    vals := Array<U8>(256)
+}
+
+# the table of counts[0:16] codes of each length 1..16 for the symbols vals[0:n]
+fn (h mut Huff&) Build(counts Array<U8>&, vals Array<U8>&, n I64) ? Error {
+    for i in range 512: h.fast[i] = 0
+    code I64 = 0
+    k I64 = 0
+    for l in range 1, 17 {
+        c := I64(counts[l - 1])
+        h.valptr[l] = k - code
+        for _ in range c {
+            if k >= n or code >= (1 << l): error Error.Corrupt
+            h.vals[k] = vals[k]
+            if l <= 9 {
+                start := code << (9 - l)
+                for j in range 1 << (9 - l): h.fast[start + j] = U16((l << 8) | I64(vals[k]))
+            }
+            code++
+            k++
+        }
+        h.maxcode[l] = code - 1 if c > 0 else -1
+        code = code << 1
+    }
+    h.Valid = true
+}
+
+# the entropy-coded data's bits, most significant first; the byte stuffing (FF 00) is undone, and a marker or the end
+# of the file stops the supply of data (zero bits follow)
+type Reader struct(src Array<U8>&) {
+    src
+    pos I64 = 0
+    buf U64 = 0
+    cnt I64 = 0
+    marker I64 = 0 # the marker met in the data (its FF at pos), 0 for none
+    ended Bool = false
+}
+
+fn (r mut Reader&) fill() {
+    n := r.src.Len()
+    for r.cnt <= 56 {
+        b U64 = 0
+        if r.marker == 0 {
+            if r.pos >= n {
+                r.marker = 0xD9
+                r.ended = true
+            } else {
+                c := U64(r.src[r.pos])
+                if c != 0xFF {
+                    b = c
+                    r.pos++
+                } else if r.pos + 1 >= n {
+                    r.marker = 0xD9
+                    r.ended = true
+                } else if r.src[r.pos + 1] == 0 {
+                    b = 0xFF
+                    r.pos += 2
+                } else if r.src[r.pos + 1] == 0xFF {
+                    r.pos++
+                    continue
+                } else {
+                    r.marker = I64(r.src[r.pos + 1])
+                }
+            }
+        }
+        r.buf = (r.buf << 8) | b
+        r.cnt += 8
+    }
+}
+
+# the next n bits (at most 16)
+fn (r mut Reader&) bits(n I64) I64 {
+    if n == 0: return 0
+    if r.cnt < n: r.fill()
+    r.cnt -= n
+    return I64((r.buf >> U64(r.cnt)) & ((U64(1) << U64(n)) - 1))
+}
+
+fn (r mut Reader&) bit() I64 {
+    if r.cnt < 1: r.fill()
+    r.cnt--
+    return I64((r.buf >> U64(r.cnt)) & 1)
+}
+
+# n bits as a signed value: the top bit set means positive (T.81 F.2.2.1)
+fn (r mut Reader&) extend(n I64) I64 {
+    v := r.bits(n)
+    if n > 0 and v < (1 << (n - 1)): return v - (1 << n) + 1
+    return v
+}
+
+fn (r mut Reader&) decode(h Huff&) I64 ? Error {
+    if r.cnt < 16: r.fill()
+    e := I64(h.fast[I64((r.buf >> U64(r.cnt - 9)) & 511)])
+    if e != 0 {
+        r.cnt -= e >> 8
+        return e & 255
+    }
+    for l in range 10, 17 {
+        code := I64((r.buf >> U64(r.cnt - l)) & ((U64(1) << U64(l)) - 1))
+        if code <= h.maxcode[l] {
+            r.cnt -= l
+            return I64(h.vals[h.valptr[l] + code])
+        }
+    }
+    error Error.Corrupt
+}
+
+# moves pos to the next marker after the data: its FF
+fn (r mut Reader&) seek() {
+    r.cnt = 0
+    r.buf = 0
+    if r.marker != 0 {
+        if r.ended: r.pos = r.src.Len()
+        return
+    }
+    n := r.src.Len()
+    p := r.pos
+    for p + 1 < n and not (r.src[p] == 0xFF and r.src[p + 1] != 0 and r.src[p + 1] != 0xFF): p++
+    r.pos = p
+    if p + 1 < n {
+        r.marker = I64(r.src[p + 1])
+    } else {
+        r.marker = 0xD9
+        r.ended = true
+        r.pos = n
+    }
+}
+
+# the data after a restart interval: moves past the RSTn marker
+fn (r mut Reader&) restart() {
+    r.seek()
+    if r.marker >= 0xD0 and r.marker <= 0xD7 {
+        r.pos += 2
+        r.marker = 0
+    }
+}
+
+# the frame, its tables and the coefficients of every block
+type Dec struct() {
+    Width I64 = 0
+    Height I64 = 0
+    Progressive Bool = false
+    Adobe I64 = -1 # the Adobe marker's transform, -1 when there is none
+    n I64 = 0      # components
+    id := Array<I64>(4)
+    hs := Array<I64>(4)
+    vs := Array<I64>(4)
+    tq := Array<I64>(4)
+    bw := Array<I64>(4) # blocks across, in whole MCUs
+    bh := Array<I64>(4)
+    off := Array<I64>(4) # where a component's blocks start in coefs
+    hmax I64 = 1
+    vmax I64 = 1
+    mcusX I64 = 0
+    mcusY I64 = 0
+    coefs Array<I16>
+    qt := Array<I64>(256)
+    dc := Array<Huff>(4)
+    ac := Array<Huff>(4)
+    ri I64 = 0
+    # the scan under way
+    sn I64 = 0
+    sc := Array<I64>(4) # its components
+    td := Array<I64>(4)
+    ta := Array<I64>(4)
+    ss I64 = 0
+    se I64 = 0
+    ah I64 = 0
+    al I64 = 0
+    pred := Array<I64>(4)
+    eobrun I64 = 0
+}
+
+fn be16(b Array<U8>&, p I64) I64 { return (I64(b[p]) << 8) | I64(b[p + 1]) }
+
+fn ceilDiv(a I64, b I64) I64 { return (a + b - 1) / b }
+
+# the width and height of component c in samples
+fn (d Dec&) compW(c I64) I64 { return ceilDiv(d.Width * d.hs[c], d.hmax) }
+fn (d Dec&) compH(c I64) I64 { return ceilDiv(d.Height * d.vs[c], d.vmax) }
+
+fn (d mut Dec&) frame(b Array<U8>&, p I64, end I64, progressive Bool) ? Error {
+    if d.n != 0 or end - p < 6: error Error.Corrupt
+    if b[p] != 8: error Error.Unsupported
+    d.Height = be16(b, p + 1)
+    d.Width = be16(b, p + 3)
+    nf := I64(b[p + 5])
+    if d.Height == 0: error Error.Unsupported
+    if d.Width == 0 or end - p < 6 + 3 * nf: error Error.Corrupt
+    if nf == 4: error Error.Unsupported
+    if nf != 1 and nf != 3: error Error.Corrupt
+    if d.Width * d.Height > maxPixels: error Error.TooBig
+    d.Progressive = progressive
+    d.n = nf
+    for c in range nf {
+        q := p + 6 + 3 * c
+        d.id[c] = I64(b[q])
+        d.hs[c] = I64(b[q + 1]) >> 4
+        d.vs[c] = I64(b[q + 1]) & 15
+        d.tq[c] = I64(b[q + 2])
+        if d.hs[c] < 1 or d.hs[c] > 4 or d.vs[c] < 1 or d.vs[c] > 4 or d.tq[c] > 3: error Error.Corrupt
+        d.hmax = d.hmax.Max(d.hs[c])
+        d.vmax = d.vmax.Max(d.vs[c])
+    }
+    d.mcusX = ceilDiv(d.Width, 8 * d.hmax)
+    d.mcusY = ceilDiv(d.Height, 8 * d.vmax)
+    total I64 = 0
+    for c in range nf {
+        if d.hmax % d.hs[c] != 0 or d.vmax % d.vs[c] != 0: error Error.Unsupported
+        d.bw[c] = d.mcusX * d.hs[c]
+        d.bh[c] = d.mcusY * d.vs[c]
+        d.off[c] = total
+        total += d.bw[c] * d.bh[c] * 64
+    }
+    d.coefs = Array<I16>(total)
+}
+
+fn (d mut Dec&) quant(b Array<U8>&, p I64, end I64) ? Error {
+    q := p
+    for q < end {
+        pq := I64(b[q]) >> 4
+        t := I64(b[q]) & 15
+        q++
+        if pq > 1 or t > 3 or q + 64 * (pq + 1) > end: error Error.Corrupt
+        for i in range 64 {
+            v := I64(b[q + i]) if pq == 0 else be16(b, q + 2 * i)
+            d.qt[t * 64 + I64(zigzag[i])] = v
+        }
+        q += 64 * (pq + 1)
+    }
+}
+
+fn (d mut Dec&) huffman(b Array<U8>&, p I64, end I64) ? Error {
+    q := p
+    for q < end {
+        tc := I64(b[q]) >> 4
+        t := I64(b[q]) & 15
+        if tc > 1 or t > 3 or q + 17 > end: error Error.Corrupt
+        n I64 = 0
+        for i in range 16: n += I64(b[q + 1 + i])
+        if n > 256 or q + 17 + n > end: error Error.Corrupt
+        if tc == 0: try d.dc[t].Build(b[q + 1 : q + 17], b[q + 17 : q + 17 + n], n)
+        else: try d.ac[t].Build(b[q + 1 : q + 17], b[q + 17 : q + 17 + n], n)
+        q += 17 + n
+    }
+}
+
+# the scan header at b[p:end]
+fn (d mut Dec&) scanHeader(b Array<U8>&, p I64, end I64) ? Error {
+    if d.n == 0 or end - p < 1: error Error.Corrupt
+    ns := I64(b[p])
+    if ns < 1 or ns > d.n or end - p != 4 + 2 * ns: error Error.Corrupt
+    d.sn = ns
+    for i in range ns {
+        id := I64(b[p + 1 + 2 * i])
+        d.sc[i] = -1
+        for c in range d.n {
+            if d.id[c] == id: d.sc[i] = c
+        }
+        if d.sc[i] < 0: error Error.Corrupt
+        d.td[i] = I64(b[p + 2 + 2 * i]) >> 4
+        d.ta[i] = I64(b[p + 2 + 2 * i]) & 15
+        if d.td[i] > 3 or d.ta[i] > 3: error Error.Corrupt
+    }
+    q := p + 1 + 2 * ns
+    d.ss = I64(b[q])
+    d.se = I64(b[q + 1])
+    d.ah = I64(b[q + 2]) >> 4
+    d.al = I64(b[q + 2]) & 15
+    if not d.Progressive {
+        d.ss = 0
+        d.se = 63
+        d.ah = 0
+        d.al = 0
+        return
+    }
+    if d.ss > d.se or d.se > 63 or d.al > 13 or d.ah > 13: error Error.Corrupt
+    if d.ss == 0 and d.se != 0: error Error.Corrupt
+    if d.ss > 0 and ns != 1: error Error.Corrupt
+}
+
+# a sequential block: DC difference, then the AC run-lengths
+fn (d mut Dec&) baseline(r mut Reader&, ci I64, at I64) ? Error {
+    c := d.sc[ci]
+    dc := d.dc[d.td[ci]]
+    ac := d.ac[d.ta[ci]]
+    if not dc.Valid or not ac.Valid: error Error.Corrupt
+    t := try r.decode(dc)
+    if t > 16: error Error.Corrupt
+    d.pred[c] += r.extend(t)
+    d.coefs[at] = I16(d.pred[c])
+    k I64 = 1
+    for k < 64 {
+        rs := try r.decode(ac)
+        s := rs & 15
+        if s == 0 {
+            if rs != 0xF0: break
+            k += 16
+            continue
+        }
+        k += rs >> 4
+        if k > 63: error Error.Corrupt
+        d.coefs[at + I64(zigzag[k])] = I16(r.extend(s))
+        k++
+    }
+}
+
+fn (d mut Dec&) dcFirst(r mut Reader&, ci I64, at I64) ? Error {
+    c := d.sc[ci]
+    dc := d.dc[d.td[ci]]
+    if not dc.Valid: error Error.Corrupt
+    t := try r.decode(dc)
+    if t > 16: error Error.Corrupt
+    d.pred[c] += r.extend(t)
+    d.coefs[at] = I16(d.pred[c] << d.al)
+}
+
+fn (d mut Dec&) dcRefine(r mut Reader&, at I64) {
+    if r.bit() == 1: d.coefs[at] = I16(I64(d.coefs[at]) | (1 << d.al))
+}
+
+fn (d mut Dec&) acFirst(r mut Reader&, ci I64, at I64) ? Error {
+    if d.eobrun > 0 {
+        d.eobrun--
+        return
+    }
+    ac := d.ac[d.ta[ci]]
+    if not ac.Valid: error Error.Corrupt
+    k := d.ss
+    for k <= d.se {
+        rs := try r.decode(ac)
+        s := rs & 15
+        rr := rs >> 4
+        if s == 0 {
+            if rr < 15 {
+                d.eobrun = (1 << rr) - 1 + r.bits(rr)
+                break
+            }
+            k += 16
+            continue
+        }
+        k += rr
+        if k > 63: error Error.Corrupt
+        d.coefs[at + I64(zigzag[k])] = I16(r.extend(s) << d.al)
+        k++
+    }
+}
+
+# one coefficient already nonzero: a correction bit may add to its magnitude
+fn (d mut Dec&) correct(r mut Reader&, i I64, p1 I64) {
+    v := I64(d.coefs[i])
+    if r.bit() == 0 or (v & p1) != 0: return
+    d.coefs[i] = I16(v + p1 if v >= 0 else v - p1)
+}
+
+fn (d mut Dec&) acRefine(r mut Reader&, ci I64, at I64) ? Error {
+    ac := d.ac[d.ta[ci]]
+    if not ac.Valid: error Error.Corrupt
+    p1 := 1 << d.al
+    k := d.ss
+    if d.eobrun == 0 {
+        for k <= d.se {
+            rs := try r.decode(ac)
+            rr := rs >> 4
+            s I64 = rs & 15
+            if s != 0 {
+                s = p1 if r.bit() == 1 else -p1
+            } else if rr != 15 {
+                d.eobrun = 1 << rr
+                d.eobrun += r.bits(rr)
+                break
+            }
+            # skip rr zero coefficients, correcting the nonzero ones passed; then place the new one
+            for k <= d.se {
+                i := at + I64(zigzag[k])
+                if d.coefs[i] != 0 {
+                    d.correct(r, i, p1)
+                } else {
+                    rr--
+                    if rr < 0: break
+                }
+                k++
+            }
+            if s != 0 and k <= d.se: d.coefs[at + I64(zigzag[k])] = I16(s)
+            k++
+        }
+    }
+    if d.eobrun > 0 {
+        for k <= d.se {
+            i := at + I64(zigzag[k])
+            if d.coefs[i] != 0: d.correct(r, i, p1)
+            k++
+        }
+        d.eobrun--
+    }
+}
+
+fn (d mut Dec&) block(r mut Reader&, ci I64, at I64) ? Error {
+    if not d.Progressive {
+        try d.baseline(r, ci, at)
+    } else if d.ss == 0 {
+        if d.ah == 0: try d.dcFirst(r, ci, at)
+        else: d.dcRefine(r, at)
+    } else if d.ah == 0 {
+        try d.acFirst(r, ci, at)
+    } else {
+        try d.acRefine(r, ci, at)
+    }
+}
+
+# the blocks of one MCU, in the order the scan interleaves its components
+fn (d mut Dec&) mcu(r mut Reader&, mx I64, my I64) ? Error {
+    for ci in range d.sn {
+        c := d.sc[ci]
+        for v in range d.vs[c] {
+            for h in range d.hs[c] {
+                at := d.off[c] + ((my * d.vs[c] + v) * d.bw[c] + mx * d.hs[c] + h) * 64
+                try d.block(r, ci, at)
+            }
+        }
+    }
+}
+
+fn (d mut Dec&) restartAt(r mut Reader&, i I64) {
+    if d.ri == 0 or i == 0 or i % d.ri != 0: return
+    r.restart()
+    for c in range 4: d.pred[c] = 0
+    d.eobrun = 0
+}
+
+# decodes the scan whose data starts at r.pos
+fn (d mut Dec&) scan(r mut Reader&) ? Error {
+    for c in range 4: d.pred[c] = 0
+    d.eobrun = 0
+    if d.sn == 1 {
+        c := d.sc[0]
+        bx := ceilDiv(d.compW(c), 8)
+        total := bx * ceilDiv(d.compH(c), 8)
+        for i in range total {
+            d.restartAt(r, i)
+            try d.block(r, 0, d.off[c] + ((i / bx) * d.bw[c] + i % bx) * 64)
+        }
+    } else {
+        for m in range d.mcusX * d.mcusY {
+            d.restartAt(r, m)
+            try d.mcu(r, m % d.mcusX, m / d.mcusX)
+        }
+    }
+    if r.ended and r.cnt < 0: error Error.Truncated
+}
+
+fn descale(x I64, n I64) I64 { return (x + (1 << (n - 1))) >> n }
+
+fn clamp8(x I64) U8 {
+    if x < 0: return 0
+    return 255 if x > 255 else U8(x)
+}
+
+# the inverse DCT of the 64 coefficients at coefs[at:], dequantized by qt[q:], written as 8x8 samples to out[o:] with
+# row stride stride: libjpeg's accurate integer method (jidctint)
+fn idct(coefs Array<I16>&, at I64, qt Array<I64>&, q I64, out mut Array<U8>&, o I64, stride I64, ws mut Array<I64>&) {
+    for x in range 8 {
+        i := at + x
+        if coefs[i + 8] == 0 and coefs[i + 16] == 0 and coefs[i + 24] == 0 and coefs[i + 32] == 0 and coefs[i + 40] == 0 and coefs[i + 48] == 0 and coefs[i + 56] == 0 {
+            v := (I64(coefs[i]) * qt[q + x]) << 2
+            for y in range 8: ws[y * 8 + x] = v
+            continue
+        }
+        z2 := I64(coefs[i + 16]) * qt[q + x + 16]
+        z3 := I64(coefs[i + 48]) * qt[q + x + 48]
+        z1 := (z2 + z3) * 4433
+        t2 := z1 - z3 * 15137
+        t3 := z1 + z2 * 6270
+        z2 = I64(coefs[i]) * qt[q + x]
+        z3 = I64(coefs[i + 32]) * qt[q + x + 32]
+        t0 := (z2 + z3) << 13
+        t1 := (z2 - z3) << 13
+        t10 := t0 + t3
+        t13 := t0 - t3
+        t11 := t1 + t2
+        t12 := t1 - t2
+        t0 = I64(coefs[i + 56]) * qt[q + x + 56]
+        t1 = I64(coefs[i + 40]) * qt[q + x + 40]
+        t2 = I64(coefs[i + 24]) * qt[q + x + 24]
+        t3 = I64(coefs[i + 8]) * qt[q + x + 8]
+        z1 = t0 + t3
+        z2 = t1 + t2
+        z3 = t0 + t2
+        z4 := t1 + t3
+        z5 := (z3 + z4) * 9633
+        t0 = t0 * 2446
+        t1 = t1 * 16819
+        t2 = t2 * 25172
+        t3 = t3 * 12299
+        z1 = -z1 * 7373
+        z2 = -z2 * 20995
+        z3 = z5 - z3 * 16069
+        z4 = z5 - z4 * 3196
+        t0 += z1 + z3
+        t1 += z2 + z4
+        t2 += z2 + z3
+        t3 += z1 + z4
+        ws[x] = descale(t10 + t3, 11)
+        ws[56 + x] = descale(t10 - t3, 11)
+        ws[8 + x] = descale(t11 + t2, 11)
+        ws[48 + x] = descale(t11 - t2, 11)
+        ws[16 + x] = descale(t12 + t1, 11)
+        ws[40 + x] = descale(t12 - t1, 11)
+        ws[24 + x] = descale(t13 + t0, 11)
+        ws[32 + x] = descale(t13 - t0, 11)
+    }
+    for y in range 8 {
+        w := y * 8
+        p := o + y * stride
+        z2 := ws[w + 2]
+        z3 := ws[w + 6]
+        z1 := (z2 + z3) * 4433
+        t2 := z1 - z3 * 15137
+        t3 := z1 + z2 * 6270
+        t0 := (ws[w] + ws[w + 4]) << 13
+        t1 := (ws[w] - ws[w + 4]) << 13
+        t10 := t0 + t3
+        t13 := t0 - t3
+        t11 := t1 + t2
+        t12 := t1 - t2
+        t0 = ws[w + 7]
+        t1 = ws[w + 5]
+        t2 = ws[w + 3]
+        t3 = ws[w + 1]
+        z1 = t0 + t3
+        z2 = t1 + t2
+        z3 = t0 + t2
+        z4 := t1 + t3
+        z5 := (z3 + z4) * 9633
+        t0 = t0 * 2446
+        t1 = t1 * 16819
+        t2 = t2 * 25172
+        t3 = t3 * 12299
+        z1 = -z1 * 7373
+        z2 = -z2 * 20995
+        z3 = z5 - z3 * 16069
+        z4 = z5 - z4 * 3196
+        t0 += z1 + z3
+        t1 += z2 + z4
+        t2 += z2 + z3
+        t3 += z1 + z4
+        out[p] = clamp8(descale(t10 + t3, 18) + 128)
+        out[p + 7] = clamp8(descale(t10 - t3, 18) + 128)
+        out[p + 1] = clamp8(descale(t11 + t2, 18) + 128)
+        out[p + 6] = clamp8(descale(t11 - t2, 18) + 128)
+        out[p + 2] = clamp8(descale(t12 + t1, 18) + 128)
+        out[p + 5] = clamp8(descale(t12 - t1, 18) + 128)
+        out[p + 3] = clamp8(descale(t13 + t0, 18) + 128)
+        out[p + 4] = clamp8(descale(t13 - t0, 18) + 128)
+    }
+}
+
+# component c as samples: its blocks through the IDCT, a plane of (bw * 8) x (bh * 8)
+fn (d Dec&) plane(c I64) Array<U8> {
+    stride := d.bw[c] * 8
+    out := Array<U8>(stride * d.bh[c] * 8)
+    ws := Array<I64>(64)
+    q := d.tq[c] * 64
+    for by in range d.bh[c] {
+        for bx in range d.bw[c] {
+            idct(d.coefs, d.off[c] + (by * d.bw[c] + bx) * 64, d.qt, q, out, by * 8 * stride + bx * 8, stride, ws)
+        }
+    }
+    return out
+}
+
+# the plane of component c (stride pw) at the full width and height: triangle filtering for 2:1 in x and y (libjpeg's
+# "fancy" upsampling), else replication
+fn (d Dec&) upsample(c I64, src Array<U8>&, pw I64) Array<U8> {
+    W := d.Width
+    H := d.Height
+    out := Array<U8>(W * H)
+    fx := d.hmax / d.hs[c]
+    fy := d.vmax / d.vs[c]
+    cw := d.compW(c)
+    ch := d.compH(c)
+    if fx == 1 and fy == 1 {
+        for y in range H {
+            for x in range W: out[y * W + x] = src[y * pw + x]
+        }
+    } else if fx == 2 and fy == 1 and cw > 2 {
+        for y in range H {
+            s := y * pw
+            for x in range W {
+                i := x >> 1
+                if x & 1 == 0: out[y * W + x] = src[s] if i == 0 else U8((I64(src[s + i]) * 3 + I64(src[s + i - 1]) + 1) >> 2)
+                else: out[y * W + x] = src[s + i] if i == cw - 1 else U8((I64(src[s + i]) * 3 + I64(src[s + i + 1]) + 2) >> 2)
+            }
+        }
+    } else if fx == 1 and fy == 2 and cw > 2 {
+        for y in range H {
+            r := y >> 1
+            nb := (r - 1).Max(0) if y & 1 == 0 else (r + 1).Min(ch - 1)
+            bias := 1 if y & 1 == 0 else 2
+            for x in range W: out[y * W + x] = U8((I64(src[r * pw + x]) * 3 + I64(src[nb * pw + x]) + bias) >> 2)
+        }
+    } else if fx == 2 and fy == 2 and cw > 2 {
+        sums := Array<I64>(cw)
+        for y in range H {
+            r := y >> 1
+            nb := (r - 1).Max(0) if y & 1 == 0 else (r + 1).Min(ch - 1)
+            for i in range cw: sums[i] = I64(src[r * pw + i]) * 3 + I64(src[nb * pw + i])
+            for x in range W {
+                i := x >> 1
+                this := sums[i]
+                v I64 = 0
+                if x & 1 == 0: v = (this * 4 + 8) >> 4 if i == 0 else (this * 3 + sums[i - 1] + 8) >> 4
+                else: v = (this * 4 + 7) >> 4 if i == cw - 1 else (this * 3 + sums[i + 1] + 7) >> 4
+                out[y * W + x] = U8(v)
+            }
+        }
+    } else {
+        for y in range H {
+            for x in range W: out[y * W + x] = src[(y / fy) * pw + x / fx]
+        }
+    }
+    return out
+}
+
+# the image the planes make: grey, or YCbCr converted to RGB with libjpeg's fixed-point JFIF formulas
+fn (d Dec&) assemble() image.Image {
+    W := d.Width
+    H := d.Height
+    n := W * H
+    if d.n == 1 {
+        return image.Image(W, H, 1, d.upsample(0, d.plane(0), d.bw[0] * 8))
+    }
+    y := d.upsample(0, d.plane(0), d.bw[0] * 8)
+    cb := d.upsample(1, d.plane(1), d.bw[1] * 8)
+    cr := d.upsample(2, d.plane(2), d.bw[2] * 8)
+    out := Array<U8>(n * 3)
+    if d.Adobe == 0 {
+        for i in range n {
+            out[3 * i] = y[i]
+            out[3 * i + 1] = cb[i]
+            out[3 * i + 2] = cr[i]
+        }
+        return image.Image(W, H, 3, out)
+    }
+    for i in range n {
+        yy := I64(y[i])
+        u := I64(cb[i]) - 128
+        v := I64(cr[i]) - 128
+        out[3 * i] = clamp8(yy + ((91881 * v + 32768) >> 16))
+        out[3 * i + 1] = clamp8(yy + ((-22554 * u - 46802 * v + 32768) >> 16))
+        out[3 * i + 2] = clamp8(yy + ((116130 * u + 32768) >> 16))
+    }
+    return image.Image(W, H, 3, out)
+}
+
+# the image a JPEG file's bytes hold
+fn Decode(b Array<U8>&) image.Image ? Error {
+    n := b.Len()
+    if n < 4 or b[0] != 0xFF or b[1] != 0xD8: error Error.NotJpeg
+    d := Dec()
+    r := Reader(b)
+    pos I64 = 2
+    scans I64 = 0
+    for pos < n {
+        if b[pos] != 0xFF: error Error.Corrupt
+        if pos + 1 >= n: break
+        m := I64(b[pos + 1])
+        if m == 0xFF {
+            pos++
+            continue
+        }
+        pos += 2
+        if m == 0xD9: break
+        if m == 0x01 or m == 0xD8 or (m >= 0xD0 and m <= 0xD7): continue
+        if pos + 2 > n: error Error.Truncated
+        len := be16(b, pos)
+        end := pos + len
+        if len < 2: error Error.Corrupt
+        if end > n: error Error.Truncated
+        body := pos + 2
+        if m == 0xC0 or m == 0xC1 or m == 0xC2 {
+            try d.frame(b, body, end, m == 0xC2)
+        } else if m == 0xC3 or (m >= 0xC5 and m <= 0xCF and m != 0xC8 and m != 0xCC) {
+            error Error.Unsupported
+        } else if m == 0xC4 {
+            try d.huffman(b, body, end)
+        } else if m == 0xDB {
+            try d.quant(b, body, end)
+        } else if m == 0xDD {
+            if len != 4: error Error.Corrupt
+            d.ri = be16(b, body)
+        } else if m == 0xEE and len >= 14 and b[body] == 0x41 and b[body + 1] == 0x64 and b[body + 2] == 0x6F and b[body + 3] == 0x62 and b[body + 4] == 0x65 {
+            d.Adobe = I64(b[body + 11])
+        } else if m == 0xDA {
+            try d.scanHeader(b, body, end)
+            r.pos = end
+            r.marker = 0
+            r.ended = false
+            r.cnt = 0
+            r.buf = 0
+            try d.scan(r)
+            r.seek()
+            scans++
+            pos = r.pos
+            r.marker = 0
+            continue
+        }
+        pos = end
+    }
+    if d.n == 0 or scans == 0: error Error.Truncated
+    return d.assemble()
+}
