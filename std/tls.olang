@@ -67,7 +67,8 @@ fn parsePin(pin String&) Array<U8> ? Error.Pin {
 # "pin", where given, is the SHA-256 fingerprint of the server's certificate (64 hex digits, ':' between bytes allowed,
 # as `openssl x509 -fingerprint -sha256` prints it): the chain, "ca" and the name are then not checked, the certificate
 # must be exactly that one, and the dial fails with Pin when it is not (or when "pin" is not a fingerprint)
-# the handshake's longest wait for the server's next message (Windows; OpenSSL's waits as its socket does)
+# the handshake's longest wait for the server's next message: a server that stops answering ends it with Handshake
+# (OpenSSL) or Timeout (Schannel)
 HandshakeMs I64 = 10000
 
 fn Conn.Dial(host String&, port U16, ca String& = "", pin String& = "") Conn ? Error, net.Error {
@@ -182,12 +183,14 @@ if TargetOs != "windows" {
             error Error.Failed
         }
         ssl.SSL_set_fd(session, fd)
+        waitOn(fd, time.Duration.Millis(HandshakeMs))
         ssl.SSL_ctrl(session, sslCtrlSetTlsextHostname, 0, host.ToC())
         pinned := pin.Len() > 0
         unchecked := pinned or learn
         connected := (unchecked or ssl.SSL_set1_host(session, host.ToC()) == 1) and ssl.SSL_connect(session) == 1
         why :~ "" if unchecked else verifyFailure(session)
         mismatch := connected and pinned and not sameDigest(digestOf(session), pin)
+        waitOn(fd, time.Duration.Millis(0))         # reads wait as long as the caller says again
         if connected and why == "" and not mismatch: return session
         ssl.SSL_free(session)
         ssl.SSL_CTX_free(ctx)
@@ -242,7 +245,10 @@ if TargetOs != "windows" {
     }
 
     # a Read or Write waiting longer than d fails with Timeout from now on; 0 waits for ever (the default)
-    fn (c Conn&) SetTimeout(d time.Duration) {
+    fn (c Conn&) SetTimeout(d time.Duration): waitOn(c.fd, d)
+
+    # reads and writes on the socket fd waiting longer than d fail; 0 waits for ever
+    fn waitOn(fd I32, d time.Duration) {
         tv := Array<U8>(16)
         sec := I64(d) / 1000000000
         usec := I64(d) % 1000000000 / 1000
@@ -250,8 +256,8 @@ if TargetOs != "windows" {
             tv[i] = U8((sec >> (8 * i)) & 0xFF)
             tv[8 + i] = U8((usec >> (8 * i)) & 0xFF)
         }
-        sock.setsockopt(c.fd, solSocket, soRcvtimeo, tv, 16)
-        sock.setsockopt(c.fd, solSocket, soSndtimeo, tv, 16)
+        sock.setsockopt(fd, solSocket, soRcvtimeo, tv, 16)
+        sock.setsockopt(fd, solSocket, soSndtimeo, tv, 16)
     }
 }
 
@@ -847,4 +853,15 @@ test "a session to a port nothing listens at fails with the TCP error" {
     refused := false
     try Conn.Dial("127.0.0.1", U16(try freePort()), "") catch net.Error.Refused { refused = true } catch { }
     assert refused
+}
+
+test "a handshake with a server that never answers ends after HandshakeMs" {
+    if TargetOs == "windows": return
+    l := try net.Listener.Listen(try net.Addr.Resolve("127.0.0.1:0"))
+    port := (try l.Addr()).Port                 # connections queue in the backlog, never accepted or answered
+    start := time.Now()
+    failed := false
+    try Conn.Dial("127.0.0.1", port, "") catch Error.Handshake { failed = true } catch { }
+    assert failed
+    assert time.Since(start) < time.Duration.Millis(HandshakeMs + 5000)
 }
