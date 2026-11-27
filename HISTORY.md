@@ -44399,3 +44399,14 @@ its callers copy where they keep it - so retView now marks the calls it hands ba
 there, whatever the statement. Checks' viewreturns (a Next through v.Iter() and an nth, 20,000 passes over 100 elements,
 under 8 MB) ran out of memory before. A type whose Copy is declared still copies (E31d), in its callee too.
 
+
+## 2026-11-27: a declared Copy copies its own type part by part (E31d; mine; wt-copyrec)
+
+A model of an e-paper pixel declared `fn (px Pixel&) Copy() Pixel` on a struct holding value arrays, built `out :=
+Pixel()`, filled it and returned it; `olang test` ran out of stack. The Copy body is made by the checker after the
+scope pass (wantCopy), so it is lowered unplanned: `return out` copies the local into the result scope (retCopies), and
+that copy went through the type's Copy helper, which calls the declared Copy - which returned its local the same way,
+for ever. Any other copy of the type inside its own Copy (`second := out`) did the same. Lowering now asks
+ownCopyBody(ty): inside ty's own declared Copy, ownCopyOf and copyAt take the supplied part-by-part copy
+(HelperKind.Parts, as D9h's callee copies do) instead of the declared one. tests/copy.olang's Cell (a local returned, a
+local copied to another, read back at run time and while compiling) ended by a segmentation fault before.

@@ -9337,7 +9337,7 @@ fn (ln mut lowering&) ownsStorage(ty types.TypeId) Bool { return ln.T.OwnedPart(
 fn (ln mut lowering&) ownCopyOf(v mir.Operand, ty types.TypeId, at mir.ScopeRef, sp source.Span, parts Bool = false) mir.Operand {
     if not ln.T.OwnsParts(ty) { return ln.arrayCopy(v, ty, sp, at) if ln.T.OwnedPart(ty) else v }
     src := ln.local(v, ty, sp)
-    if parts and ln.T.DeclaresCopy(ty) {
+    if (parts or ln.ownCopyBody(ty)) and ln.T.DeclaresCopy(ty) {
         return ln.helperCall(mir.HelperKind.Parts, ty, Array<mir.Operand>[ln.refTo(pl(mir.Base.Local(src)), ty, sp)], Array<mir.ScopeRef>[at], ty, sp)
     }
     return ln.helperCall(mir.HelperKind.Copy, ty, Array<mir.Operand>[ln.refTo(pl(mir.Base.Local(src)), ty, sp)], Array<mir.ScopeRef>[at]
@@ -9350,7 +9350,10 @@ fn (ln mut lowering&) ownCopyOf(v mir.Operand, ty types.TypeId, at mir.ScopeRef,
 fn (ln mut lowering&) copyAt(a pl, ty types.TypeId, at mir.ScopeRef, sp source.Span, top Bool = false, own Bool = false) mir.Operand {
     t :~ ln.T
     if not ln.ownsStorage(ty): return ln.into(ty, mir.Rvalue.Use(mir.Operand.Copy(ln.mk(a))), sp)
-    if t.DeclaresCopy(ty) and not own: return ln.declaredCopy(a, ty, at, sp)
+    if t.DeclaresCopy(ty) and not own and not ln.ownCopyBody(ty): return ln.declaredCopy(a, ty, at, sp)
+    if t.DeclaresCopy(ty) and not own and not top {
+        return ln.helperCall(mir.HelperKind.Parts, ty, Array<mir.Operand>[ln.refTo(a, ty, sp)], Array<mir.ScopeRef>[at], ty, sp)
+    }
     r := t.Repr(ty)
     if t.KindOf(r) == types.Kind.Array and t.Length(r) == types.TypeId(0) {
         if not t.OwnsParts(ty): return ln.arrayCopy(mir.Operand.Copy(ln.mk(a)), ty, sp, at)
@@ -9556,6 +9559,12 @@ fn (ln mut lowering&) declaredCopy(a pl, ty types.TypeId, at mir.ScopeRef, sp so
 }
 
 # the body of the Copy a type declares (E31d), -1 for none
+# E31d: whether this body is type ty's own declared Copy - where a copy of a ty (its result handed out of a local, a read
+# of its receiver) is the supplied part-by-part one (HelperKind.Parts), never the declared one, which would call itself
+fn (ln mut lowering&) ownCopyBody(ty types.TypeId) Bool {
+    return I64(ln.B.Id) >= 0 and ln.T.DeclaresCopy(ty) and ln.copyBody(ty) == I64(ln.B.Id)
+}
+
 fn (ln mut lowering&) copyBody(ty types.TypeId) I64 {
     got := try ln.L.copyOf.Get(ty) catch default -2
     if got != -2: return got
