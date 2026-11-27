@@ -1,0 +1,1041 @@
+# flate - DEFLATE (RFC 1951) both ways, and its two containers: zlib (RFC 1950, Adler-32) and gzip (RFC 1952, CRC-32).
+#
+#   packed := flate.Deflate(data, level = 6)    # raw DEFLATE; level 0 stores, 1 is quickest, 9 packs hardest
+#   data := try flate.Inflate(packed)           # the bytes of a raw stream
+#   z := flate.Zlib(data)         / try flate.Unzlib(z)
+#   g := flate.Gzip(data)         / try flate.Gunzip(g)   # Gunzip reads every member of a .gz file
+#   flate.Adler32(data)
+#
+# The compressor is LZ77 over the 32 KB window, found by hash chains (longer chains and lazy matching as the level
+# rises), cut into blocks of up to 32768 symbols; each block is written as the smallest of a stored block, a block of
+# the fixed codes and a block of its own dynamic Huffman codes (lengths limited to 15 bits). The decoder reads codes
+# through a 10-bit table (longer ones by the canonical walk); its output is one growing buffer that is also the window.
+# Malformed input fails with `flate.Error`. Imported with `import "std/flate"`.
+
+import "std/crc32"
+
+type Error error {
+    Truncated   # the input ended inside a header, a block or a trailer
+    BadHeader   # not a gzip or zlib header, or a field of it is wrong
+    Corrupt     # a block that DEFLATE does not allow
+    BadChecksum # a member's CRC-32 or header CRC differs from the one stored
+    BadSize     # a member's length differs from the ISIZE stored
+    Unsupported # a compression method other than DEFLATE
+}
+
+fastBits I64 = 10
+maxOut I64 = 1 << 34 # a ceiling on what one stream may grow to, against a runaway
+
+lenBase Array<U16> = Array<U16>[3, 4, 5, 6, 7, 8, 9, 10, 11, 13, 15, 17, 19, 23, 27, 31, 35, 43, 51, 59, 67, 83, 99, 115, 131, 163, 195, 227, 258]
+lenExtra Array<U8> = Array<U8>[0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 2, 2, 2, 2, 3, 3, 3, 3, 4, 4, 4, 4, 5, 5, 5, 5, 0]
+distBase Array<U16> = Array<U16>[1, 2, 3, 4, 5, 7, 9, 13, 17, 25, 33, 49, 65, 97, 129, 193, 257, 385, 513, 769, 1025, 1537, 2049, 3073, 4097, 6145, 8193, 12289, 16385, 24577]
+distExtra Array<U8> = Array<U8>[0, 0, 0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5, 6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11, 12, 12, 13, 13]
+clOrder Array<U8> = Array<U8>[16, 17, 18, 0, 8, 7, 9, 6, 10, 5, 11, 4, 12, 3, 13, 2, 14, 1, 15]
+
+# a canonical Huffman code. fast is indexed by the next 10 bits of input (the first bit lowest): the symbol shifted
+# left 4 with the code's length, or 0 where the code is longer than 10 bits (or unassigned) and slow decides
+type Huff struct() {
+    fast := Array<U32>(1 << fastBits)
+    count := Array<I64>(16)   # codes of each length
+    symbol := Array<U16>(320) # symbols in code order
+}
+
+fn reverse(code U32, n U32) U32 {
+    r U32 = 0
+    c := code
+    for _ in range n {
+        r = (r << 1) | (c & 1)
+        c = c >> 1
+    }
+    return r
+}
+
+# the code for the n symbols whose lengths are lens[0:n]; an over-subscribed set is Corrupt, an incomplete one is
+# allowed (what decodes to nothing is Corrupt when met)
+fn (h mut Huff&) Build(lens Array<U8>&, n I64) ? Error {
+    for i in range 16: h.count[i] = 0
+    for i in range 1 << fastBits: h.fast[i] = 0
+    for i in range n: h.count[I64(lens[i])]++
+    h.count[0] = 0
+    left I64 = 1
+    for l in range 1, 16 {
+        left = left * 2 - h.count[l]
+        if left < 0: error Error.Corrupt
+    }
+    offs := Array<I64>(17)
+    for l in range 1, 16: offs[l + 1] = offs[l] + h.count[l]
+    next := Array<U32>(17)
+    code U32 = 0
+    for l in range 1, 16 {
+        code = (code + U32(h.count[l - 1])) << 1 if l > 1 else 0
+        next[l] = code
+    }
+    for s in range n {
+        l := I64(lens[s])
+        if l == 0: continue
+        h.symbol[offs[l]] = U16(s)
+        offs[l]++
+        c := next[l]
+        next[l]++
+        if l > fastBits: continue
+        r := reverse(c, U32(l))
+        e := (U32(s) << 4) | U32(l)
+        step := U32(1) << U32(l)
+        for r < U32(1) << fastBits {
+            h.fast[r] = e
+            r += step
+        }
+    }
+}
+
+# the symbol and length (symbol << 4 | length) of the code at the start of bits, or -1 for none
+fn (h Huff&) slow(bits U32) I64 {
+    code I64 = 0
+    first I64 = 0
+    index I64 = 0
+    b := bits
+    for l in range 1, 16 {
+        code = code | I64(b & 1)
+        b = b >> 1
+        c := h.count[l]
+        if code - c < first: return (I64(h.symbol[index + (code - first)]) << 4) | l
+        index += c
+        first = (first + c) << 1
+        code = code << 1
+    }
+    return -1
+}
+
+# the decoder: the input, a bit buffer (first bit lowest), the output and the window start of the current member
+type Inflater struct(src Array<U8>&) {
+    src
+    pos I64 = 0 # next byte of src to move into bitbuf
+    bitbuf U64 = 0
+    bitcnt I64 = 0
+    out Array<U8>
+    op I64 = 0   # bytes of out in use
+    base I64 = 0 # where the current member starts in out: matches may not reach before
+    lit Huff
+    dist Huff
+}
+
+# bytes enough in the bit buffer for 32 bits: zero bytes stand in past the end of src, and a read that used them is
+# found by past()
+fn (h mut Inflater&) fill() {
+    for h.bitcnt <= 56 {
+        b U64 = 0
+        if h.pos < h.src.Len(): b = U64(h.src[h.pos])
+        h.bitbuf = h.bitbuf | (b << U64(h.bitcnt))
+        h.pos++
+        h.bitcnt += 8
+    }
+}
+
+# whether bits not in src have been consumed
+fn (h Inflater&) past() Bool { return h.pos * 8 - h.bitcnt > h.src.Len() * 8 }
+
+fn (h mut Inflater&) take(n I64) U32 ? Error {
+    if n == 0: return 0
+    h.fill()
+    v := U32(h.bitbuf & ((U64(1) << U64(n)) - 1))
+    h.bitbuf = h.bitbuf >> U64(n)
+    h.bitcnt -= n
+    if h.past(): error Error.Truncated
+    return v
+}
+
+fn (h mut Inflater&) symbolOf(t Huff&) I64 ? Error {
+    h.fill()
+    e := t.fast[U32(h.bitbuf & 1023)]
+    v I64 = I64(e)
+    if e == 0 {
+        v = t.slow(U32(h.bitbuf & 0x7FFF))
+        if v < 0: error Error.Corrupt
+    }
+    n := v & 15
+    h.bitbuf = h.bitbuf >> U64(n)
+    h.bitcnt -= n
+    if h.past(): error Error.Truncated
+    return v >> 4
+}
+
+# room for need more bytes of output
+fn (h mut Inflater&) room(need I64) ? Error {
+    if h.op + need <= h.out.Len(): return
+    if h.op + need > maxOut: error Error.Corrupt
+    nc := h.out.Len() * 2
+    if nc < 65536: nc = 65536
+    for nc < h.op + need: nc *= 2
+    nd := Array<U8>(nc)
+    for i in range h.op: nd[i] = h.out[i]
+    h.out = nd
+}
+
+# decodes symbols of the current block with the tables lit and dist until the end-of-block symbol (true) or until
+# the output is too full for another match (false). The hot state is kept in locals
+fn (h mut Inflater&) run() Bool ? Error {
+    src :~ h.src
+    n := src.Len()
+    pos := h.pos
+    bitbuf := h.bitbuf
+    bitcnt := h.bitcnt
+    op := h.op
+    base := h.base
+    out mut Array<U8>& = h.out
+    outLen := out.Len()
+    done := false
+    for not done and op + 260 <= outLen {
+        # 32 bits are enough for a length code with its extra bits; the distance's are refilled below
+        if bitcnt < 32 {
+            if pos + 4 <= n {
+                bitbuf = bitbuf | ((U64(src[pos]) | (U64(src[pos + 1]) << 8) | (U64(src[pos + 2]) << 16) | (U64(src[pos + 3]) << 24)) << U64(bitcnt))
+                pos += 4
+                bitcnt += 32
+            } else {
+                for bitcnt <= 56 {
+                    b U64 = 0
+                    if pos < n: b = U64(src[pos])
+                    bitbuf = bitbuf | (b << U64(bitcnt))
+                    pos++
+                    bitcnt += 8
+                }
+                if pos * 8 - bitcnt > n * 8: error Error.Truncated
+            }
+        }
+        e := h.lit.fast[U32(bitbuf & 1023)]
+        v I64 = I64(e)
+        if e == 0 {
+            v = h.lit.slow(U32(bitbuf & 0x7FFF))
+            if v < 0: error Error.Corrupt
+        }
+        k := v & 15
+        bitbuf = bitbuf >> U64(k)
+        bitcnt -= k
+        sym := v >> 4
+        if sym < 256 {
+            out[op] = U8(sym)
+            op++
+            continue
+        }
+        if sym == 256 {
+            done = true
+            continue
+        }
+        sym -= 257
+        if sym >= 29: error Error.Corrupt
+        xb := I64(lenExtra[sym])
+        length := I64(lenBase[sym]) + I64(bitbuf & ((U64(1) << U64(xb)) - 1))
+        bitbuf = bitbuf >> U64(xb)
+        bitcnt -= xb
+        # the distance code and its extra bits: up to 28 more bits
+        if bitcnt < 32 {
+            if pos + 4 <= n {
+                bitbuf = bitbuf | ((U64(src[pos]) | (U64(src[pos + 1]) << 8) | (U64(src[pos + 2]) << 16) | (U64(src[pos + 3]) << 24)) << U64(bitcnt))
+                pos += 4
+                bitcnt += 32
+            } else {
+                for bitcnt <= 56 {
+                    b U64 = 0
+                    if pos < n: b = U64(src[pos])
+                    bitbuf = bitbuf | (b << U64(bitcnt))
+                    pos++
+                    bitcnt += 8
+                }
+            }
+        }
+        de := h.dist.fast[U32(bitbuf & 1023)]
+        dv I64 = I64(de)
+        if de == 0 {
+            dv = h.dist.slow(U32(bitbuf & 0x7FFF))
+            if dv < 0: error Error.Corrupt
+        }
+        dk := dv & 15
+        bitbuf = bitbuf >> U64(dk)
+        bitcnt -= dk
+        ds := dv >> 4
+        if ds >= 30: error Error.Corrupt
+        dxb := I64(distExtra[ds])
+        d := I64(distBase[ds]) + I64(bitbuf & ((U64(1) << U64(dxb)) - 1))
+        bitbuf = bitbuf >> U64(dxb)
+        bitcnt -= dxb
+        if d > op - base: error Error.Corrupt
+        from := op - d
+        for j in range length: out[op + j] = out[from + j]
+        op += length
+    }
+    h.pos = pos
+    h.bitbuf = bitbuf
+    h.bitcnt = bitcnt
+    h.op = op
+    if h.past(): error Error.Truncated
+    return done
+}
+
+# the fixed codes of block type 1
+fn (h mut Inflater&) fixed() ? Error {
+    lens := Array<U8>(288, 8)
+    for i in range 144, 256: lens[i] = 9
+    for i in range 256, 280: lens[i] = 7
+    try h.lit.Build(lens, 288)
+    d := Array<U8>(30, 5)
+    try h.dist.Build(d, 30)
+}
+
+# the codes of block type 2, read from its header
+fn (h mut Inflater&) dynamic() ? Error {
+    nlit := I64(try h.take(5)) + 257
+    ndist := I64(try h.take(5)) + 1
+    ncl := I64(try h.take(4)) + 4
+    if nlit > 286 or ndist > 30: error Error.Corrupt
+    cl := Array<U8>(19)
+    for i in range ncl: cl[I64(clOrder[i])] = U8(try h.take(3))
+    clh Huff
+    try clh.Build(cl, 19)
+    lens := Array<U8>(nlit + ndist)
+    i I64 = 0
+    for i < nlit + ndist {
+        s := try h.symbolOf(clh)
+        if s < 16 {
+            lens[i] = U8(s)
+            i++
+            continue
+        }
+        rep I64 = 0
+        val U8 = 0
+        if s == 16 {
+            if i == 0: error Error.Corrupt
+            val = lens[i - 1]
+            rep = 3 + I64(try h.take(2))
+        } else if s == 17: rep = 3 + I64(try h.take(3))
+        else: rep = 11 + I64(try h.take(7))
+        if i + rep > nlit + ndist: error Error.Corrupt
+        for _ in range rep {
+            lens[i] = val
+            i++
+        }
+    }
+    if lens[256] == 0: error Error.Corrupt
+    try h.lit.Build(lens[:nlit], nlit)
+    try h.dist.Build(lens[nlit:], ndist)
+}
+
+# a stored block: the rest of the byte dropped, then LEN, NLEN and LEN bytes
+fn (h mut Inflater&) stored() ? Error {
+    h.pos -= h.bitcnt / 8 # whole bytes of the buffer go back to the input
+    h.bitbuf = 0
+    h.bitcnt = 0
+    p := h.pos
+    if p + 4 > h.src.Len(): error Error.Truncated
+    n := I64(h.src[p]) | (I64(h.src[p + 1]) << 8)
+    nn := I64(h.src[p + 2]) | (I64(h.src[p + 3]) << 8)
+    if n != (nn ^ 0xFFFF): error Error.Corrupt
+    p += 4
+    if p + n > h.src.Len(): error Error.Truncated
+    try h.room(n)
+    for i in range n: h.out[h.op + i] = h.src[p + i]
+    h.op += n
+    h.pos = p + n
+}
+
+# one DEFLATE stream from the current position into out; leaves pos just after it
+fn (h mut Inflater&) Stream() ? Error {
+    last := false
+    for not last {
+        last = (try h.take(1)) == 1
+        kind := try h.take(2)
+        if kind == 0 {
+            try h.stored()
+            continue
+        }
+        if kind == 3: error Error.Corrupt
+        if kind == 1: try h.fixed()
+        else: try h.dynamic()
+        for {
+            try h.room(260)
+            if try h.run(): break
+        }
+    }
+    h.pos -= h.bitcnt / 8 # the bytes the buffer holds that the stream did not use
+    h.bitbuf = 0
+    h.bitcnt = 0
+}
+
+fn finish(h mut Inflater&) Array<U8> {
+    r := Array<U8>(h.op)
+    for i in range h.op: r[i] = h.out[i]
+    return r
+}
+
+# the bytes a raw DEFLATE stream holds; sizeHint, if known, is the length it expands to
+fn Inflate(data Array<U8>&, sizeHint I64 = 0) Array<U8> ? Error {
+    h := Inflater(data)
+    h.out = Array<U8>(sizeHint + 300 if sizeHint > 0 else 65536)
+    try h.Stream()
+    return finish(h)
+}
+
+fn le32(d Array<U8>&, p I64) U32 {
+    return U32(d[p]) | (U32(d[p + 1]) << 8) | (U32(d[p + 2]) << 16) | (U32(d[p + 3]) << 24)
+}
+
+# the end of a zero-terminated field starting at p
+fn cstring(d Array<U8>&, p I64) I64 ? Error {
+    i := p
+    for i < d.Len() and d[i] != 0: i++
+    if i >= d.Len(): error Error.Truncated
+    return i + 1
+}
+
+# parses a member's header at p; the position after it
+fn header(d Array<U8>&, p I64) I64 ? Error {
+    if p + 10 > d.Len(): error Error.Truncated
+    if d[p] != 0x1F or d[p + 1] != 0x8B: error Error.BadHeader
+    if d[p + 2] != 8: error Error.Unsupported
+    flg := d[p + 3]
+    if (flg & 0xE0) != 0: error Error.BadHeader
+    q := p + 10
+    if (flg & 4) != 0 {
+        if q + 2 > d.Len(): error Error.Truncated
+        q += 2 + I64(d[q]) + (I64(d[q + 1]) << 8)
+    }
+    if (flg & 8) != 0: q = try cstring(d, q)
+    if (flg & 16) != 0: q = try cstring(d, q)
+    if (flg & 2) != 0 {
+        if q + 2 > d.Len(): error Error.Truncated
+        want := U32(d[q]) | (U32(d[q + 1]) << 8)
+        if (crc32.Checksum(d[p:q]) & 0xFFFF) != want: error Error.BadChecksum
+        q += 2
+    }
+    if q > d.Len(): error Error.Truncated
+    return q
+}
+
+# the bytes of a gzip file: every member in turn, appended. Trailing zero bytes (tape padding) are ignored
+fn Gunzip(data Array<U8>&) Array<U8> ? Error {
+    n := data.Len()
+    h := Inflater(data)
+    hint := 0
+    if n >= 18: hint = I64(le32(data, n - 4))
+    if hint > n * 1032: hint = n * 1032
+    if hint > 1 << 30: hint = 1 << 30
+    h.out = Array<U8>(hint + 300 if hint > 0 else 65536)
+    p I64 = 0
+    members := 0
+    for p < n {
+        if members > 0 and data[p] == 0 {
+            rest :~ data[p:]
+            for b in rest {
+                if b != 0: error Error.BadHeader
+            }
+            break
+        }
+        p = try header(data, p)
+        h.pos = p
+        h.base = h.op
+        try h.Stream()
+        p = h.pos
+        if p + 8 > n: error Error.Truncated
+        mem :~ h.out[h.base:h.op]
+        if crc32.Checksum(mem) != le32(data, p): error Error.BadChecksum
+        if U32(mem.Len() & 0xFFFFFFFF) != le32(data, p + 4): error Error.BadSize
+        p += 8
+        members++
+    }
+    return finish(h)
+}
+
+
+# ---- the compressor ----
+
+blockSymbols I64 = 32768 # symbols in a block, at most
+hashBits I64 = 15
+
+# a token is a literal byte (below 256) or a match: bit 31, then length - 3 in bits 16..23 and distance - 1 below
+matchFlag U32 = 0x80000000
+
+fn makeLenSym() Array<U8> {
+    t := Array<U8>(256)
+    for c in range 29 {
+        for l in range I64(lenBase[c]), I64(lenBase[c]) + (1 << I64(lenExtra[c])) {
+            if l - 3 < 256: t[l - 3] = U8(c)
+        }
+    }
+    return t
+}
+
+lenSym Array<U8> = makeLenSym()
+
+# the distance code of distance x + 1
+fn distCode(x I64) I64 {
+    if x < 4: return x
+    n I64 = 0
+    t := x
+    for t > 1 {
+        t = t >> 1
+        n++
+    }
+    return 2 * n + ((x >> (n - 1)) & 1)
+}
+
+# the bit writer: bits go in lowest first
+type Writer struct() {
+    out Vec<U8>
+    buf U64 = 0
+    cnt I64 = 0
+}
+
+fn (w mut Writer&) put(v U32, n I64) {
+    w.buf = w.buf | (U64(v) << U64(w.cnt))
+    w.cnt += n
+    for w.cnt >= 8 {
+        w.out.Push(U8(w.buf & 255))
+        w.buf = w.buf >> 8
+        w.cnt -= 8
+    }
+}
+
+fn (w mut Writer&) align() { if w.cnt > 0: w.put(0, 8 - w.cnt) }
+
+# code lengths, at most limit bits, of the n symbols with frequencies freq: Huffman's, with the over-long ones
+# shortened by moving leaves up the tree until the lengths fill the code exactly (Kraft's sum is 1); pair gives a
+# single used symbol a partner, for the code-length code, which zlib wants complete
+fn lengths(freq Array<I64>&, n I64, limit I64, pair Bool = false) Array<U8> {
+    lens := Array<U8>(n)
+    keys := Vec<I64>()
+    for s in range n {
+        if freq[s] > 0: keys.Push((freq[s] << 12) | s)
+    }
+    m := keys.Len()
+    if m == 0: return lens
+    if m == 1 {
+        s := keys[0] & 4095
+        lens[s] = 1
+        if pair: lens[1 if s == 0 else 0] = 1 # zlib refuses a code-length code of one symbol
+        return lens
+    }
+    keys.Sort(fn(a, b): return a < b)
+    weight := Array<I64>(2 * m)
+    parent := Array<I64>(2 * m)
+    for k in range m: weight[k] = keys[k] >> 12
+    li I64 = 0
+    ni := m
+    for next in range m, 2 * m - 1 {
+        sum I64 = 0
+        for _ in range 2 {
+            pick I64 = 0
+            if li < m and (ni >= next or weight[li] <= weight[ni]) {
+                pick = li
+                li++
+            } else {
+                pick = ni
+                ni++
+            }
+            parent[pick] = next
+            sum += weight[pick]
+        }
+        weight[next] = sum
+    }
+    depth := Array<I64>(2 * m)
+    for k in range 2 * m - 2 {
+        id := 2 * m - 3 - k
+        depth[id] = depth[parent[id]] + 1
+    }
+    num := Array<I64>(m + limit + 1)
+    for k in range m {
+        d := depth[k]
+        num[limit if d > limit else d]++
+    }
+    total I64 = 0
+    for l in range 1, limit + 1: total += num[l] << (limit - l)
+    for total > (1 << limit) {
+        num[limit]--
+        for j in range 1, limit {
+            l := limit - j
+            if num[l] > 0 {
+                num[l]--
+                num[l + 1] += 2
+                break
+            }
+        }
+        total--
+    }
+    k I64 = 0
+    for j in range limit {
+        l := limit - j
+        for _ in range num[l] {
+            lens[keys[k] & 4095] = U8(l)
+            k++
+        }
+    }
+    return lens
+}
+
+# the canonical codes of lens, bit-reversed so that put writes them first bit first
+fn codesOf(lens Array<U8>&) Array<U32> {
+    n := lens.Len()
+    count := Array<I64>(16)
+    for i in range n: count[I64(lens[i])]++
+    count[0] = 0
+    next := Array<U32>(17)
+    code U32 = 0
+    for l in range 1, 16 {
+        code = (code + U32(count[l - 1])) << 1
+        next[l] = code
+    }
+    codes := Array<U32>(n)
+    for s in range n {
+        l := I64(lens[s])
+        if l == 0: continue
+        codes[s] = reverse(next[l], U32(l))
+        next[l]++
+    }
+    return codes
+}
+
+fixedLit Array<U8> = makeFixedLit()
+fixedDist Array<U8> = Array<U8>(30, 5)
+
+fn makeFixedLit() Array<U8> {
+    lens := Array<U8>(288, 8)
+    for i in range 144, 256: lens[i] = 9
+    for i in range 256, 280: lens[i] = 7
+    return lens
+}
+
+# the bits of the symbols in a block under the code lengths ll and dl, extra bits included
+fn dataBits(lf Array<I64>&, df Array<I64>&, ll Array<U8>&, dl Array<U8>&) I64 {
+    bits I64 = 0
+    for s in range 286 {
+        bits += lf[s] * I64(ll[s])
+        if s > 256: bits += lf[s] * I64(lenExtra[s - 257])
+    }
+    for s in range 30: bits += df[s] * (I64(dl[s]) + I64(distExtra[s]))
+    return bits
+}
+
+# stored blocks holding data[from:to]; the last of them final when last is set
+fn storedBlocks(w mut Writer&, data Array<U8>&, from I64, to I64, last Bool) {
+    p := from
+    for {
+        n := to - p
+        if n > 65535: n = 65535
+        fin := last and p + n == to
+        w.put(1 if fin else 0, 1)
+        w.put(0, 2)
+        w.align()
+        w.put(U32(n), 16)
+        w.put(U32(n ^ 0xFFFF), 16)
+        for i in range n: w.out.Push(data[p + i])
+        p += n
+        if p >= to: break
+    }
+}
+
+# the code lengths of a dynamic block's header run-length coded: each entry the symbol of the length-code alphabet
+# (0..18) with its extra bits above bit 8
+fn runLengths(all Array<U8>&) Array<U32> {
+    r := Vec<U32>()
+    total := all.Len()
+    i I64 = 0
+    for i < total {
+        v := all[i]
+        run I64 = 1
+        for i + run < total and all[i + run] == v: run++
+        if v == 0 and run >= 3 {
+            c := 138 if run > 138 else run
+            if c >= 11: r.Push(U32(18) | (U32(c - 11) << 8))
+            else: r.Push(U32(17) | (U32(c - 3) << 8))
+            i += c
+        } else if v != 0 and run >= 4 {
+            r.Push(U32(v))
+            i++
+            run--
+            for run >= 3 {
+                c := 6 if run > 6 else run
+                r.Push(U32(16) | (U32(c - 3) << 8))
+                i += c
+                run -= c
+            }
+        } else {
+            r.Push(U32(v))
+            i++
+        }
+    }
+    return r.ToArray()
+}
+
+# one block: the tokens, standing for data[from:to], in the smallest of the three forms
+fn flushBlock(w mut Writer&, tokens Array<U32>&, data Array<U8>&, from I64, to I64, last Bool) {
+    lf := Array<I64>(286)
+    df := Array<I64>(30)
+    lf[256] = 1
+    for t in tokens {
+        if (t & matchFlag) == 0 {
+            lf[I64(t)]++
+            continue
+        }
+        lf[257 + I64(lenSym[I64((t >> 16) & 255)])]++
+        df[distCode(I64(t & 0xFFFF))]++
+    }
+    ll := lengths(lf, 286, 15)
+    dl := lengths(df, 30, 15)
+    nd := 30
+    for nd > 1 and dl[nd - 1] == 0: nd--
+    if dl[0] == 0 and nd == 1: dl[0] = 1 # no distance codes used: one code of length 1 keeps the table valid
+    nl := 286
+    for nl > 257 and ll[nl - 1] == 0: nl--
+    all := Array<U8>(nl + nd)
+    for i in range nl: all[i] = ll[i]
+    for i in range nd: all[nl + i] = dl[i]
+    rle := runLengths(all)
+    cf := Array<I64>(19)
+    xbits I64 = 0
+    for e in rle {
+        s := I64(e & 255)
+        cf[s]++
+        xbits += 2 if s == 16 else 3 if s == 17 else 7 if s == 18 else 0
+    }
+    cl := lengths(cf, 19, 7, pair = true)
+    ncl := 19
+    for ncl > 4 and cl[I64(clOrder[ncl - 1])] == 0: ncl--
+    hbits := 14 + 3 * ncl + xbits
+    for s in range 19: hbits += cf[s] * I64(cl[s])
+    dyn := 3 + hbits + dataBits(lf, df, ll, dl)
+    fix := 3 + dataBits(lf, df, fixedLit, fixedDist)
+    span := to - from
+    stored := span * 8 + 40 * ((span + 65534) / 65535 if span > 0 else 1) + 7
+    if stored <= dyn and stored <= fix {
+        storedBlocks(w, data, from, to, last)
+        return
+    }
+    litLens := ll
+    distLens := dl
+    w.put(1 if last else 0, 1)
+    if fix <= dyn {
+        w.put(1, 2)
+        litLens = fixedLit
+        distLens = fixedDist
+    } else {
+        w.put(2, 2)
+        w.put(U32(nl - 257), 5)
+        w.put(U32(nd - 1), 5)
+        w.put(U32(ncl - 4), 4)
+        for i in range ncl: w.put(U32(cl[I64(clOrder[i])]), 3)
+        cc := codesOf(cl)
+        for e in rle {
+            s := I64(e & 255)
+            w.put(cc[s], I64(cl[s]))
+            if s == 16: w.put(e >> 8, 2)
+            else if s == 17: w.put(e >> 8, 3)
+            else if s == 18: w.put(e >> 8, 7)
+        }
+    }
+    lc := codesOf(litLens)
+    dc := codesOf(distLens)
+    for t in tokens {
+        if (t & matchFlag) == 0 {
+            w.put(lc[I64(t)], I64(litLens[I64(t)]))
+            continue
+        }
+        li := I64(lenSym[I64((t >> 16) & 255)])
+        w.put(lc[257 + li], I64(litLens[257 + li]))
+        w.put(U32(((t >> 16) & 255) + 3 - U32(lenBase[li])), I64(lenExtra[li]))
+        x := I64(t & 0xFFFF)
+        di := distCode(x)
+        w.put(dc[di], I64(distLens[di]))
+        w.put(U32(x + 1 - I64(distBase[di])), I64(distExtra[di]))
+    }
+    w.put(lc[256], I64(litLens[256]))
+}
+
+# hash chains over the input: head[h] the latest position whose three bytes hash to h, prev[p] the one before p
+type Matcher struct(src Array<U8>&) {
+    src
+    head := Array<I32>(1 << hashBits, -1)
+    prev Array<I32>
+    chain I64 = 0 # chain links followed at most
+    nice I64 = 0  # a match this long is taken at once
+}
+
+fn (m Matcher&) hash(i I64) I64 {
+    return ((I64(m.src[i]) << 10) ^ (I64(m.src[i + 1]) << 5) ^ I64(m.src[i + 2])) & ((1 << hashBits) - 1)
+}
+
+fn (m mut Matcher&) insert(i I64) {
+    if i + 2 >= m.src.Len(): return
+    h := m.hash(i)
+    m.prev[i] = m.head[h]
+    m.head[h] = I32(i)
+}
+
+# the longest match for the bytes at i among the earlier positions: length << 16 | distance, or 0 for none
+fn (m Matcher&) find(i I64) I64 {
+    n := m.src.Len()
+    maxLen := 258 if n - i > 258 else n - i
+    if maxLen < 3: return 0
+    cand := I64(m.head[m.hash(i)])
+    bestLen I64 = 2
+    bestDist I64 = 0
+    left := m.chain
+    for cand >= 0 and cand >= i - 32768 and left > 0 {
+        if m.src[cand + bestLen] == m.src[i + bestLen] {
+            l I64 = 0
+            for l < maxLen and m.src[cand + l] == m.src[i + l]: l++
+            if l > bestLen {
+                bestLen = l
+                bestDist = i - cand
+                if l >= m.nice or l == maxLen: break
+            }
+        }
+        cand = I64(m.prev[cand])
+        left--
+    }
+    if bestDist == 0 or (bestLen == 3 and bestDist > 4096): return 0
+    return (bestLen << 16) | bestDist
+}
+
+chainOf Array<I64> = Array<I64>[0, 4, 8, 16, 32, 64, 128, 256, 512, 1024]
+niceOf Array<I64> = Array<I64>[0, 16, 16, 32, 32, 64, 128, 128, 258, 258]
+lazyOf Array<I64> = Array<I64>[0, 0, 0, 0, 8, 16, 16, 32, 128, 258]
+
+# raw DEFLATE of data; level 0 stores it, 1..9 trade time for size (6 is the usual)
+fn Deflate(data Array<U8>&, level I64 = 6) Array<U8> {
+    w := Writer()
+    n := data.Len()
+    if level <= 0 {
+        storedBlocks(w, data, 0, n, true)
+        w.align()
+        return w.out.ToArray()
+    }
+    lv := 9 if level > 9 else level
+    m := Matcher(data)
+    m.prev = Array<I32>(n)
+    m.chain = chainOf[lv]
+    m.nice = niceOf[lv]
+    lazy := lazyOf[lv]
+    tokens := Vec<U32>()
+    blockFrom I64 = 0
+    i I64 = 0
+    ahead := false # the match for position i is already looked up, in cur
+    cur I64 = 0
+    for i < n {
+        if not ahead: cur = m.find(i)
+        ahead = false
+        m.insert(i)
+        len := cur >> 16
+        if len >= 3 and len < lazy and i + 1 < n {
+            nx := m.find(i + 1)
+            if (nx >> 16) > len {
+                tokens.Push(U32(data[i]))
+                i++
+                cur = nx
+                ahead = true
+                continue
+            }
+        }
+        if len >= 3 {
+            tokens.Push(matchFlag | (U32(len - 3) << 16) | U32((cur & 0xFFFF) - 1))
+            for j in range i + 1, i + len: m.insert(j)
+            i += len
+        } else {
+            tokens.Push(U32(data[i]))
+            i++
+        }
+        if tokens.Len() >= blockSymbols and i < n {
+            flushBlock(w, tokens.ToArray(), data, blockFrom, i, false)
+            tokens = Vec<U32>()
+            blockFrom = i
+        }
+    }
+    flushBlock(w, tokens.ToArray(), data, blockFrom, n, true)
+    w.align()
+    return w.out.ToArray()
+}
+
+# ---- the containers ----
+
+# the Adler-32 checksum of RFC 1950
+fn Adler32(data Array<U8>&) U32 {
+    a U32 = 1
+    b U32 = 0
+    p I64 = 0
+    n := data.Len()
+    for p < n {
+        e := p + 5552 # the most bytes whose sums cannot overflow before the reduction
+        if e > n: e = n
+        for q in range p, e {
+            a += U32(data[q])
+            b += a
+        }
+        a = a % 65521
+        b = b % 65521
+        p = e
+    }
+    return (b << 16) | a
+}
+
+fn put32le(v mut Vec<U8>&, x U32) { for i in range 4: v.Push(U8((x >> U32(8 * i)) & 255)) }
+
+# the zlib stream (RFC 1950) of data
+fn Zlib(data Array<U8>&, level I64 = 6) Array<U8> {
+    out := Vec<U8>()
+    out.Push(0x78)
+    out.Push(0x01 if level <= 1 else 0x5E if level <= 5 else 0x9C if level == 6 else 0xDA)
+    out.PushAll(Deflate(data, level))
+    a := Adler32(data)
+    for i in range 4: out.Push(U8((a >> U32(24 - 8 * i)) & 255))
+    return out.ToArray()
+}
+
+# the bytes of a zlib stream: header (no preset dictionary), DEFLATE data, Adler-32 checked
+fn Unzlib(data Array<U8>&) Array<U8> ? Error {
+    if data.Len() < 2: error Error.Truncated
+    cmf := I64(data[0])
+    flg := I64(data[1])
+    if (cmf & 15) != 8 or (cmf >> 4) > 7 or ((cmf << 8) | flg) % 31 != 0: error Error.BadHeader
+    if (flg & 0x20) != 0: error Error.Unsupported
+    h := Inflater(data)
+    h.out = Array<U8>(65536)
+    h.pos = 2
+    try h.Stream()
+    p := h.pos
+    if p + 4 > data.Len(): error Error.Truncated
+    want := (U32(data[p]) << 24) | (U32(data[p + 1]) << 16) | (U32(data[p + 2]) << 8) | U32(data[p + 3])
+    r := finish(h)
+    if Adler32(r) != want: error Error.BadChecksum
+    return r
+}
+
+# the gzip file (RFC 1952) of data: one member, no name, no time, operating system unknown
+fn Gzip(data Array<U8>&, level I64 = 6) Array<U8> {
+    out := Vec<U8>()
+    out.PushAll(Array<U8>[0x1F, 0x8B, 8, 0, 0, 0, 0, 0, 2 if level >= 9 else 4 if level == 1 else 0, 255])
+    out.PushAll(Deflate(data, level))
+    put32le(out, crc32.Checksum(data))
+    put32le(out, U32(data.Len() & 0xFFFFFFFF))
+    return out.ToArray()
+}
+
+if TestBuild {
+    import "std/hex"
+
+    Fox String = "The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. The quick brown fox jumps over the lazy dog. Pack my box with five dozen liquor jugs! Pack my box with five dozen liquor jugs! Pack my box with five dozen liquor jugs! "
+
+    # n pseudo-random bytes (a linear congruential generator's high bits)
+    fn noise(n I64) Array<U8> {
+        r := Array<U8>(n)
+        x U64 = 12345
+        for i in range n {
+            x = x * 6364136223846793005 + 1442695040888963407
+            r[i] = U8(x >> 56)
+        }
+        return r
+    }
+
+    # text-like bytes: words drawn from a small vocabulary
+    fn words(n I64) Array<U8> {
+        vocab := Array<String>["alpha ", "beta ", "gamma ", "delta ", "epsilon ", "zeta\n", "eta ", "theta ", "iota ", "kappa "]
+        v := Vec<U8>()
+        x U64 = 99
+        for v.Len() < n {
+            x = x * 6364136223846793005 + 1442695040888963407
+            v.PushAll(vocab[I64(x >> 60) % 10])
+        }
+        return v.ToArray()
+    }
+
+    fn samples() Array<Array<U8>> {
+        runs := Vec<U8>()
+        for _ in range 100000: runs.Push(97)
+        for _ in range 3000: runs.PushAll("xyz")
+        return Array<Array<U8>>[Array<U8>(0), Array<U8>[7], Fox.Bytes(), noise(5000), words(20000), runs.ToArray(), words(150000), noise(70000)]
+    }
+
+    test "round trips at every level" {
+        for d in samples() {
+            for level in range 10 {
+                assert Inflate(Deflate(d, level))! == d
+            }
+        }
+    }
+
+    test "round trips through zlib and gzip" {
+        for d in samples() {
+            assert Unzlib(Zlib(d))! == d
+            assert Gunzip(Gzip(d, level = 9))! == d
+            assert Gunzip(Gzip(d, level = 1))! == d
+        }
+    }
+
+    test "levels order the sizes, and compressible data gets small" {
+        w := words(100000)
+        a := Deflate(w, 1).Len()
+        b := Deflate(w, 6).Len()
+        c := Deflate(w, 9).Len()
+        assert b <= a and c <= b + b / 50
+        assert b < 100000 / 3
+        assert Deflate(w, 0).Len() > 100000
+        assert Deflate(noise(70000)).Len() <= 70000 + 20
+        assert Deflate(Fox.Bytes()).Len() < 100
+    }
+
+    test "stored and empty streams" {
+        assert Deflate(Array<U8>(0), 0) == Array<U8>[1, 0, 0, 0xFF, 0xFF]
+        assert Deflate(Array<U8>(0)) == Array<U8>[3, 0]
+        assert Deflate("abc", 0) == Array<U8>[1, 3, 0, 0xFC, 0xFF, 97, 98, 99]
+        assert Inflate(Deflate(noise(200000), 0))! == noise(200000)
+    }
+
+    test "zlib's and gzip's own output (made by Python) is read" {
+        z6 := hex.Decode("789cddcbc10140301005d156be06d4e2a00161c59264094948f5b60917e779d32f8423f1b8c1442901b3dc5893df4f48a6884bb31bea83496c8bfeefb81bd4f9074651e16bc1cc9934550a707c2489fadab3f900bec1dd8ce9")!
+        z1 := hex.Decode("7801ddd0c10140301044d15646036a71d080b06249b28424a47a5b8493f3fccbbc7e211c89c70d264a0998e5c69afc7e4232455c3abba13e98c4b6e8ff1e778342f80746150a5f0b66cea4df2b05383e9244c5b16783efc317c1dd8ce9")!
+        raw := hex.Decode("ddcbc10140301005d156be06d4e2a00161c59264094948f5b60917e779d32f8423f1b8c1442901b3dc5893df4f48a6884bb31bea83496c8bfeefb81bd4f9074651e16bc1cc9934550a707c2489fadab3f900be")!
+        gz := hex.Decode("1f8b08000000000002ffddcbc10140301005d156be06d4e2a00161c59264094948f5b60917e779d32f8423f1b8c1442901b3dc5893df4f48a6884bb31bea83496c8bfeefb81bd4f9074651e16bc1cc9934550a707c2489fadab3f900be6265daf889010000")!
+        assert Unzlib(z6)! == Fox.Bytes() and Unzlib(z1)! == Fox.Bytes()
+        assert Inflate(raw)! == Fox.Bytes() and Gunzip(gz)! == Fox.Bytes()
+        assert String(Inflate(hex.Decode("cb48cdc9c90700")!)!) == "hello"
+        assert Unzlib(hex.Decode("7801010300fcff616263024d0127")!)! == "abc".Bytes()
+    }
+
+    test "Adler-32" {
+        assert Adler32("Wikipedia") == 0x11E60398 and Adler32("") == 1
+        assert Adler32(noise(100000)) == Adler32(noise(100000))
+        assert Zlib("")[Zlib("").Len() - 4:] == Array<U8>[0, 0, 0, 1]
+    }
+
+    test "malformed streams fail with their error" {
+        z := Zlib(Fox.Bytes())
+        ok := false
+        try Unzlib(z[:z.Len() - 6]) catch Error.Truncated { ok = true }
+        assert ok
+        bad := z
+        bad[bad.Len() - 1] = bad[bad.Len() - 1] ^ 1
+        ok = false
+        try Unzlib(bad) catch Error.BadChecksum { ok = true }
+        assert ok
+        for h in Array<Array<U8>>[Array<U8>[0x78, 0x9D], Array<U8>[0x79, 0x9C], Array<U8>[0x88, 0x1C]] {
+            ok = false
+            try Unzlib(h) catch Error.BadHeader { ok = true }
+            assert ok
+        }
+        ok = false
+        try Unzlib(Array<U8>[0x78, 0xBB, 1, 2, 3, 4, 5, 6]) catch Error.Unsupported { ok = true }
+        assert ok
+        ok = false
+        try Inflate(Array<U8>[7, 0, 0]) catch Error.Corrupt { ok = true } # block type 3
+        assert ok
+        ok = false
+        try Inflate(Array<U8>[1, 3, 0, 0, 0, 97, 98, 99]) catch Error.Corrupt { ok = true } # LEN and NLEN disagree
+        assert ok
+        ok = false
+        try Inflate(Array<U8>[3]) catch Error.Truncated { ok = true } # a fixed block with no end
+        assert ok
+        ok = false
+        try Inflate(Array<U8>[3, 2, 0]) catch Error.Corrupt { ok = true } # a match reaching before the start
+        assert ok
+        g := Gzip("abc")
+        ok = false
+        try Gunzip(g[:g.Len() - 5]) catch Error { ok = true }
+        assert ok
+    }
+}
