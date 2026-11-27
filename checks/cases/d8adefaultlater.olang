@@ -1,0 +1,4 @@
+# check: fail error[M22]: unknown name 'later'
+# D8a: a default reads only the parameters before it - a later one has no value yet where the default is computed
+fn f(n I64, m I64 = later, later I64 = 1) I64 { return n + m + later }
+test "never runs" { assert f(1) == 3 }

@@ -1,0 +1,67 @@
+# D8a: a parameter's default may read the parameters before it - the receiver among them - each the argument the call
+# gives it, evaluated once, before the default
+
+calls mut I64 = 0
+
+fn next() I64 {
+    calls += 1
+    return calls * 10
+}
+
+fn label(n I64, m I64 = n + 1, s String = $n + "/" + $m) String { return s }
+
+fn (v Vec<I64>&) last(i I64 = v.Len() - 1) I64 { return v[i] }
+
+fn total(xs Array<I64>&, n I64 = xs.Len()) I64 {
+    t I64 = 0
+    for i in range n: t += xs[i]
+    return t
+}
+
+fn same<T>(a T, b T = a) T { return b }
+
+fn shout(s String&, t String = s + "!") String { return t }
+
+fn tied(qwen3 Bool, seed U64, tie Bool = qwen3) Bool { return tie }
+
+type span struct(From I64, To I64 = From * 2) {
+    From
+    To
+}
+
+test "a default reads the parameters before it" {
+    assert label(1) == "1/2"
+    assert label(1, 5) == "1/5"
+    assert label(1, default, "x") == "x"
+    assert tied(true, 3) and not tied(false, 3)
+    assert tied(true, 3, false) == false
+    assert same(4) == 4
+    assert shout("hi") == "hi!"
+    assert shout("a" + "b") == "ab!"
+}
+
+test "an argument a default reads is evaluated once, in order" {
+    calls = 0
+    assert label(next()) == "10/11"
+    assert label(next(), next()) == "20/30"
+    assert calls == 3
+}
+
+test "a receiver and a reference parameter read by a default" {
+    v := Vec<I64>()
+    v.Push(3)
+    v.Push(7)
+    assert v.last() == 7
+    assert v.last(0) == 3
+    assert total([1, 2, 3]) == 6
+    assert total([1, 2, 3], 2) == 3
+}
+
+test "a constructor's default reads the parameters before it" {
+    s := span(3)
+    assert s.To == 6
+    assert span(3, 1).To == 1
+}
+
+# the compile-time evaluator agrees (S18c: decided while compiling)
+assert label(1) == "1/2" and shout("a") == "a!" and span(2).To == 4

@@ -44319,3 +44319,28 @@ Left: a reference held in a field, a payload, an `any` and a capture still give 
 too). Pinning them needs the stores of a *reference* to such an instance to ask the referent's binding to be exactly its
 own scope, which a relaxed local instance's is not; nothing measured needs it (the self-build's ten are built once).
 builtref's option (a) is separate and left alone.
+
+## 2026-11-27: a default reads the parameters before it; every default checked where it is written (D8a; mine)
+
+Found by the oann fine-tuning work: `fn Tiny(qwen3 Bool, seed U64, tied Bool = qwen3)` was M22, "unknown name
+'qwen3'", and a module importing llm/model built and passed with that error in it - only `olang test llm/model.olang`
+showed it.
+
+The second was a checking gap, not an import one: a default that is no literal was checked only at a call that left
+it off (defaultArg, in the caller's body). A module whose calls all gave that argument - the importer's, or the
+module's own - never checked it. Now checkFn and the constructor's check run every default of a function or
+constructor no instance's arguments bind, in a frame of their own on the body being checked, the parameters before it
+bound to the body's own; what it builds is dropped (each call builds its own). A generic's, or an instance's method's,
+is still checked per call: its type is the instance's (G16, G18, G29).
+
+The first is a capability olang lacked (the user's rule: what olang cannot say, olang is extended to say). A default
+reading the parameters before it is still a value with no behaviour - it reads what the call gives, as a written
+argument would - so D8a's reasons (no mutable global, no extern, nothing with a destructor) hold unchanged; it is
+just no longer always one value. The resolver declares each parameter before the next one's default (it read every
+default before any parameter). At a call, bindEarlier finds which earlier parameters the default names (a word
+match on its text - a stray match only holds one argument more than needed), holds every argument given so far in a
+hidden local, in order - each evaluated once, before the default, as written order would - and binds the names in the
+default's frame to those locals (defaultArg, ctorDefault). Kotlin and Scala allow the same; C++ and Python do not
+(C++ forbids it, Python evaluates defaults once at definition). Left: a trait method's default called through an
+`any` (T32b) reads no parameter (the dispatch path binds none; nothing needs it), nor does a function type's (T21d:
+checked where the type is written, no call there).

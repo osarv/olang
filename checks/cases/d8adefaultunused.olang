@@ -1,0 +1,5 @@
+# check: fail error[E12]: expected I64, found String
+# D8a: a default is checked where it is written, whether or not a call leaves it off - one no call uses (here, nor in a
+# module importing this one) is still an error
+fn f(n I64, m I64 = $n) I64 { return n + m }
+test "never runs" { assert f(1, 2) == 3 }
