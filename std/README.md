@@ -36,6 +36,7 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `zmtp.olang` | ZeroMQ's wire protocol (ZMTP 3.0, NULL mechanism) over TCP, no libzmq: a `Socket` per connection (`Accept`, `Dial`, `Send`, `Recv`) - what the Jupyter kernel speaks (B23) |
 | `http.olang` | requests by running `curl` |
 | `http1.olang` | HTTP/1.1 over `std/net`, no curl: `Request`/`Response` with header fields (`Header`, `Set`, case-insensitive), `Parse`/`ParseHead`/`Format` with head and body limits, `Dechunk`/`Chunked`; a client (`Response.Get`, `Post`, `Send`; redirects, `Connection: close`, http only - https is `std/https`); `Serve(listener, handler)`, a task per connection; `http1.Error` |
+| `https.olang` | `std/http1`'s client over http and https (TLS by `std/tls`, so it links libssl): `https.Get`, `Post`, `Send`, redirects across both schemes, `ca` for a PEM bundle |
 | `url.olang` | URLs (RFC 3986): `Url.Parse` into scheme, user info, host (IPv6 unbracketed), port, path, query, fragment and `$u` back; `PortNumber` (the scheme's default), `Target`; `EscapePath`/`EscapeQuery`, `Unescape`/`UnescapeQuery`; `ParseQuery`/`EncodeQuery` (form encoding) and `Lookup`; `u.Resolve(ref)` (5.2); `url.Error` |
 | `chan.olang`, `cancel.olang` | bounded blocking channel, `Select` over two to four channels, sends (`SendOf`) and timers, cancellation tokens and deadlines |
 | `sync.olang` | `Mutex<T>` (reached only inside `With`), `RWLock<T>`, `Once` - no `Mutex<I64>`: a number is guarded by its atomic methods (`x.AtomicAdd(1)`), or kept in a struct a `Mutex` holds |

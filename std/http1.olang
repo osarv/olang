@@ -606,8 +606,10 @@ fn Redirected(r Response&, at url.Url&, req mut Request&) url.Url ? Error.Head, 
     return next
 }
 
-# one request over a new TCP connection to u, each read and write waiting at most timeout
-fn Response.sendPlain(u url.Url&, req Request&, timeout time.Duration, maxBody I64) Response ? Error, url.Error, net.Error {
+# one request, req, over a new TCP connection to the http URL u - no redirect followed - each read and write waiting
+# at most timeout
+fn Response.Once(u url.Url&, req Request&, timeout time.Duration, maxBody I64 = MaxBody) Response ? Error, url.Error, net.Error {
+    if u.Scheme != "http": error Error.Scheme(u.Scheme)
     p := plain(try net.Conn.Dial(try net.Addr.Resolve(try Dialed(u))))
     p.conn.SetTimeout(timeout)
     return try Response.Exchange(p, req, maxBody = maxBody)
@@ -620,8 +622,7 @@ fn Response.Send(method String&, target String&, headers Array<Header>&, body Ar
     u := try url.Url.Parse(target)
     req := Request.To(method, u, headers, body)
     for _ in range redirects + 1 {
-        if u.Scheme != "http": error Error.Scheme(u.Scheme)
-        r := try Response.sendPlain(u, req, timeout, maxBody)
+        r := try Response.Once(u, req, timeout, maxBody)
         if not Redirects(r.Status): return r
         u = try Redirected(r, u, req)
     }

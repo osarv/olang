@@ -1,0 +1,109 @@
+# https - HTTP/1.1 requests over http and https alike: std/http1's client with TLS (std/tls) for https URLs. Kept apart
+# from http1 because importing std/tls links libssl and libcrypto (Schannel on Windows) into the program; a program
+# importing this module pays that, one importing http1 alone does not.
+#
+#     r := try https.Get("https://example.com/data.json")
+#     if r.Status == 200: doc := try json.Parse(r.Body)
+#     r2 := try https.Post(u, "application/json", body, headers = Array<http1.Header>[http1.Header("Authorization", k)])
+#     r3 := try https.Send("DELETE", u, Array<http1.Header>(0), Array<U8>(0), timeout = time.Duration.Seconds(5))
+#
+# The requests are http1's (Request.To: Host, "Connection: close", one request per connection), its Response is the
+# answer, and redirects are followed between the two schemes as http1.Redirected says. The server's certificate is
+# verified as tls.Conn.Dial verifies it - against the system's trusted ones, or the PEM bundle "ca" names; a
+# certificate refused fails with tls.Error.Verify, never silently accepted.
+#
+# Imported with `import "std/https"`.
+
+import "http1"
+import "net"
+import "time"
+import "tls"
+import "url"
+
+# a TLS connection whose Read and Write fail with http1's Error, as http1.Response.Exchange takes
+type secure unique struct(conn tls.Conn) {
+    conn
+}
+
+fn mapTls(e tls.Error) ? http1.Error {
+    match e {
+        case tls.Error.Closed { error http1.Error.Closed }
+        case tls.Error.Timeout { error http1.Error.Timeout }
+        case _ { error http1.Error.Transport($e) }
+    }
+}
+
+fn (s mut secure&) Read(buf mut Array<U8>&) Array<U8>& ? http1.Error {
+    return try s.conn.Read(buf) catch tls.Error e {
+        try mapTls(e)
+        unreachable
+    }
+}
+
+fn (s mut secure&) Write(data Array<U8>&) ? http1.Error {
+    try s.conn.Write(data) catch tls.Error e { try mapTls(e) }
+}
+
+# one request, req, to u - over TLS for https, as http1 makes it for http - no redirect followed
+fn Once(u url.Url&, req http1.Request&, timeout time.Duration, maxBody I64, ca String&) http1.Response ? http1.Error, url.Error, net.Error, tls.Error {
+    if u.Scheme == "http": return try http1.Response.Once(u, req, timeout, maxBody)
+    if u.Scheme != "https": error http1.Error.Scheme(u.Scheme)
+    s := secure(try tls.Conn.Dial(u.Host, try u.PortNumber(), ca = ca))
+    s.conn.SetTimeout(timeout)
+    return try http1.Response.Exchange(s, req, maxBody = maxBody)
+}
+
+# the response to a request of "method" to the http or https URL "target", with the fields and body given; redirects
+# followed up to "redirects" times (http1.Error.Redirects past it), each read and write waiting at most "timeout"; the
+# server's certificate checked against the system's trusted ones, or the PEM file "ca" where one is named
+fn Send(method String&, target String&, headers Array<http1.Header>&, body Array<U8>&, timeout time.Duration = time.Duration.Seconds(30), redirects I64 = 10, maxBody I64 = http1.MaxBody, ca String& = "") http1.Response ? http1.Error, url.Error, net.Error, tls.Error {
+    u := try url.Url.Parse(target)
+    req := http1.Request.To(method, u, headers, body)
+    for _ in range redirects + 1 {
+        r := try Once(u, req, timeout, maxBody, ca)
+        if not http1.Redirects(r.Status): return r
+        u = try http1.Redirected(r, u, req)
+    }
+    error http1.Error.Redirects
+}
+
+# the response to a GET of url, with the fields given
+fn Get(target String&, headers Array<http1.Header>& = Array<http1.Header>(0), timeout time.Duration = time.Duration.Seconds(30), ca String& = "") http1.Response ? http1.Error, url.Error, net.Error, tls.Error {
+    return try Send("GET", target, headers, Array<U8>(0), timeout = timeout, ca = ca)
+}
+
+# the response to a POST of body to url as contentType, with the fields given
+fn Post(target String&, contentType String&, body Array<U8>&, headers Array<http1.Header>& = Array<http1.Header>(0), timeout time.Duration = time.Duration.Seconds(30), ca String& = "") http1.Response ? http1.Error, url.Error, net.Error, tls.Error {
+    all := Vec<http1.Header>()
+    all.Push(http1.Header("Content-Type", String(contentType)))
+    for h in headers: all.Push(h)
+    return try Send("POST", target, all.ToArray(), body, timeout = timeout, ca = ca)
+}
+
+# ---- the tests ----
+
+if TestBuild {
+
+fn echo(r http1.Request&) http1.Response { return http1.Response.Of(200, r.Method + " " + r.Target + " " + r.Body) }
+
+test "plain http goes through http1, https dials TLS, other schemes are refused" {
+    l := net.Listener.Listen(net.Addr(net.IP.Loopback4(), 0))!
+    port := l.Addr()!.Port
+    join {
+        spawn http1.Serve(l, echo, timeout = time.Duration.Seconds(5), connections = 2)!
+        g := Get("http://127.0.0.1:" + $port + "/a?b=1")!
+        assert g.Status == 200 and g.Body == "GET /a?b=1 "
+        p := Post("http://127.0.0.1:" + $port + "/p", "text/plain", "x".Bytes())!
+        assert p.Body == "POST /p x"
+    }
+    try Get("ftp://127.0.0.1/") catch http1.Error.Scheme e { assert e.scheme == "ftp" } catch { unreachable }
+    # nothing listens on a port a closed listener had: the TLS dial is refused by TCP, before any handshake
+    gone := net.Addr(net.IP.Loopback4(), 0)
+    {
+        k := net.Listener.Listen(gone)!
+        gone = k.Addr()!
+    }
+    try Get("https://127.0.0.1:" + $gone.Port + "/") catch net.Error.Refused { } catch { unreachable }
+}
+
+}
