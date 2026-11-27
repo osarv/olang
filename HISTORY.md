@@ -44344,3 +44344,5 @@ default's frame to those locals (defaultArg, ctorDefault). Kotlin and Scala allo
 (C++ forbids it, Python evaluates defaults once at definition). Left: a trait method's default called through an
 `any` (T32b) reads no parameter (the dispatch path binds none; nothing needs it), nor does a function type's (T21d:
 checked where the type is written, no call there).
+Checking every default where it is written found two latent errors: checks' c2dcondfield and c2dmatchfield declared a
+constructor default `data Array<F64>& = null` (T2c: a reference never null) that no call used; the default is dropped.
