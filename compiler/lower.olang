@@ -632,6 +632,10 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     # the statement ends - or handed back as it is by a return (a view of this body's arguments): a call of a function
     # handing back views copies its result at every other site
     reads Map<I64, Bool>
+    # ... and of those, the ones a return hands back as they are (retView): never copied here, whether or not the
+    # statement is quiet - check recorded the body as handing back a view (ViewResults), so its callers pass the viewed
+    # argument's scope for the result and copy it where they keep it; a copy here would be built in that scope
+    retReads Map<I64, Bool>
     # O15 (QCZ): which of a block's by-value holders hold which - typed.DropHolds of B, made where a level's drops are
     # first ordered or a holder's guard registered
     holding typed.DropHolding = typed.DropHolding()
@@ -6552,7 +6556,8 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
     if ln.viewCall(c, ty) {
         if ln.L.ViewDump { ln.L.ViewLog.Push($ln.L.P.L.Diags.Locate(ln.file, I64(sp.Start)) + ": " + $("read" if ln.reads.Has(I64(c.Site)) else "kept") + $(" stable" if ln.stableViews(c) else "")) }
         # (E31d: a value whose copy runs a declared Copy is copied whatever reads it)
-        inPlace := not t.RunsCopy(ty) and (ln.vlSites.Has(I64(c.Site)) or (ln.reads.Has(I64(c.Site)) and ln.stableViews(c)))
+        # (a return's view, handed back as it is: nothing runs after the call before the return takes it - retView)
+        inPlace := not t.RunsCopy(ty) and (ln.vlSites.Has(I64(c.Site)) or ln.retReads.Has(I64(c.Site)) or (ln.reads.Has(I64(c.Site)) and ln.stableViews(c)))
         # (O8f, 2.4: an owner local's copy of the existing text it is assigned, made in copyStore's region)
         if ln.copySite >= 0 and I64(c.Site) == ln.copySite {
             ln.copySite = -1
@@ -6736,7 +6741,11 @@ fn (ln mut lowering&) retView(x typed.Expr&) Bool {
 fn (ln mut lowering&) markViews(w typed.ViewWalk&, x typed.Expr?&) {
     if x is null: return
     match x {
-        case typed.Expr.Call(_, _, c) { if w.CallRoots(c) > 0: ln.reads.Put(I64(c.Site), true) }
+        case typed.Expr.Call(_, _, c) {
+            if w.CallRoots(c) <= 0: return
+            ln.reads.Put(I64(c.Site), true)
+            ln.retReads.Put(I64(c.Site), true)
+        }
         case typed.Expr.Cond(_, _, k) {
             ln.markViews(w, k.A)
             ln.markViews(w, k.B)

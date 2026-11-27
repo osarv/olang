@@ -793,6 +793,13 @@ fn freeing(r mut report&) ? Failed {
     try r.expect(sh(dir, "(ulimit -v 8192 && ./build/slotcopy) > out.txt 2>&1") == 0 and outOf(dir) == "233993 7.5 0\n", "slotcopy under 8 MB", dir)
     try late(r, dir, "slotcopy", "200", "1199 1.5 0\n")
     try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 slotcopy.olang > out.txt 2>&1") == 0 and outOf(dir) == "1199 1.5 0\n", "slotcopy interpreted", dir)
+    # (viewreturns, D9h: a function handing back a view - `return v.At(i)`, IndexIter's Next under `for o in v.Iter()` -
+    # reads it where it stands in a program that may write a global, never copying it into the viewed Vec's region: flat
+    # under 8 MB; built, -free late, -sanitize and the evaluator agree)
+    try r.expect(sh(dir, "\"$OLANG\" build viewreturns.olang > out.txt 2>&1") == 0, "viewreturns build", dir)
+    try r.expect(sh(dir, "(ulimit -v 8192 && ./build/viewreturns) > out.txt 2>&1") == 0 and outOf(dir) == "311600000 20000\n", "viewreturns under 8 MB", dir)
+    try late(r, dir, "viewreturns", "200", "3116000 200\n")
+    try r.expect(sh(dir, "env OLANG_EVALUATE=1 \"$OLANG\" -define N=200 viewreturns.olang > out.txt 2>&1") == 0 and outOf(dir) == "3116000 200\n", "viewreturns interpreted", dir)
     # (globalview, D9h: `d := f.data` in a method reads a mutable global receiver's 8 MB array in place, no copy a
     # call - under 14 MB; the evaluator agrees)
     try r.expect(sh(dir, "\"$OLANG\" build globalview.olang > out.txt 2>&1") == 0, "globalview build", dir)

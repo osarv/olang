@@ -1,0 +1,44 @@
+import "std/io"
+
+# D9h: a function handing back a view of what it is given - `return v.At(i)`, IndexIter's Next under `for o in
+# v.Iter()` - where its return's statement is not quiet (the program may write a global) is read where it stands, never
+# copied into its result scope: its callers pass the viewed argument's scope for the result, so a copy there was built
+# in the Vec's own region and kept until it closed (each pass over the Vec grew by a copy of every element's text).
+# Flat under 8 MB over N passes each way
+N I64 = 20000
+
+type Obs struct(name String, tag String, v I64) {
+    name
+    tag
+    v
+}
+
+calls mut I64 = 0
+
+fn nth(v Vec<Obs>&, i I64) Obs { return v.At(i) }
+
+fn viaIter(v Vec<Obs>&) I64 {
+    n I64 = 0
+    for o in v.Iter(): n += o.v + o.name.Len()
+    return n
+}
+
+fn viaCall(v Vec<Obs>&) I64 {
+    n I64 = 0
+    for i in range v.Len() {
+        o := nth(v, i)
+        n += o.v + o.tag.Len()
+    }
+    return n
+}
+
+fn main() ? io.Error {
+    v := Vec<Obs>()
+    for i in range I64(100): v.Push(Obs($"name number " + $i + " padded out to some length", $"tag " + $i + " padded out", i))
+    t I64 = 0
+    for _ in range N {
+        t += viaIter(v) + viaCall(v)
+        calls++
+    }
+    try io.Put($t + " " + $calls + "\n")
+}
