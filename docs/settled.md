@@ -343,6 +343,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   destructor to run hands back none (`typed.NothingAfter`, check's settleViews), and a local handed back holding views
   (a constructor's field too) views only by-value parameters holding no reference that the body never writes
   (`typed.StillParams`, Settle's mask, the same for check and lowering); d9hstillret (wt-joinreach).
+  A return's view call is handed back as it is whether or not its statement is quiet (lower.retReads): its callers pass
+  the viewed argument's scope for the result, so a copy made there lived in the Vec's own region (2026-11-27,
+  checks' viewreturns: `for o in v.Iter()` over structs of text grew v's region every pass).
 - **Permission is part of a reference's type (T25b/T25c, the user's design; kept 2026-10-31: "knowing whether or not a
   function you pass things into mutates what you passed is valuable", and "globals shouldn't be mut unless you say
   so").** `mut T&` writable, `T&` read-only, at every level, shallow. Locals and parameters are always assignable

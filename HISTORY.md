@@ -44384,3 +44384,18 @@ the error listed the modes without pointing at the one meant. A second spelling 
 thing, B1's words). Instead the refusal names the mode a word misspells (msgs.Nearest, as options already did) or
 shortens - its first letter, then its letters in order (`Nearest.OfferShortened`): `fmt` -> format, `comp` -> compile,
 `tst` -> test; `lsp`, `bogus`, `nope` still get none. compiler/olang.olang's B1 test pins three.
+
+## 2026-11-27: a return's view is handed back as it is (D9h; mine)
+
+The OAgent Pi core ran out of memory: `for o in v.Iter()` over a Vec of structs holding text grew by a copy of every
+element per pass, inside a function taking v by reference, while `for o in v` and an index loop stayed flat. The same
+held for any function handing back a view, `fn nth(v Vec<Obs>&, i I64) Obs { return v.At(i) }` called in a loop.
+check recorded such a body as handing back a view of its parameter (load.ViewResults, typed.ViewWalk.Roots), so its
+callers read the result as a view and passed the viewed argument's scope for the result scope - v's. But lowering the
+body read the return's view call in place only where its statement was quiet (stableViews); in a program that may write
+a global it is not, so the body copied At's value into its result scope: v's region, kept until v's scope closed.
+A return's view needs no window of its own - nothing runs after the call before the return takes it (NothingAfter), and
+its callers copy where they keep it - so retView now marks the calls it hands back (retReads) and they are never copied
+there, whatever the statement. Checks' viewreturns (a Next through v.Iter() and an nth, 20,000 passes over 100 elements,
+under 8 MB) ran out of memory before. A type whose Copy is declared still copies (E31d), in its callee too.
+
