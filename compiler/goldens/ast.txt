@@ -2750,7 +2750,10 @@ b93a943edf2e8c97 381931e954cbfbd5 std/hex.olang
 f8db35951918e773 8587a7e81150a452 std/http.olang
 6fa82854d1e25d4a 1cebfc70dc922605 std/http1.olang
 cd8058b8f5c98fbf d609d8a88c7243d7 std/https.olang
+8e1176684117f6e2 b172ee7a1c641cbb std/image.olang
+f51e8cda1aaea954 19612834b43cfeba std/imgdecode.olang
 b43238e3aa861233 d83f07ee1182e0ca std/io.olang
+cbc547361227202a de61763046966f09 std/jpeg.olang
 e23a590c28d782c1 dde88c3ea060ce90 std/json.olang
 221b8519dc86705d 75a97cd9f2afbb71 std/list.olang
 ee18b8590fcbd721 304e22985505a975 std/net.olang
@@ -2758,6 +2761,7 @@ e9aa94e405345e7a f136bf23c1f483ab std/order.olang
 0b523561cae41db5 977686d6256abc58 std/os.olang
 17c08f79ab55afc4 b4a22233d00c7e49 std/pair.olang
 9d995dd756c4cc2e 27472a692fbe2416 std/plot.olang
+486b1fa8f129183e 360a8597b2b775c4 std/png.olang
 3ea631f369fef41e 930ead3ce67343d4 std/pool.olang
 1a2030bf036772f0 f8380d0801ad72f6 std/prelude/argument.olang
 7b1294795730f558 a5f24a38a56d8331 std/prelude/array.olang
@@ -2867,6 +2871,8 @@ e5ae6baf96c4a74d 03a8da7fc561d72d tests/handover.olang
 258685af1bea4cb8 b5410c0661318bec tests/handoverglobal.olang
 932ba54a638b9d32 87df1e00289d750d tests/heldexact.olang
 b92b9f9009878c79 10512059a3af9d68 tests/heldfields.olang
+496840fb19a0d5fb 4037c9bf20289890 tests/imgdec_jpeg.olang
+1b52a5fb0e58e2f1 41183d7a5ce6b15b tests/imgdec_png.olang
 4a198c888b2ff8e9 37043a366ff21d11 tests/immut.olang
 47259167ff6c4bf7 2597c26849901793 tests/inplace.olang
 088eb892c113e59d 7ad2238e873d4f2e tests/intsweep.olang

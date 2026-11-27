@@ -407,6 +407,53 @@
 === test tests/heldfields.olang
 | status 0
 | ok - ByBuilder: ends a field a builder's, a fallible call's or a catch default's value made, once, wherever it is held
+=== test tests/imgdec_jpeg.olang
+| status 0
+| ok - jpeg 444b
+| ok - jpeg 444p
+| ok - jpeg 422b
+| ok - jpeg 422p
+| ok - jpeg 420b
+| ok - jpeg 420p
+| ok - jpeg grayb
+| ok - jpeg grayp
+| ok - jpeg 420rst
+| ok - jpeg 420prst
+| ok - jpeg 444opt
+| ok - jpeg 422q20
+| ok - files that are no JPEG, cut, or in a format not read
+| ok - corrupt entropy data does not crash
+=== test tests/imgdec_png.olang
+| status 0
+| ok - png c0d1
+| ok - png c0d2
+| ok - png c0d2i
+| ok - png c0d4
+| ok - png c0d8
+| ok - png c0d8i
+| ok - png c0d16
+| ok - png c2d8
+| ok - png c2d8i
+| ok - png c2d16
+| ok - png c3d1
+| ok - png c3d1i
+| ok - png c3d2
+| ok - png c3d4
+| ok - png c3d4i
+| ok - png c3d8
+| ok - png c3d8i
+| ok - png c4d8
+| ok - png c4d8i
+| ok - png c4d16
+| ok - png c4d16i
+| ok - png c6d8
+| ok - png c6d8i
+| ok - png c6d16
+| ok - png c6d16i
+| ok - damaged files are refused
+| ok - a file that is no PNG, and a cut one
+| ok - a cut file
+| ok - imgdecode picks the decoder by the first bytes
 === test tests/immut.olang
 | status 0
 | ok - an immut value is read, held and replaced whole, never changed
@@ -1769,6 +1816,12 @@
 === test std/https.olang
 | status 0
 | ok - plain http goes through http1, https dials TLS, other schemes are refused
+=== test std/image.olang
+| status 0
+| ok - the formats are told by their first bytes
+=== test std/imgdecode.olang
+| status 0
+| ok - the format decides the decoder
 === test std/io.olang
 | status 0
 | ok - Write reports a failure from the underlying syscall
@@ -1800,6 +1853,8 @@
 | ok - Reader.All: gives everything left, and the empty text at the end
 | ok - Reader.Available: gives what a read brought, keeps a split character whole, and mixes with Line
 | ok - Reader: reports a read that fails
+=== test std/jpeg.olang
+| status 0
 === test std/json.olang
 | status 0
 | ok - every kind of value, and asking for its parts
@@ -1934,6 +1989,8 @@
 | ok - data that does not fit is an error
 | ok - Save writes the SVG file
 | ok - the viewer is chosen from the system's facts
+=== test std/png.olang
+| status 0
 === test std/pool.olang
 | status 0
 | ok - Pool.Add: values are added, read and changed through handles
