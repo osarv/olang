@@ -2418,7 +2418,12 @@ variable (`alpha T = 1`) has no type to fit there: it is fitted at each call aga
 as a literal argument does (G18), and a call whose instantiation it does not fit is the error. A default may read the
 length of a by-value array parameter before it (`k I64 = a.Len() * 2`), which is a constant in each instance (G29): it
 is then each instance's, computed with that instance's length and checked where a call omits it. A `null` default refers to nothing, so it fits whatever scope a call
-binds its parameter to. At each call that omits it, a default is that call's argument as if written there: a temporary
+binds its parameter to. A default may also read the **parameters before it** (the receiver among them), and only
+those: `fn Tiny(qwen3 Bool, seed U64, tied Bool = qwen3)`. Each such name is the value the call gives that parameter -
+written, or its own default - and the call evaluates every argument before the default once, in order, before the
+default (a constructor's defaults the same, C1). Such a default is computed at each call, as its arguments are. Every
+default is checked where it is written, whether or not any call leaves it off; one of a generic or an instance's
+method is checked at each call that leaves it off (G16). At each call that omits it, a default is that call's argument as if written there: a temporary
 it builds is built where that call builds its argument (§8 O18a). Its names still mean what they mean at the
 declaration, whichever call it stands in: a name the declaration's module gives a meaning - a global, a type - is
 never one the calling code has in scope, so a caller's own local of that name is not the default's. The one thing a

@@ -961,14 +961,13 @@ fn (r mut Resolver&) sig(f ast.Func&, body Bool) {
     for p in s.Params: r.typeRef(p.Ty)
     for t in s.Results: r.typeRef(t)
     for e in s.Errors: r.path(e)
-    for p in s.Params {
-        if p.Dflt is not null: r.expr(p.Dflt)
-    }
     if f.Recv is not null and f.Recv!.Name != source.NameId(0) {
         r.param(f.Recv!, body)
         if body: r.paramStart(f.Recv!)
     }
+    # D8a: a default may read the parameters before it (and the receiver), each the argument a call gives it
     for p in s.Params {
+        if p.Dflt is not null: r.expr(p.Dflt)
         r.param(p, body)
         if body: r.paramStart(p)
     }

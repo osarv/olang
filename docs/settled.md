@@ -546,7 +546,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   whole, `Map<String&, (fn(x I64) I64, I64 ? A, B)>`. Parentheses group nothing else.
 - **Defaults and `default` (D8a/D8b/E14).** Trailing defaults, `default` in an argument slot. A default is built per
   call in its declaration's context. D8b's trailing rule is the parser's, for every parameter list (2026-11-17: it was
-  never enforced on declarations).
+  never enforced on declarations). A default may read the parameters before it, the receiver among them (2026-11-27, mine: `tie Bool =
+  qwen3`): each names what the call gives it, every argument before the default held in a hidden local first, so each is
+  evaluated once and in order; a constructor's defaults the same. Every default is checked where it is written (a
+  function or constructor no instance's arguments bind), whether or not a call leaves it off.
 - **Defaults in function types (T21d, the user's "Yes, build this", 2026-11-16, reversing "keep function types without
   defaults for now"; built 2026-11-17).** `fn&(x F32, k F32 = 1.0) F32`: a call through a value leaves them off, gives
   `default` or names them (E14b); the type's defaults fill the call while compiling, checked where the type is written

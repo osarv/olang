@@ -580,6 +580,12 @@
 | ok - Header: reflection gives each field's bits
 | ok - Pub: json writes and reads a packed struct by its fields
 | ok - Header: an array field stored whole, and its copy's lanes
+=== test tests/paramdefaults.olang
+| status 0
+| ok - a default reads the parameters before it
+| ok - an argument a default reads is evaluated once, in order
+| ok - a receiver and a reference parameter read by a default
+| ok - a constructor's default reads the parameters before it
 === test tests/place.olang
 | status 0
 | ok - Place.Here is where it is written
