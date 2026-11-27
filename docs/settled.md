@@ -337,6 +337,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   can write it; a mutable global that may be that storage makes only a call that may store into a global (its
   whole-program fact, `D9h NAME`), a destructor run or an atomic store unquiet - no longer every call (2026-11-24,
   wt-fieldborrow: an 8 MB array copied per method call when the program had a `mut` global of the type).
+  So too a conditional each of whose arms would be held alone (`src := a if c else b`, of locals or reference
+  parameters), and what a body's read-only reference result names where its arguments are held (`a.Bytes()` of a
+  reference parameter; lower.heldSrc, heldRefCall) - not copied per loop turn (2026-11-27, wt-condcopy, condviewloop).
   A value result is never handed back as a view of what a `mut` reference names (2026-11-24, wt-vecclear: `taken := a.Outs`
   then `a.Outs.Clear()` returned a view whose elements Clear had ended - typed.ViewWalk.refRoots).
   A view is handed back only where nothing changes it before the caller copies: a body with deferred code or a

@@ -44399,3 +44399,19 @@ its callers copy where they keep it - so retView now marks the calls it hands ba
 there, whatever the statement. Checks' viewreturns (a Next through v.Iter() and an nth, 20,000 passes over 100 elements,
 under 8 MB) ran out of memory before. A type whose Copy is declared still copies (E31d), in its callee too.
 
+
+## 2026-11-27: a conditional of existing storage held as a view, as each arm is (D9h; mine; wt-condcopy)
+
+A user's loop over 3.4 GB of text, `src := a.Bytes() if c else b.Bytes()`, was killed for memory. Each turn copied the
+chosen arm whole: D9h leaves out a value local's copy of existing storage nothing changes while the local lives
+(lower.viewLocals), but viewInit recognised only a place read or a MakeKind.Copy of one - a conditional (typed
+`Cond` at the top, or a read through the dereference of a `Cond` of two references) and a body's reference result
+(`Read(Deref(Call))`) were never held, so `src := a if c else b` copied where `src := a` held a view. The copy was
+the turn's, reclaimed as the turn closed (the peak grew by one copy, not per turn), which is what killed a 3.4 GB run.
+heldCopy now judges a conditional by its arms (the MakeKind.Copy sites of each left out, the let's array copy too),
+heldSrc reads through a conditional of references, and heldRefCall holds what a body's read-only reference result
+names where every argument is held as it stands and nothing in the local's block can write storage of the referent's
+type (quietLife) - section 8 keeps that storage outliving the local. No meaning changes (nothing could tell). Left: a
+text local given to `Bytes()` still counts as escaping (its reference result may name it), so `c.Bytes()` of a local
+copies; `c if x else d` of locals does not. Checks' condviewloop (40 turns over 8 MB texts, locals, reference
+parameters and `Bytes()`) grew 7.9 MB before, flat after.
