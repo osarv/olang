@@ -58,6 +58,8 @@ Expected Array<String&> = Array<String&>[
 # spinning or blocked in C until another runs beside it, which under interpret never happens (B3e). The file's other
 # tests run, named by the words test takes (B7a). A whole file named is not run (a program too slow interpreted)
 Skipped Array<String&> = Array<String&>[
+    # B3e: its one test serves on loopback under a join, and the interpreter runs the join's tasks one after another
+    "std/https.olang - its server's Accept blocks in C for a task the client's join runs only after it (B3e)"
     "checks/cases/gemmflat.olang - matrix products over ten minutes interpreted (the memory it holds flat is the build's)"
     # O8e: a million nodes churned, minutes interpreted, and the peak each asserts is the interpreting compiler's
     "checks/cases/o8earrays.olang - a million nodes churned, minutes interpreted; its peak is the compiler's under interpret"
@@ -72,6 +74,7 @@ Skipped Array<String&> = Array<String&>[
     "std/chan.olang: Ready.Select: sends through SendOf, a rendezvous handing its value to a waiting receiver - Select polls for a task (B3e)"
     "checks/cases/c6selectjoin.olang - Select polls for a task its join runs only after it (B3e)"
     "std/net.olang: a TCP connection over loopback carries bytes both ways - Accept blocks in C for a task (B3e)"
+    "std/http1.olang: the server on loopback answers the client - Accept blocks in C for a task (B3e)"
     # a million frames deep: the interpreter's frames take ~3.7 KB each, so ~4 GB, beside the suite's other processes
     "std/os.olang: RunOnStack runs a recursion deeper than a thread's own stack holds, and waits for it - a million frames, ~4 GB interpreted"
 ]
