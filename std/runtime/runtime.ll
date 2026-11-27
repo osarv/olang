@@ -6422,10 +6422,80 @@ entry:
   ret void
 }
 
+; the blocks of C[rows x cols] at c (row stride cs bytes) += A[rows x 32n] at a (row stride as) . B, B's column j in
+; pair rows bs bytes apart from b + (j >> 5) bblk + (j & 31) 4, a 32-deep step bstep bytes on: blocks of 32 x 32 hold four
+; C tiles across all n steps; a last block of 16 rows or columns goes tile by tile
+define internal void @__olang_tile_run(ptr %c, i64 %cs, i64 %rows, i64 %cols, ptr %a, i64 %as, ptr %b, i64 %bs, i64 %bblk, i64 %n, i64 %bstep) {
+entry:
+  %rows32 = and i64 %rows, -32
+  %cols32 = and i64 %cols, -32
+  br label %rowloop
+rowloop:                                   ; i over row blocks of 32, then one of 16
+  %i = phi i64 [ 0, %entry ], [ %inext, %rowdone ]
+  %more = icmp slt i64 %i, %rows
+  br i1 %more, label %rowbody, label %done
+rowbody:
+  %full = icmp slt i64 %i, %rows32
+  %mr = select i1 %full, i64 32, i64 16
+  %crow = mul i64 %i, %cs
+  %cr = getelementptr i8, ptr %c, i64 %crow
+  %arow = mul i64 %i, %as
+  %ar = getelementptr i8, ptr %a, i64 %arow
+  br label %colloop
+colloop:
+  %j = phi i64 [ 0, %rowbody ], [ %jnext, %coldone ]
+  %cmore = icmp slt i64 %j, %cols
+  br i1 %cmore, label %colbody, label %rowdone
+colbody:
+  %jb = shl i64 %j, 2
+  %cb = getelementptr i8, ptr %cr, i64 %jb
+  %jblk = lshr i64 %j, 5
+  %jboff = mul i64 %jblk, %bblk
+  %jin = and i64 %jb, 127
+  %jbo = add i64 %jboff, %jin
+  %bb = getelementptr i8, ptr %b, i64 %jbo
+  %cfull = icmp slt i64 %j, %cols32
+  %both = and i1 %full, %cfull
+  br i1 %both, label %k22, label %edge
+k22:
+  call void @__olang_tile_k22(ptr %cb, i64 %cs, ptr %ar, i64 %as, ptr %bb, i64 %bs, i64 %n, i64 %bstep)
+  br label %coldone
+edge:                                      ; a block of 16 rows or 16 columns: its 16 x 16 tiles one by one
+  call void @__olang_tile_k11(ptr %cb, i64 %cs, ptr %ar, i64 %as, ptr %bb, i64 %bs, i64 %n, i64 %bstep)
+  br i1 %full, label %edgerow, label %edgecol
+edgerow:                                   ; 32 rows, 16 columns: the lower tile
+  %c16 = shl i64 %cs, 4
+  %cb2 = getelementptr i8, ptr %cb, i64 %c16
+  %a16 = shl i64 %as, 4
+  %ar2 = getelementptr i8, ptr %ar, i64 %a16
+  call void @__olang_tile_k11(ptr %cb2, i64 %cs, ptr %ar2, i64 %as, ptr %bb, i64 %bs, i64 %n, i64 %bstep)
+  br label %coldone
+edgecol:                                   ; 16 rows: the right tile too, where 32 columns remain
+  br i1 %cfull, label %edgeright, label %coldone
+edgeright:
+  %cbr = getelementptr i8, ptr %cb, i64 64
+  %bbr = getelementptr i8, ptr %bb, i64 64
+  call void @__olang_tile_k11(ptr %cbr, i64 %cs, ptr %ar, i64 %as, ptr %bbr, i64 %bs, i64 %n, i64 %bstep)
+  br label %coldone
+coldone:
+  %cstep = select i1 %cfull, i64 32, i64 16
+  %jnext = add i64 %j, %cstep
+  br label %colloop
+rowdone:
+  %inext = add i64 %i, %mr
+  br label %rowloop
+done:
+  ret void
+}
+
 ; ARCH_REQ_XCOMP_PERM (0x1023) for XFEATURE_XTILEDATA (18) is asked once per process; the tile configuration (every
 ; tile 16 rows of 64 bytes) is loaded on each call and released after it, so nothing about the tiles outlives a call on
-; any thread. Blocks of 32 x 32 hold four C tiles across the whole depth; a last block of 16 rows or columns goes tile
-; by tile
+; any thread. A product of at least 128 rows and 128 columns goes in depth slices of 256 (C's tiles stored and loaded
+; again between them: the same sums, each element's steps still in order), each slice's B copied into blocks of 32
+; columns (pair rows of 128 bytes, a step's two tiles in 2 KB) and A into chunks of 256 rows (rows of the slice's depth),
+; so each block's operands are read from the cache near the core rather than at B's row stride, which puts each tile
+; row on its own page (4 KB at 1024 columns) and has every row block of A read all of B again; smaller products, or
+; where the scratch cannot be had, read A and B where they are
 define i32 @__olang_tile_bf16(ptr %c, i64 %cld, i64 %rows, i64 %cols, ptr %a, i64 %ald, i64 %depth, ptr %b) {
 entry:
   %cfg = alloca [64 x i8], align 64
@@ -6465,59 +6535,118 @@ setup:
   %bs = shl i64 %cols, 2
   %bstep = shl i64 %cols, 6
   %n = lshr i64 %depth, 5
-  %rows32 = and i64 %rows, -32
-  %cols32 = and i64 %cols, -32
-  br label %rowloop
-rowloop:                                   ; i over row blocks of 32, then one of 16
-  %i = phi i64 [ 0, %setup ], [ %inext, %rowdone ]
-  %more = icmp slt i64 %i, %rows
-  br i1 %more, label %rowbody, label %done
-rowbody:
-  %full = icmp slt i64 %i, %rows32
-  %mr = select i1 %full, i64 32, i64 16
-  %crow = mul i64 %i, %cs
-  %cr = getelementptr i8, ptr %c, i64 %crow
-  %arow = mul i64 %i, %as
-  %ar = getelementptr i8, ptr %a, i64 %arow
-  br label %colloop
-colloop:
-  %j = phi i64 [ 0, %rowbody ], [ %jnext, %coldone ]
-  %cmore = icmp slt i64 %j, %cols
-  br i1 %cmore, label %colbody, label %rowdone
-colbody:
-  %jb = shl i64 %j, 2
-  %cb = getelementptr i8, ptr %cr, i64 %jb
-  %bb = getelementptr i8, ptr %b, i64 %jb
-  %cfull = icmp slt i64 %j, %cols32
-  %both = and i1 %full, %cfull
-  br i1 %both, label %k22, label %edge
-k22:
-  call void @__olang_tile_k22(ptr %cb, i64 %cs, ptr %ar, i64 %as, ptr %bb, i64 %bs, i64 %n, i64 %bstep)
-  br label %coldone
-edge:                                      ; a block of 16 rows or 16 columns: its 16 x 16 tiles one by one
-  call void @__olang_tile_k11(ptr %cb, i64 %cs, ptr %ar, i64 %as, ptr %bb, i64 %bs, i64 %n, i64 %bstep)
-  br i1 %full, label %edgerow, label %edgecol
-edgerow:                                   ; 32 rows, 16 columns: the lower tile
-  %c16 = shl i64 %cs, 4
-  %cb2 = getelementptr i8, ptr %cb, i64 %c16
-  %a16 = shl i64 %as, 4
-  %ar2 = getelementptr i8, ptr %ar, i64 %a16
-  call void @__olang_tile_k11(ptr %cb2, i64 %cs, ptr %ar2, i64 %as, ptr %bb, i64 %bs, i64 %n, i64 %bstep)
-  br label %coldone
-edgecol:                                   ; 16 rows: the right tile too, where 32 columns remain
-  br i1 %cfull, label %edgeright, label %coldone
-edgeright:
-  %cbr = getelementptr i8, ptr %cb, i64 64
-  %bbr = getelementptr i8, ptr %bb, i64 64
-  call void @__olang_tile_k11(ptr %cbr, i64 %cs, ptr %ar, i64 %as, ptr %bbr, i64 %bs, i64 %n, i64 %bstep)
-  br label %coldone
-coldone:
-  %cstep = select i1 %cfull, i64 32, i64 16
-  %jnext = add i64 %j, %cstep
-  br label %colloop
-rowdone:
-  %inext = add i64 %i, %mr
-  br label %rowloop
+  %tallr = icmp sge i64 %rows, 128
+  %widec = icmp sge i64 %cols, 128
+  %big = and i1 %tallr, %widec
+  br i1 %big, label %scratch, label %direct
+scratch:                                   ; B's slice (columns rounded up to 32, 256 deep), then A's chunk (256 x 256), and 64 bytes to align them
+  %colsup = add i64 %cols, 31
+  %cols32up = and i64 %colsup, -32
+  %bbytes = shl i64 %cols32up, 9
+  %all = add i64 %bbytes, 131136
+  %mem = call ptr @malloc(i64 %all)
+  %none = icmp eq ptr %mem, null
+  br i1 %none, label %direct, label %slices
+direct:
+  call void @__olang_tile_run(ptr %c, i64 %cs, i64 %rows, i64 %cols, ptr %a, i64 %as, ptr %b, i64 %bs, i64 128, i64 %n, i64 %bstep)
+  br label %done
+slices:                                    ; the scratch from a 64-byte boundary, so that no tile row straddles two lines
+  %memi = ptrtoint ptr %mem to i64
+  %memup = add i64 %memi, 63
+  %bufi = and i64 %memup, -64
+  %bufoff = sub i64 %bufi, %memi
+  %buf = getelementptr i8, ptr %mem, i64 %bufoff
+  %pa = getelementptr i8, ptr %buf, i64 %bbytes
+  br label %kloop
+kloop:                                     ; k0 over depth slices of 256
+  %k0 = phi i64 [ 0, %slices ], [ %k0next, %chunkdone ]
+  %kmore = icmp slt i64 %k0, %depth
+  br i1 %kmore, label %kbody, label %kdone
+kbody:
+  %left = sub i64 %depth, %k0
+  %kshort = icmp slt i64 %left, 256
+  %kc = select i1 %kshort, i64 %left, i64 256
+  %pairs = lshr i64 %kc, 1
+  %ksteps = lshr i64 %kc, 5
+  %bblk = shl i64 %kc, 6
+  %arow = shl i64 %kc, 1
+  %p00 = lshr i64 %k0, 1
+  %boff = mul i64 %p00, %bs
+  %bslice = getelementptr i8, ptr %b, i64 %boff
+  br label %bcol
+bcol:                                      ; B's slice block by block of 32 columns (the last perhaps 16)
+  %jc = phi i64 [ 0, %kbody ], [ %jcnext, %bcoldone ]
+  %bmore = icmp slt i64 %jc, %cols
+  br i1 %bmore, label %bcolbody, label %bpacked
+bcolbody:
+  %jcb = shl i64 %jc, 2
+  %bsrc0 = getelementptr i8, ptr %bslice, i64 %jcb
+  %jcblk = lshr i64 %jc, 5
+  %bdoff = mul i64 %jcblk, %bblk
+  %bdst0 = getelementptr i8, ptr %buf, i64 %bdoff
+  %jcrest = sub i64 %cols, %jc
+  %bwide = icmp sge i64 %jcrest, 32
+  br label %brow
+brow:
+  %q = phi i64 [ 0, %bcolbody ], [ %qnext, %browcopied ]
+  %qmore = icmp slt i64 %q, %pairs
+  br i1 %qmore, label %browbody, label %bcoldone
+browbody:
+  %qsrc = mul i64 %q, %bs
+  %bsrc = getelementptr i8, ptr %bsrc0, i64 %qsrc
+  %qdst = shl i64 %q, 7
+  %bdst = getelementptr i8, ptr %bdst0, i64 %qdst
+  br i1 %bwide, label %brow128, label %brow64
+brow128:
+  call void @llvm.memcpy.p0.p0.i64(ptr %bdst, ptr %bsrc, i64 128, i1 false)
+  br label %browcopied
+brow64:
+  call void @llvm.memcpy.p0.p0.i64(ptr %bdst, ptr %bsrc, i64 64, i1 false)
+  br label %browcopied
+browcopied:
+  %qnext = add i64 %q, 1
+  br label %brow
+bcoldone:
+  %jcnext = add i64 %jc, 32
+  br label %bcol
+bpacked:
+  br label %chunk
+chunk:                                     ; ic over chunks of 256 rows of A
+  %ic = phi i64 [ 0, %bpacked ], [ %icnext, %chunkrun ]
+  %cmore2 = icmp slt i64 %ic, %rows
+  br i1 %cmore2, label %chunkbody, label %chunkdone
+chunkbody:
+  %rleft = sub i64 %rows, %ic
+  %rshort = icmp slt i64 %rleft, 256
+  %h = select i1 %rshort, i64 %rleft, i64 256
+  br label %arow0
+arow0:
+  %r0 = phi i64 [ 0, %chunkbody ], [ %r0next, %arowbody ]
+  %amore = icmp slt i64 %r0, %h
+  br i1 %amore, label %arowbody, label %chunkrun
+arowbody:
+  %ai = add i64 %ic, %r0
+  %aelem0 = mul i64 %ai, %ald
+  %aelem = add i64 %aelem0, %k0
+  %abyte = shl i64 %aelem, 1
+  %asrc = getelementptr i8, ptr %a, i64 %abyte
+  %adoff = mul i64 %r0, %arow
+  %adst = getelementptr i8, ptr %pa, i64 %adoff
+  call void @llvm.memcpy.p0.p0.i64(ptr %adst, ptr %asrc, i64 %arow, i1 false)
+  %r0next = add i64 %r0, 1
+  br label %arow0
+chunkrun:
+  %ccoff = mul i64 %ic, %cs
+  %cc = getelementptr i8, ptr %c, i64 %ccoff
+  call void @__olang_tile_run(ptr %cc, i64 %cs, i64 %h, i64 %cols, ptr %pa, i64 %arow, ptr %buf, i64 128, i64 %bblk, i64 %ksteps, i64 2048)
+  %icnext = add i64 %ic, 256
+  br label %chunk
+chunkdone:
+  %k0next = add i64 %k0, 256
+  br label %kloop
+kdone:
+  call void @free(ptr %mem)
+  br label %done
 done:
   call void asm sideeffect "tilerelease", "~{memory},~{dirflag},~{fpsr},~{flags}"()
   ret i32 0

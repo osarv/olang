@@ -44346,3 +44346,21 @@ default's frame to those locals (defaultArg, ctorDefault). Kotlin and Scala allo
 checked where the type is written, no call there).
 Checking every default where it is written found two latent errors: checks' c2dcondfield and c2dmatchfield declared a
 constructor default `data Array<F64>& = null` (T2c: a reference never null) that no call used; the default is dropped.
+
+## 2026-11-27: the tile product reads its operands from the core's cache (E39a's runtime, X6; mine; wt-tilebf16)
+
+oann's frozen-weight BF16 products (AddDot of 256 rows by 1024 columns, depth 1024-3072) ran at ~110-230 GMAC/s on
+one Sapphire Rapids core, about a fifth of what tdpbf16ps does (1.3 TMAC/s with its operands in L1, measured). Two
+causes: B's pair rows sit `cols * 4` bytes apart (4 KB at 1024 columns), so each of a tile's 16 rows is on its own page;
+and every 32-row block of A read all of B again (2-6 MB, beyond L2) - the product streamed from L3. `__olang_tile_bf16`
+now takes a product of at least 128 rows and 128 columns in depth slices of 256: each slice's B copied into blocks of
+32 columns (pair rows of 128 bytes, a step's two tiles in 2 KB), A into chunks of 256 rows of the slice's depth, both
+in one scratch from malloc aligned to 64 bytes, freed before the call returns; the 32 x 32 blocks then run over the
+copies (`__olang_tile_run`, the old loops with B's column blocks at a stride of their own). C's tiles are stored and
+loaded again between slices, which is exact in F32, and each element's steps still run in order - the same bits
+(tests/tile.olang's blocked shapes, against the rule by hand). Measured, one core: 256x1024x1024 246 -> 455 GMAC/s,
+256x1024x3072 173 -> 459, 1024x1024x1024 207 -> 535. The 64-byte alignment mattered most: unaligned copies gave
+~240 (each tile row then straddles two lines). Smaller products read A and B in place, which is faster for them (a
+B 32-64 columns wide reaches ~620 GMAC/s unpacked; copying 256 rows of A for 64 columns does not pay). Tried and
+dropped: software prefetch of the next block or of C (slower), A copied into tile order rather than rows (no gain),
+depth slices of 512 or more (A's chunk falls out of L1).
