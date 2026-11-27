@@ -27,6 +27,8 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `utf8.olang` | Unicode code points: `Rune`, `Decode`/`Encode`, `Valid`, `Count`, `Runes` |
 | `base64.olang`, `hex.olang` | RFC 4648 base64 (standard and URL-safe) and hex, strict decoding |
 | `sha256.olang`, `crc32.olang` | the SHA-256 digest (`Sum`, `Hex`, a streaming `Hasher`, `Hmac`) and the IEEE CRC-32 |
+| `flate.olang` | DEFLATE both ways (`Deflate(data, level = 6)`, `try Inflate(data)`: LZ77 with hash chains, dynamic Huffman, stored blocks when smaller), the zlib container (`Zlib`, `try Unzlib`, `Adler32`) and gzip (`Gzip`, `try Gunzip`, every member, CRC-32 checked); `flate.Error` |
+| `zip.olang` | .zip archives in memory: `zip.Write(entries, level = 6)`, `try zip.Read(bytes)` - stored and deflate entries, CRC-32 checked, UTF-8 names, `time.Date` modification times, no zip64 or encryption; `zip.Error` |
 | `flags.olang` | command-line flags declared with types, defaults and help, or read from a struct's parameters (`Read<T>`, `@flags.Help`, `@flags.Short`); `--help` text; `flags.Error` |
 | `regex.olang` | RE2-style regular expressions, linear time (a lazy DFA and a Pike VM): `Compile`, `Matches`, `Find`, `FindAll`, `Replace`, `Split`, groups |
 | `json.olang` | JSON parse into an immutable tree, and encode; `Encode`/`Decode<T>` of any value by reflection, keys by a `Naming` policy, `@json.Key`, `@json.Skip` |
