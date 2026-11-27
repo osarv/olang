@@ -1,0 +1,180 @@
+# sha512 - the SHA-512 digest (FIPS 180-4): 64 bytes, the hash Ed25519 (RFC 8032) is built on. Sum takes the digest of
+# bytes held whole, Hex writes it as text; a Hasher takes one of bytes given a piece at a time; Hmac is the keyed
+# digest of RFC 2104. Ordinary olang - U64 arithmetic wrapping as SHA-512's does - used as std/sha256 is.
+# Imported with `import "std/sha512"`.
+
+import "hex"
+
+# the first 64 bits of the fractional parts of the cube roots of the first 80 primes
+k Array<U64> = Array<U64>[0x428a2f98d728ae22, 0x7137449123ef65cd, 0xb5c0fbcfec4d3b2f, 0xe9b5dba58189dbbc
+    0x3956c25bf348b538, 0x59f111f1b605d019, 0x923f82a4af194f9b, 0xab1c5ed5da6d8118, 0xd807aa98a3030242
+    0x12835b0145706fbe, 0x243185be4ee4b28c, 0x550c7dc3d5ffb4e2, 0x72be5d74f27b896f, 0x80deb1fe3b1696b1
+    0x9bdc06a725c71235, 0xc19bf174cf692694, 0xe49b69c19ef14ad2, 0xefbe4786384f25e3, 0x0fc19dc68b8cd5b5
+    0x240ca1cc77ac9c65, 0x2de92c6f592b0275, 0x4a7484aa6ea6e483, 0x5cb0a9dcbd41fbd4, 0x76f988da831153b5
+    0x983e5152ee66dfab, 0xa831c66d2db43210, 0xb00327c898fb213f, 0xbf597fc7beef0ee4, 0xc6e00bf33da88fc2
+    0xd5a79147930aa725, 0x06ca6351e003826f, 0x142929670a0e6e70, 0x27b70a8546d22ffc, 0x2e1b21385c26c926
+    0x4d2c6dfc5ac42aed, 0x53380d139d95b3df, 0x650a73548baf63de, 0x766a0abb3c77b2a8, 0x81c2c92e47edaee6
+    0x92722c851482353b, 0xa2bfe8a14cf10364, 0xa81a664bbc423001, 0xc24b8b70d0f89791, 0xc76c51a30654be30
+    0xd192e819d6ef5218, 0xd69906245565a910, 0xf40e35855771202a, 0x106aa07032bbd1b8, 0x19a4c116b8d2d0c8
+    0x1e376c085141ab53, 0x2748774cdf8eeb99, 0x34b0bcb5e19b48a8, 0x391c0cb3c5c95a63, 0x4ed8aa4ae3418acb
+    0x5b9cca4f7763e373, 0x682e6ff3d6b2b8a3, 0x748f82ee5defb2fc, 0x78a5636f43172f60, 0x84c87814a1f0ab72
+    0x8cc702081a6439ec, 0x90befffa23631e28, 0xa4506cebde82bde9, 0xbef9a3f7b2c67915, 0xc67178f2e372532b
+    0xca273eceea26619c, 0xd186b8c721c0c207, 0xeada7dd6cde0eb1e, 0xf57d4f7fee6ed178, 0x06f067aa72176fba
+    0x0a637dc5a2c898a6, 0x113f9804bef90dae, 0x1b710b35131c471b, 0x28db77f523047d84, 0x32caab7b40c72493
+    0x3c9ebe0a15c9bebc, 0x431d67c49c100d4c, 0x4cc5d4becb3e42b6, 0x597f299cfc657e2a, 0x5fcb6fab3ad6faec
+    0x6c44198c4a475817]
+
+fn rotr(x U64, n U64) U64 { return (x >> n) | (x << (64 - n)) }
+
+# the digest of bytes given a piece at a time: Push each piece, then Sum - the digest Sum gives of the pieces joined
+type Hasher struct() {
+    state := Array<U64>[0x6a09e667f3bcc908, 0xbb67ae8584caa73b, 0x3c6ef372fe94f82b, 0xa54ff53a5f1d36f1
+        0x510e527fade682d1, 0x9b05688c2b3e6c1f, 0x1f83d9abfb41bd6b, 0x5be0cd19137e2179]
+    buf := Array<U8>(128)
+    used I64 = 0                                   # bytes in buf
+    total I64 = 0                                  # bytes pushed in all
+}
+
+# one 128-byte block of data, from byte at, folded into the state
+fn (h mut Hasher&) block(data Array<U8>&, at I64) {
+    w := Array<U64>(80)
+    for i in range 16 {
+        v U64 = 0
+        for j in range 8: v = (v << 8) | U64(data[at + 8 * i + j])
+        w[i] = v
+    }
+    for i in range 16, 80 {
+        s0 := rotr(w[i - 15], 1) ^ rotr(w[i - 15], 8) ^ (w[i - 15] >> 7)
+        s1 := rotr(w[i - 2], 19) ^ rotr(w[i - 2], 61) ^ (w[i - 2] >> 6)
+        w[i] = w[i - 16] + s0 + w[i - 7] + s1
+    }
+    a := h.state[0]
+    b := h.state[1]
+    c := h.state[2]
+    d := h.state[3]
+    e := h.state[4]
+    f := h.state[5]
+    g := h.state[6]
+    hh := h.state[7]
+    for i in range 80 {
+        t1 := hh + (rotr(e, 14) ^ rotr(e, 18) ^ rotr(e, 41)) + ((e & f) ^ (~e & g)) + k[i] + w[i]
+        t2 := (rotr(a, 28) ^ rotr(a, 34) ^ rotr(a, 39)) + ((a & b) ^ (a & c) ^ (b & c))
+        hh = g
+        g = f
+        f = e
+        e = d + t1
+        d = c
+        c = b
+        b = a
+        a = t1 + t2
+    }
+    h.state[0] += a
+    h.state[1] += b
+    h.state[2] += c
+    h.state[3] += d
+    h.state[4] += e
+    h.state[5] += f
+    h.state[6] += g
+    h.state[7] += hh
+}
+
+# data added to what the digest is taken of
+fn (h mut Hasher&) Push(data Array<U8>&) {
+    h.total += data.Len()
+    i I64 = 0
+    if h.used > 0 {
+        for i < data.Len() and h.used < 128 {
+            h.buf[h.used] = data[i]
+            h.used++
+            i++
+        }
+        if h.used < 128: return
+        h.block(h.buf, 0)
+        h.used = 0
+    }
+    for i + 128 <= data.Len() {
+        h.block(data, i)
+        i += 128
+    }
+    for i < data.Len() {
+        h.buf[h.used] = data[i]
+        h.used++
+        i++
+    }
+}
+
+# the digest of everything pushed so far, 64 bytes; the Hasher is left as it was
+fn (h Hasher&) Sum() Array<U8> {
+    c Hasher = h
+    bits := U64(h.total) * 8
+    c.Push(Array<U8>(1, 0x80))
+    zero := Array<U8>(1)
+    for c.used != 112: c.Push(zero)
+    tail := Array<U8>(16)                          # the length as 128 bits: the high 64 are 0 below 2^61 bytes
+    for i in range 8: tail[8 + i] = U8((bits >> U64(56 - 8 * i)) & 0xFF)
+    c.Push(tail)
+    out := Array<U8>(64)
+    for i in range 8 {
+        for j in range 8: out[8 * i + j] = U8((c.state[i] >> U64(56 - 8 * j)) & 0xFF)
+    }
+    return out
+}
+
+# the digest of data, 64 bytes
+fn Sum(data Array<U8>&) Array<U8> {
+    h := Hasher()
+    h.Push(data)
+    return h.Sum()
+}
+
+# the digest of data as 128 lowercase hex digits, as sha512sum writes it
+fn Hex(data Array<U8>&) String { return hex.Encode(Sum(data)) }
+
+# HMAC-SHA512 of the pieces of data together, keyed by key (RFC 2104), 64 bytes
+fn Hmac(key Array<U8>&, data ...Array<U8>&) Array<U8> {
+    block := Array<U8>(128)
+    if key.Len() > 128 {
+        h := Sum(key)
+        for i in range 64: block[i] = h[i]
+    } else {
+        for i in range key.Len(): block[i] = key[i]
+    }
+    inner := Hasher()
+    outer := Hasher()
+    pad := Array<U8>(128)
+    for i in range 128: pad[i] = block[i] ^ 0x36
+    inner.Push(pad)
+    for d in data: inner.Push(d)
+    for i in range 128: pad[i] = block[i] ^ 0x5c
+    outer.Push(pad)
+    outer.Push(inner.Sum())
+    return outer.Sum()
+}
+
+if TestBuild {
+
+test "the FIPS 180-4 test vectors" {
+    assert Hex("") == "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e"
+    assert Hex("abc") == "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
+    assert Hex("abcdefghbcdefghicdefghijdefghijkefghijklfghijklmghijklmnhijklmnoijklmnopjklmnopqklmnopqrlmnopqrsmnopqrstnopqrstu") ==
+        "8e959b75dae313da8cf4f72814fc143f8f7779c6eb9f7fa17299aeadb6889018501d289e4900f7e4331b99dec4b5433ac7d329eeb6dd26545e96e55b874be909"
+}
+
+test "a Hasher fed in pieces gives the digest of the whole" {
+    big := Array<U8>(1000000, 'a')
+    assert hex.Encode(Sum(big)) == "e718483d0ce769644e2e42c7bc15b4638e1f98b13b2044285632a803afa973ebde0ff244877ea60a4cb0432ce577c31beb009c5c2c49aa2e4eadb217ad8cc09b"
+    h := Hasher()
+    for n in Array<I64>[1, 127, 128, 129, 7, 256, 300]: h.Push(big[:n])
+    assert h.Sum() == Sum(big[:1 + 127 + 128 + 129 + 7 + 256 + 300])
+}
+
+test Hmac "RFC 4231's test vectors, the data whole or in pieces" {
+    assert hex.Encode(Hmac(Array<U8>(20, 0x0b), "Hi There")) ==
+        "87aa7cdea5ef619d4ff0b4241a1d6cb02379f4e2ce4ec2787ad0b30545e17cdedaa833b7d6b8a702038b274eaea3f4e4be9d914eeb61f1702e696c203a126854"
+    assert hex.Encode(Hmac("Jefe", "what do ya want ", "for nothing?")) ==
+        "164b7a7bfcf819e2e395fbe73b56e0a387bd64222e831fd610270cd7ea2505549758bf75c05a994a6d034f65f8f0e6fdcaeab1a34d4a6b4b636e070a38bce737"
+    assert hex.Encode(Hmac(Array<U8>(131, 0xaa), "Test Using Larger Than Block-Size Key - Hash Key First")) ==
+        "80b24263c7c1a3ebb71493c1dd7be8b49b46d1f41b4aeec1121b013783f8f3526b56d037e05f2598bd0fd2215d6a1e5295e64f73f63f0aec8b915a985d786598"
+}
+
+}
