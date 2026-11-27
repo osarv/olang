@@ -532,7 +532,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **`Copy()` makes a new value from an existing one (E31d, the user's decisions 2026-11-03 "Copy DECIDED", "Copy and
   unique DECIDED", "Collections DECIDED").** Every type has one supplied (deep through values, shared at references
   and function values); `x.Copy()` gives it. A struct or enum may declare its own, `fn (x T&) Copy() T`, called at
-  every copy of a value; it may only build (allocation, no other effect). `Clone` is gone.
+  every copy of a value; it may only build (allocation, no other effect). Inside a type's own Copy a copy of that type (a
+  local returned, a local copied) is the supplied part-by-part one, never itself. `Clone` is gone.
 - **Operators are methods named for them (E31, the user's design).** `Plus Minus Mul Div Rem MatMul Neg Less BitAnd
   ... Inc Dec At SetAt Slice Call`, lowercase being module-private (M6b); `> <= >=` derive from `Less`. Any operator's
   method but `Len`/`Eq`/`Str` may declare errors (E31a). `x[i, j]` calls `At(i, j)`. **`commutes` (E31c, the user's

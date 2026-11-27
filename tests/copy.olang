@@ -170,3 +170,39 @@ test captured "copies what a captured value owns, by its Copy" {
     assert Captured == captured()
     assert captured() == "0601"
 }
+
+# a type's own declared Copy copying a value of its type - its result built in a local and returned, a local copied to
+# another - copies it part by part (the supplied copy), never through itself (E31d: it called itself until the stack
+# ran out, the copy a return of an existing local makes running the declared Copy)
+type Cell struct() {
+    occ Array<F64> = Array<F64>(4, 0.0)
+    stick Array<F64> = Array<F64>(2, 0.0)
+    made I64 = 0
+}
+
+fn (c Cell&) Copy() Cell {
+    out := Cell()
+    for k in range 4: out.occ[k] = c.occ[k]
+    for s in range 2: out.stick[s] = c.stick[s]
+    out.made = c.made + 1
+    second := out
+    second.occ[0] = out.occ[0] + 10.0
+    return second
+}
+
+fn cells() String {
+    a := Cell()
+    a.occ[1] = 2.5
+    a.stick[1] = 0.5
+    b := a.Copy()
+    a.occ[1] = 9.0
+    c := b
+    return $b.occ[0] + " " + $b.occ[1] + " " + $b.stick[1] + " " + $b.made + " " + $c.made + " " + $a.occ[1]
+}
+
+Cells := cells()
+
+test "a declared Copy copying its own type copies part by part" {
+    assert Cells == cells()
+    assert cells() == "10 2.5 0.5 1 2 9"
+}
