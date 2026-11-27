@@ -1,0 +1,90 @@
+# jpeg decoding against libjpeg's own decode (PIL, tests/embedded/img/jpeg_*.jpg with jpeg_*.raw: the 53x37 image its
+# decoder gave, 8 bits a channel): baseline and progressive, 4:4:4, 4:2:2 and 4:2:0, greyscale, restart intervals,
+# optimized tables. The decoder uses libjpeg's integer IDCT, upsampling and colour formulas, so the differences stay tiny.
+
+import "std/jpeg"
+import "std/pair"
+
+# the mean and the largest absolute difference (the mean in hundredths) between the decoded file and want
+fn diff(file Array<U8>&, want Array<U8>&, channels I64) pair.Pair<I64, I64> {
+    img := try jpeg.Decode(file) catch jpeg.Error { return pair.Pair<I64, I64>(-1, -1) }
+    if img.Width != 53 or img.Height != 37 or img.Channels != channels or img.Pixels.Len() != want.Len(): return pair.Pair<I64, I64>(-1, -1)
+    sum I64 = 0
+    worst I64 = 0
+    for i in range want.Len() {
+        e := (I64(img.Pixels[i]) - I64(want[i])).Abs()
+        sum += e
+        worst = worst.Max(e)
+    }
+    return pair.Pair<I64, I64>(sum * 100 / want.Len(), worst)
+}
+
+test "jpeg 444b" {
+    d := diff(embed "embedded/img/jpeg_444b.jpg", embed "embedded/img/jpeg_444b.raw", 3)
+    assert d.First >= 0 and d.First < 10 and d.Second <= 1
+}
+test "jpeg 444p" {
+    d := diff(embed "embedded/img/jpeg_444p.jpg", embed "embedded/img/jpeg_444p.raw", 3)
+    assert d.First >= 0 and d.First < 10 and d.Second <= 1
+}
+test "jpeg 422b" {
+    d := diff(embed "embedded/img/jpeg_422b.jpg", embed "embedded/img/jpeg_422b.raw", 3)
+    assert d.First >= 0 and d.First < 10 and d.Second <= 1
+}
+test "jpeg 422p" {
+    d := diff(embed "embedded/img/jpeg_422p.jpg", embed "embedded/img/jpeg_422p.raw", 3)
+    assert d.First >= 0 and d.First < 10 and d.Second <= 1
+}
+test "jpeg 420b" {
+    d := diff(embed "embedded/img/jpeg_420b.jpg", embed "embedded/img/jpeg_420b.raw", 3)
+    assert d.First >= 0 and d.First < 10 and d.Second <= 1
+}
+test "jpeg 420p" {
+    d := diff(embed "embedded/img/jpeg_420p.jpg", embed "embedded/img/jpeg_420p.raw", 3)
+    assert d.First >= 0 and d.First < 10 and d.Second <= 1
+}
+test "jpeg grayb" {
+    d := diff(embed "embedded/img/jpeg_grayb.jpg", embed "embedded/img/jpeg_grayb.raw", 1)
+    assert d.First >= 0 and d.First < 10 and d.Second <= 1
+}
+test "jpeg grayp" {
+    d := diff(embed "embedded/img/jpeg_grayp.jpg", embed "embedded/img/jpeg_grayp.raw", 1)
+    assert d.First >= 0 and d.First < 10 and d.Second <= 1
+}
+test "jpeg 420rst" {
+    d := diff(embed "embedded/img/jpeg_420rst.jpg", embed "embedded/img/jpeg_420rst.raw", 3)
+    assert d.First >= 0 and d.First < 10 and d.Second <= 1
+}
+test "jpeg 420prst" {
+    d := diff(embed "embedded/img/jpeg_420prst.jpg", embed "embedded/img/jpeg_420prst.raw", 3)
+    assert d.First >= 0 and d.First < 10 and d.Second <= 1
+}
+test "jpeg 444opt" {
+    d := diff(embed "embedded/img/jpeg_444opt.jpg", embed "embedded/img/jpeg_444opt.raw", 3)
+    assert d.First >= 0 and d.First < 10 and d.Second <= 1
+}
+test "jpeg 422q20" {
+    d := diff(embed "embedded/img/jpeg_422q20.jpg", embed "embedded/img/jpeg_422q20.raw", 3)
+    assert d.First >= 0 and d.First < 10 and d.Second <= 1
+}
+
+test "files that are no JPEG, cut, or in a format not read" {
+    f := embed "embedded/img/jpeg_420b.jpg"
+    try jpeg.Decode(Array<U8>[1, 2, 3, 4, 5]) catch jpeg.Error.NotJpeg { }
+    try jpeg.Decode(f[:f.Len() / 2]) catch jpeg.Error.Truncated { }
+    bad := Array<U8>(f.Len())
+    for i in range f.Len(): bad[i] = f[i]
+    for i in range f.Len() - 1 {
+        if bad[i] == 0xFF and bad[i + 1] == 0xC0 { bad[i + 1] = 0xC9 }
+    }
+    try jpeg.Decode(bad) catch jpeg.Error.Unsupported { return }
+    assert false
+}
+
+test "corrupt entropy data does not crash" {
+    f := embed "embedded/img/jpeg_420p.jpg"
+    bad := Array<U8>(f.Len())
+    for i in range f.Len(): bad[i] = f[i] ^ U8(i * 7 % 5 if i > 600 else 0)
+    img := try jpeg.Decode(bad) catch jpeg.Error { return }
+    assert img.Width == 53
+}

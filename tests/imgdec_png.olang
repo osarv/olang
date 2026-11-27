@@ -1,0 +1,71 @@
+# png decoding against pixels written by an independent encoder (tests/embedded/img/png_*.png with png_*.raw: the
+# expected 37x23 image, 8 bits a channel; every colour type and depth, interlaced and not, all five filters, a split
+# IDAT, ancillary chunks and a tRNS that is ignored)
+
+import "std/png"
+import "std/imgdecode"
+
+fn same(file Array<U8>&, want Array<U8>&, channels I64) Bool {
+    img := try png.Decode(file) catch png.Error { return false }
+    if img.Width != 37 or img.Height != 23 or img.Channels != channels or img.Pixels.Len() != want.Len(): return false
+    for i in range want.Len() {
+        if img.Pixels[i] != want[i]: return false
+    }
+    return true
+}
+
+test "png c0d1" { assert same(embed "embedded/img/png_c0d1.png", embed "embedded/img/png_c0d1.raw", 1) }
+test "png c0d2" { assert same(embed "embedded/img/png_c0d2.png", embed "embedded/img/png_c0d2.raw", 1) }
+test "png c0d2i" { assert same(embed "embedded/img/png_c0d2i.png", embed "embedded/img/png_c0d2i.raw", 1) }
+test "png c0d4" { assert same(embed "embedded/img/png_c0d4.png", embed "embedded/img/png_c0d4.raw", 1) }
+test "png c0d8" { assert same(embed "embedded/img/png_c0d8.png", embed "embedded/img/png_c0d8.raw", 1) }
+test "png c0d8i" { assert same(embed "embedded/img/png_c0d8i.png", embed "embedded/img/png_c0d8i.raw", 1) }
+test "png c0d16" { assert same(embed "embedded/img/png_c0d16.png", embed "embedded/img/png_c0d16.raw", 1) }
+test "png c2d8" { assert same(embed "embedded/img/png_c2d8.png", embed "embedded/img/png_c2d8.raw", 3) }
+test "png c2d8i" { assert same(embed "embedded/img/png_c2d8i.png", embed "embedded/img/png_c2d8i.raw", 3) }
+test "png c2d16" { assert same(embed "embedded/img/png_c2d16.png", embed "embedded/img/png_c2d16.raw", 3) }
+test "png c3d1" { assert same(embed "embedded/img/png_c3d1.png", embed "embedded/img/png_c3d1.raw", 3) }
+test "png c3d1i" { assert same(embed "embedded/img/png_c3d1i.png", embed "embedded/img/png_c3d1i.raw", 3) }
+test "png c3d2" { assert same(embed "embedded/img/png_c3d2.png", embed "embedded/img/png_c3d2.raw", 3) }
+test "png c3d4" { assert same(embed "embedded/img/png_c3d4.png", embed "embedded/img/png_c3d4.raw", 3) }
+test "png c3d4i" { assert same(embed "embedded/img/png_c3d4i.png", embed "embedded/img/png_c3d4i.raw", 3) }
+test "png c3d8" { assert same(embed "embedded/img/png_c3d8.png", embed "embedded/img/png_c3d8.raw", 3) }
+test "png c3d8i" { assert same(embed "embedded/img/png_c3d8i.png", embed "embedded/img/png_c3d8i.raw", 3) }
+test "png c4d8" { assert same(embed "embedded/img/png_c4d8.png", embed "embedded/img/png_c4d8.raw", 4) }
+test "png c4d8i" { assert same(embed "embedded/img/png_c4d8i.png", embed "embedded/img/png_c4d8i.raw", 4) }
+test "png c4d16" { assert same(embed "embedded/img/png_c4d16.png", embed "embedded/img/png_c4d16.raw", 4) }
+test "png c4d16i" { assert same(embed "embedded/img/png_c4d16i.png", embed "embedded/img/png_c4d16i.raw", 4) }
+test "png c6d8" { assert same(embed "embedded/img/png_c6d8.png", embed "embedded/img/png_c6d8.raw", 4) }
+test "png c6d8i" { assert same(embed "embedded/img/png_c6d8i.png", embed "embedded/img/png_c6d8i.raw", 4) }
+test "png c6d16" { assert same(embed "embedded/img/png_c6d16.png", embed "embedded/img/png_c6d16.raw", 4) }
+test "png c6d16i" { assert same(embed "embedded/img/png_c6d16i.png", embed "embedded/img/png_c6d16i.raw", 4) }
+
+test "damaged files are refused" {
+    f := embed "embedded/img/png_c2d8.png"
+    bad := Array<U8>(f.Len())
+    for i in range f.Len(): bad[i] = f[i]
+    bad[40] = bad[40] ^ 1
+    try png.Decode(bad) catch png.Error.BadChunk { return }
+    assert false
+}
+
+test "a file that is no PNG, and a cut one" {
+    f := embed "embedded/img/png_c2d8.png"
+    try png.Decode(f[:5]) catch png.Error.NotPng { return }
+    assert false
+}
+
+test "a cut file" {
+    f := embed "embedded/img/png_c2d8.png"
+    try png.Decode(f[:f.Len() - 20]) catch png.Error.Truncated { return }
+    assert false
+}
+
+test "imgdecode picks the decoder by the first bytes" {
+    img := try imgdecode.Decode(embed "embedded/img/png_c6d8.png")
+    assert img.Channels == 4 and img.Width == 37
+    j := try imgdecode.Decode(embed "embedded/img/jpeg_420b.jpg")
+    assert j.Channels == 3 and j.Width == 53
+    try imgdecode.Decode(embed "embedded/img/png_c2d8.raw") catch imgdecode.Error.Unknown { return }
+    assert false
+}
