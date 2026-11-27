@@ -1,0 +1,60 @@
+# check: run
+# D9h, condcopy (2026-11-27): a value local given a conditional of existing storage holds a view wherever each arm
+# alone would - `src := a if c else b` of two text locals or of two reference parameters, and `a.Bytes() if c else
+# b.Bytes()` (a body's read-only reference result, its arguments held) - no copy of the chosen arm each loop turn.
+# It copied the arm whole every turn (a user's loop over 3.4 GB of text was killed for memory); each turn's copy was
+# reclaimed with the turn, so the peak grew by one copy
+import "std/os"
+import "std/io"
+
+fn peakKb() I64 {
+    status :~ try os.ReadFile("/proc/self/status") catch default ""
+    at := try status.Find("VmHWM:") catch default -1
+    if at < 0: return -1
+    line :~ status[at + 6:]
+    end := try line.FindByte('\n') catch default line.Len()
+    return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1
+}
+
+fn make(n I64, c U8) String {
+    a := Array<U8>(n)
+    for k in range n: a[k] = c + U8(k % 7)
+    return String(a)
+}
+
+fn params(a String&, b String&) I64 {
+    total := 0
+    for i in range 40 {
+        src := a if i % 2 == 0 else b
+        total += I64(src[5])
+    }
+    return total
+}
+
+fn bytes(a String&, b String&) I64 {
+    total := 0
+    for i in range 40 {
+        src := a.Bytes() if i % 2 == 0 else b.Bytes()
+        total += I64(src[5])
+    }
+    return total
+}
+
+fn main() ? {
+    n := 8000000 + os.Args().Len()
+    a := make(n, 'a')
+    b := make(n, 'b')
+    # (texts handed to no body: params' and bytes' arguments escape as their results may name them)
+    c := make(n, 'a')
+    d := make(n, 'b')
+    before := peakKb()
+    total := 0
+    for i in range 40 {
+        src := c if i % 2 == 0 else d
+        total += I64(src[5])
+    }
+    total += params(a, b) + bytes(a, b)
+    grew := peakKb() - before
+    if total != 3 * 20 * (I64('a') + I64('b') + 2 * 5): unreachable "sum"
+    try io.PutLn("flat" if grew < 4000 else $"grew " + $grew + " kB")
+}

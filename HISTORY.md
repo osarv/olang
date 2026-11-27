@@ -44410,3 +44410,19 @@ for ever. Any other copy of the type inside its own Copy (`second := out`) did t
 ownCopyBody(ty): inside ty's own declared Copy, ownCopyOf and copyAt take the supplied part-by-part copy
 (HelperKind.Parts, as D9h's callee copies do) instead of the declared one. tests/copy.olang's Cell (a local returned, a
 local copied to another, read back at run time and while compiling) ended by a segmentation fault before.
+
+## 2026-11-27: a conditional of existing storage held as a view, as each arm is (D9h; mine; wt-condcopy)
+
+A user's loop over 3.4 GB of text, `src := a.Bytes() if c else b.Bytes()`, was killed for memory. Each turn copied the
+chosen arm whole: D9h leaves out a value local's copy of existing storage nothing changes while the local lives
+(lower.viewLocals), but viewInit recognised only a place read or a MakeKind.Copy of one - a conditional (typed
+`Cond` at the top, or a read through the dereference of a `Cond` of two references) and a body's reference result
+(`Read(Deref(Call))`) were never held, so `src := a if c else b` copied where `src := a` held a view. The copy was
+the turn's, reclaimed as the turn closed (the peak grew by one copy, not per turn), which is what killed a 3.4 GB run.
+heldCopy now judges a conditional by its arms (the MakeKind.Copy sites of each left out, the let's array copy too),
+heldSrc reads through a conditional of references, and heldRefCall holds what a body's read-only reference result
+names where every argument is held as it stands and nothing in the local's block can write storage of the referent's
+type (quietLife) - section 8 keeps that storage outliving the local. No meaning changes (nothing could tell). Left: a
+text local given to `Bytes()` still counts as escaping (its reference result may name it), so `c.Bytes()` of a local
+copies; `c if x else d` of locals does not. Checks' condviewloop (40 turns over 8 MB texts, locals, reference
+parameters and `Bytes()`) grew 7.9 MB before, flat after.

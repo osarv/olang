@@ -7297,13 +7297,34 @@ fn (ln mut lowering&) viewInit(u typed.LocalUses&, x typed.Expr&, i I64) Bool {
     }
     c :~ viewCallIn(x)
     if c is not null: return ln.heldViews(u, c)
+    if not ln.heldCopy(u, x): return false
+    ln.leaveOutCopy(x)
+    if ln.copiesArray(x, ty): ln.noLetCopy.Put(i, true)
+    return true
+}
+
+# whether a value local's declaration copies existing storage held as it stands (heldSrc) - a place read, a value's
+# MakeKind.Copy of one, or a conditional each of whose arms is such a copy: `src := a if c else b` holds a view wherever
+# `src := a` and `src := b` would (condcopy, 2026-11-27)
+fn (ln mut lowering&) heldCopy(u typed.LocalUses&, x typed.Expr&) Bool {
+    match x {
+        case typed.Expr.Cond(_, _, k) { return k.A is not null and ln.heldCopy(u, k.A!) and ln.heldCopy(u, k.B) }
+        case _ {}
+    }
     y :~ typed.CopiedOf(ln.T, x)
-    if y is null or not ln.heldSrc(u, y): return false
+    return y is not null and ln.heldSrc(u, y)
+}
+
+# the MakeKind.Copy sites a held copy (heldCopy) leaves out, an arm's of a conditional too
+fn (ln mut lowering&) leaveOutCopy(x typed.Expr&) {
     match x {
         case typed.Expr.Make(_, _, m) { ln.noCopy.Put(I64(m.Site), true) }
-        case _ { if ln.copiesArray(x, ty): ln.noLetCopy.Put(i, true) }
+        case typed.Expr.Cond(_, _, k) {
+            ln.leaveOutCopy(k.A!)
+            ln.leaveOutCopy(k.B)
+        }
+        case _ {}
     }
-    return true
 }
 
 # a reference local given what a call k hands back (`kids := v[i].xs.View()`): a view call whose temporary k is lent
@@ -7372,8 +7393,27 @@ fn (ln mut lowering&) heldSrc(u typed.LocalUses&, x typed.Expr&) Bool {
         case typed.Expr.Promote(_, _, pr): ln.heldMadeOf(u, pr.X)
         case typed.Expr.Prim(_, _, op, _, args): op == typed.PrimOp.Convert and args.Len() == 1 and ln.heldSrc(u, args[0])
         case typed.Expr.Away(_, _, y): ln.heldSrc(u, y)
+        # (a choice of two such: `a if c else b` of two reference parameters, read through - condcopy)
+        case typed.Expr.Cond(_, _, k): k.A is not null and ln.heldSrc(u, k.A!) and ln.heldSrc(u, k.B)
+        case typed.Expr.Call(_, ty, c): ln.heldRefCall(u, ty, c)
         case _: false
     }
+}
+
+# what a body's read-only reference result names (`a.Bytes()`): storage its arguments reach or a global's, outliving
+# the local (section 8) - changed by nothing while the local lives where every argument is held as it stands and
+# nothing in the local's block can write storage of the referent's type (quietLife)
+fn (ln mut lowering&) heldRefCall(u typed.LocalUses&, ty types.TypeId, c typed.Call&) Bool {
+    t :~ ln.T
+    if not t.IsRef(ty) or (t.PermOf(ty) & types.Writable) != 0: return false
+    match c.Target {
+        case typed.Callee.Body(_) {}
+        case _ { return false }
+    }
+    for a in c.Args {
+        if not ln.heldSrc(u, a): return false
+    }
+    return ln.quietLife(t.Referent(ty))
 }
 
 # a value given storage for a call - an array value's pair names its elements' storage, a place read

@@ -2407,6 +2407,9 @@
 | Array<I64>[10, 20, 30]
 === run condvaluesame.olang
 | status 0
+=== run condviewloop.olang
+| status 0
+| flat
 === run constrelit.olang
 | status 0
 | 27
