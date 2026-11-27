@@ -1,0 +1,117 @@
+# x25519 - X25519 key agreement (RFC 7748) on Curve25519: X25519 turns a 32-byte private key and another party's
+# 32-byte public key into a 32-byte secret only the two of them can make; Public gives the public key of a private
+# one. Private keys are any 32 random bytes the caller supplies (this module reads no randomness); the shared secret
+# is best run through a hash or key-derivation step before it is used as a key. Constant time: the work done on a
+# private key depends only on its length - no branch and no memory address is chosen by a secret bit (the ladder
+# selects with masks). Shared refuses the all-zero result a public key of small order gives.
+# Imported with `import "std/x25519"`.
+
+import fld "curve25519"
+import "subtle"
+
+type Bad error {
+    SmallOrder                                     # the other's public key is of small order: the secret would be all zero
+}
+
+# the shared secret of private key k and public key u (both 32 bytes); all zero when u is of small order, which the
+# caller must refuse (Shared does)
+fn X25519(k Array<U8>&, u Array<U8>&) Array<U8> {
+    e := Array<U8>(32)
+    for i in range 32: e[i] = k[i]
+    e[0] &= 248
+    e[31] &= 127
+    e[31] |= 64
+    x1 := fld.Fe.Unpack(u)
+    x2 := fld.Fe.Of(1)
+    z2 := fld.Fe.Of(0)
+    x3 := x1
+    z3 := fld.Fe.Of(1)
+    swap U64 = 0
+    a24 := fld.Fe.Of(121665)
+    t := 254
+    for t >= 0 {
+        kt := U64((e[t >> 3] >> U8(t & 7)) & 1)
+        swap ^= kt
+        nx2 := fld.Sel(x2, x3, swap)
+        x3 = fld.Sel(x3, x2, swap)
+        x2 = nx2
+        nz2 := fld.Sel(z2, z3, swap)
+        z3 = fld.Sel(z3, z2, swap)
+        z2 = nz2
+        swap = kt
+        a := fld.Add(x2, z2)
+        aa := fld.Sq(a)
+        b := fld.Sub(x2, z2)
+        bb := fld.Sq(b)
+        ee := fld.Sub(aa, bb)
+        c := fld.Add(x3, z3)
+        d := fld.Sub(x3, z3)
+        da := fld.Mul(d, a)
+        cb := fld.Mul(c, b)
+        x3 = fld.Sq(fld.Add(da, cb))
+        z3 = fld.Mul(x1, fld.Sq(fld.Sub(da, cb)))
+        x2 = fld.Mul(aa, bb)
+        z2 = fld.Mul(ee, fld.Add(aa, fld.Mul(a24, ee)))
+        t--
+    }
+    x2 = fld.Sel(x2, x3, swap)
+    z2 = fld.Sel(z2, z3, swap)
+    return fld.Pack(fld.Mul(x2, fld.Invert(z2)))
+}
+
+# the public key of private key k: k times the base point u = 9
+fn Public(k Array<U8>&) Array<U8> {
+    nine := Array<U8>(32)
+    nine[0] = 9
+    return X25519(k, nine)
+}
+
+# X25519 of private key k and public key u, failing where u is of small order (the secret would be all zero)
+fn Shared(k Array<U8>&, u Array<U8>&) Array<U8> ? Bad {
+    s := X25519(k, u)
+    if subtle.IsZero(s): error Bad.SmallOrder
+    return s
+}
+
+if TestBuild {
+
+import "hex"
+
+fn hx(s String&) Array<U8> { return hex.Decode(s)! }
+
+
+
+test X25519 "RFC 7748 5.2's vectors and its iterated one (1000 times)" {
+    assert hex.Encode(X25519(hx("a546e36bf0527c9d3b16154b82465edd62144c0ac1fc5a18506a2244ba449ac4")
+        hx("e6db6867583030db3594c1a424b15f7c726624ec26b3353b10a903a6d0ab1c4c"))) ==
+        "c3da55379de9c6908e94ea4df28d084f32eccf03491c71f754b4075577a28552"
+    assert hex.Encode(X25519(hx("4b66e9d4d1b4673c5ad22691957d6af5c11b6421e0ea01d42ca4169e7918ba0d")
+        hx("e5210f12786811d3f4b7959d0538ae2c31dbe7106fc03c3efc4cd549c715a493"))) ==
+        "95cbde9476e8907d7aade45cb4b873f88b595a68799fa152e6f8f7647aac7957"
+    k := hx("0900000000000000000000000000000000000000000000000000000000000000")
+    u := k
+    for i in range 1000 {
+        r := X25519(k, u)
+        u = k
+        k = r
+        if i == 0: assert hex.Encode(k) == "422c8e7a6227d7bca1350b3e2bb7279f7897b87bb6854b783c60e80311ae3079"
+    }
+    assert hex.Encode(k) == "684cf59ba83309552800ef566f2f4d3c1c3887c49360e3875f2eb94d99532c51"
+}
+
+test Public "RFC 7748 6.1: Alice and Bob reach the same secret" {
+    a := hx("77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a")
+    b := hx("5dab087e624a8a4b79e17f8b83800ee66f3bb1292618b6fd1c2f8b27ff88e0eb")
+    assert hex.Encode(Public(a)) == "8520f0098930a754748b7ddcb43ef75a0dbf3a0d26381af4eba4a98eaa9b4e6a"
+    assert hex.Encode(Public(b)) == "de9edb7d7b7dc1b4d35b61c2ece435373f8343c85b78674dadfc7e146f882b4f"
+    s := "4a5d9d5ba4ce2de1728e3bf480350f25e07e21c947d19e3376f09b3c1e161742"
+    assert hex.Encode(X25519(a, Public(b))) == s and hex.Encode(X25519(b, Public(a))) == s
+}
+
+test Shared "an all-zero public key (small order) is refused" {
+    ok := true
+    try Shared(hx("77076d0a7318a57d3c16c17251b26645df4c2f87ebc0992ab177fba51db92c2a"), Array<U8>(32)) catch { ok = false }
+    assert not ok
+}
+
+}

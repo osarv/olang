@@ -29,6 +29,10 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `wav.olang` | RIFF WAVE audio: read PCM 8/16/24/32-bit and float 32/64 (incl. extensible) to interleaved F32, write 16-bit PCM or 32-bit float |
 | `uuid.olang` | UUIDs (RFC 9562): version 4 random and version 7 time-ordered, canonical text, strict Parse |
 | `sha256.olang`, `crc32.olang` | the SHA-256 digest (`Sum`, `Hex`, a streaming `Hasher`, `Hmac`) and the IEEE CRC-32 |
+| `sha512.olang`, `sha1.olang` | the SHA-512 and SHA-1 digests (`Sum`, `Hex`, a streaming `Hasher`, `Hmac`, as sha256); SHA-1 is broken for collision resistance, kept for protocols that fix it (WebSocket, git) |
+| `chacha.olang` | ChaCha20-Poly1305 authenticated encryption (RFC 8439 `Seal`/`Open`) and XChaCha20-Poly1305 (`XSeal`/`XOpen`), constant time |
+| `subtle.olang` | constant-time `Equal` and `IsZero` for tags and secrets |
+| `curve25519.olang`, `x25519.olang`, `ed25519.olang` | the GF(2^255 - 19) field, X25519 key agreement (RFC 7748) and Ed25519 signatures (RFC 8032), constant time on secrets |
 | `flags.olang` | command-line flags declared with types, defaults and help, or read from a struct's parameters (`Read<T>`, `@flags.Help`, `@flags.Short`); `--help` text; `flags.Error` |
 | `regex.olang` | RE2-style regular expressions, linear time (a lazy DFA and a Pike VM): `Compile`, `Matches`, `Find`, `FindAll`, `Replace`, `Split`, groups |
 | `json.olang` | JSON parse into an immutable tree, and encode; `Encode`/`Decode<T>` of any value by reflection, keys by a `Naming` policy, `@json.Key`, `@json.Skip` |

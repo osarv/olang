@@ -1,0 +1,322 @@
+# chacha - ChaCha20 and Poly1305 and the authenticated encryption made of them (RFC 8439), in ordinary olang. Seal
+# encrypts a message under a 32-byte key and a 12-byte nonce and appends a 16-byte tag; Open checks the tag and gives
+# the message back, or fails when anything (the message, the tag, the associated data) was changed or the key is
+# another. A nonce must never repeat under one key. XSeal and XOpen are XChaCha20-Poly1305: the same with a 24-byte
+# nonce, long enough to be chosen at random. Constant time: no branch and no address depends on the key or the data,
+# and the tag is compared without stopping at the first difference (std/subtle).
+# Imported with `import "std/chacha"`.
+
+import "subtle"
+
+type Bad error {
+    Forged                                         # the tag does not match: changed in transit, or another key
+}
+
+fn rotl(x U32, n U32) U32 { return (x << n) | (x >> (32 - n)) }
+
+fn le32(b Array<U8>&, at I64) U32 {
+    return U32(b[at]) | (U32(b[at + 1]) << 8) | (U32(b[at + 2]) << 16) | (U32(b[at + 3]) << 24)
+}
+
+fn quarter(s mut Array<U32>&, a I64, b I64, c I64, d I64) {
+    s[a] += s[b]
+    s[d] = rotl(s[d] ^ s[a], 16)
+    s[c] += s[d]
+    s[b] = rotl(s[b] ^ s[c], 12)
+    s[a] += s[b]
+    s[d] = rotl(s[d] ^ s[a], 8)
+    s[c] += s[d]
+    s[b] = rotl(s[b] ^ s[c], 7)
+}
+
+# the twenty rounds of ChaCha, in place
+fn rounds(s mut Array<U32>&) {
+    for _ in range 10 {
+        quarter(s, 0, 4, 8, 12)
+        quarter(s, 1, 5, 9, 13)
+        quarter(s, 2, 6, 10, 14)
+        quarter(s, 3, 7, 11, 15)
+        quarter(s, 0, 5, 10, 15)
+        quarter(s, 1, 6, 11, 12)
+        quarter(s, 2, 7, 8, 13)
+        quarter(s, 3, 4, 9, 14)
+    }
+}
+
+# HChaCha20: a 32-byte subkey from a key and a 16-byte nonce, the step that lets XChaCha20 take a 24-byte nonce
+fn HChaCha(key Array<U8>&, nonce Array<U8>&) Array<U8> {
+    s := Array<U32>(16)
+    s[0] = 0x61707865
+    s[1] = 0x3320646e
+    s[2] = 0x79622d32
+    s[3] = 0x6b206574
+    for i in range 8: s[4 + i] = le32(key, 4 * i)
+    for i in range 4: s[12 + i] = le32(nonce, 4 * i)
+    rounds(s)
+    out := Array<U8>(32)
+    for i in range 8 {
+        v := s[i if i < 4 else 8 + i]
+        for j in range 4: out[4 * i + j] = U8((v >> U32(8 * j)) & 0xff)
+    }
+    return out
+}
+
+# the 64-byte key stream block for key, nonce and block counter n (RFC 8439 2.3)
+fn Block(key Array<U8>&, nonce Array<U8>&, n U32) Array<U8> {
+    init := Array<U32>(16)
+    init[0] = 0x61707865
+    init[1] = 0x3320646e
+    init[2] = 0x79622d32
+    init[3] = 0x6b206574
+    for i in range 8: init[4 + i] = le32(key, 4 * i)
+    init[12] = n
+    for i in range 3: init[13 + i] = le32(nonce, 4 * i)
+    s := Array<U32>(16)
+    for i in range 16: s[i] = init[i]
+    rounds(s)
+    out := Array<U8>(64)
+    for i in range 16 {
+        v := s[i] + init[i]
+        for j in range 4: out[4 * i + j] = U8((v >> U32(8 * j)) & 0xff)
+    }
+    return out
+}
+
+# data XORed with the key stream from block counter n on (RFC 8439 2.4): encrypts and decrypts alike
+fn XorStream(key Array<U8>&, nonce Array<U8>&, n U32, data Array<U8>&) Array<U8> {
+    out := Array<U8>(data.Len())
+    at I64 = 0
+    c := n
+    for at < data.Len() {
+        ks := Block(key, nonce, c)
+        i I64 = 0
+        for i < 64 and at + i < data.Len() {
+            out[at + i] = data[at + i] ^ ks[i]
+            i++
+        }
+        at += 64
+        c++
+    }
+    return out
+}
+
+# Poly1305 (RFC 8439 2.5): the 16-byte tag of a message under a one-time 32-byte key, in five 26-bit limbs
+type Poly struct(key Array<U8>&) {
+    r0 U64 = U64(le32(key, 0)) & 0x3ffffff
+    r1 U64 = (U64(le32(key, 3)) >> 2) & 0x3ffff03
+    r2 U64 = (U64(le32(key, 6)) >> 4) & 0x3ffc0ff
+    r3 U64 = (U64(le32(key, 9)) >> 6) & 0x3f03fff
+    r4 U64 = (U64(le32(key, 12)) >> 8) & 0x00fffff
+    pad := key[16:32]
+    h0 U64 = 0
+    h1 U64 = 0
+    h2 U64 = 0
+    h3 U64 = 0
+    h4 U64 = 0
+}
+
+# one 16-byte block from at (hibit 1 << 24 for a whole block; a short last one comes padded, with hibit 0)
+fn (p mut Poly&) block(m Array<U8>&, at I64, hibit U64) {
+    k U64 = 0x3ffffff
+    h0 := p.h0 + (U64(le32(m, at)) & k)
+    h1 := p.h1 + ((U64(le32(m, at + 3)) >> 2) & k)
+    h2 := p.h2 + ((U64(le32(m, at + 6)) >> 4) & k)
+    h3 := p.h3 + ((U64(le32(m, at + 9)) >> 6) & k)
+    h4 := p.h4 + ((U64(le32(m, at + 12)) >> 8) | hibit)
+    s1 := p.r1 * 5
+    s2 := p.r2 * 5
+    s3 := p.r3 * 5
+    s4 := p.r4 * 5
+    d0 := h0 * p.r0 + h1 * s4 + h2 * s3 + h3 * s2 + h4 * s1
+    d1 := h0 * p.r1 + h1 * p.r0 + h2 * s4 + h3 * s3 + h4 * s2
+    d2 := h0 * p.r2 + h1 * p.r1 + h2 * p.r0 + h3 * s4 + h4 * s3
+    d3 := h0 * p.r3 + h1 * p.r2 + h2 * p.r1 + h3 * p.r0 + h4 * s4
+    d4 := h0 * p.r4 + h1 * p.r3 + h2 * p.r2 + h3 * p.r1 + h4 * p.r0
+    d1 += d0 >> 26
+    d2 += d1 >> 26
+    d3 += d2 >> 26
+    d4 += d3 >> 26
+    a := (d0 & k) + 5 * (d4 >> 26)
+    p.h0 = a & k
+    p.h1 = (d1 & k) + (a >> 26)
+    p.h2 = d2 & k
+    p.h3 = d3 & k
+    p.h4 = d4 & k
+}
+
+# the whole message folded in, in 16-byte blocks, the last one short where the message is
+fn (p mut Poly&) push(data Array<U8>&) {
+    at I64 = 0
+    for at + 16 <= data.Len() {
+        p.block(data, at, 1 << 24)
+        at += 16
+    }
+    if at < data.Len() {
+        last := Array<U8>(17)
+        for i in range data.Len() - at: last[i] = data[at + i]
+        last[data.Len() - at] = 1
+        p.block(last, 0, 0)
+    }
+}
+
+fn (p Poly&) Tag() Array<U8> {
+    k U64 = 0x3ffffff
+    h0 := p.h0
+    h1 := p.h1
+    h2 := p.h2 + (h1 >> 26)
+    h1 &= k
+    h3 := p.h3 + (h2 >> 26)
+    h2 &= k
+    h4 := p.h4 + (h3 >> 26)
+    h3 &= k
+    h0 += 5 * (h4 >> 26)
+    h4 &= k
+    h1 += h0 >> 26
+    h0 &= k
+    g0 := h0 + 5                                   # h - (2^130 - 5): taken where it does not go below zero
+    g1 := h1 + (g0 >> 26)
+    g0 &= k
+    g2 := h2 + (g1 >> 26)
+    g1 &= k
+    g3 := h3 + (g2 >> 26)
+    g2 &= k
+    g4 := h4 + (g3 >> 26) - (1 << 26)
+    g3 &= k
+    m := (g4 >> 63) - 1                            # all ones where g4 did not go below zero
+    h0 = (h0 & ~m) | (g0 & m)
+    h1 = (h1 & ~m) | (g1 & m)
+    h2 = (h2 & ~m) | (g2 & m)
+    h3 = (h3 & ~m) | (g3 & m)
+    h4 = (h4 & ~m) | (g4 & k & m)
+    acc := U128(h0) | (U128(h1) << 26) | (U128(h2) << 52) | (U128(h3) << 78) | (U128(h4) << 104)
+    s U128 = 0
+    for i in range 16: s |= U128(p.pad[i]) << U128(8 * i)
+    acc += s
+    out := Array<U8>(16)
+    for i in range 16: out[i] = U8((acc >> U128(8 * i)) & 0xff)
+    return out
+}
+
+# the tag of a message under a one-time key
+fn Mac(key Array<U8>&, msg Array<U8>&) Array<U8> {
+    p := Poly(key)
+    p.push(msg)
+    return p.Tag()
+}
+
+fn tagOf(key Array<U8>&, nonce Array<U8>&, aad Array<U8>&, ct Array<U8>&) Array<U8> {
+    a := (aad.Len() + 15) / 16 * 16                # each padded to 16 bytes with zeros, then the two lengths
+    c := (ct.Len() + 15) / 16 * 16
+    m := Array<U8>(a + c + 16)
+    for i in range aad.Len(): m[i] = aad[i]
+    for i in range ct.Len(): m[a + i] = ct[i]
+    for i in range 8 {
+        m[a + c + i] = U8((aad.Len() >> I64(8 * i)) & 0xff)
+        m[a + c + 8 + i] = U8((ct.Len() >> I64(8 * i)) & 0xff)
+    }
+    return Mac(Block(key, nonce, 0)[:32], m)
+}
+
+# the message encrypted under key and nonce (32 and 12 bytes), aad bound to it unencrypted, the 16-byte tag at its end
+fn Seal(key Array<U8>&, nonce Array<U8>&, aad Array<U8>&, plain Array<U8>&) Array<U8> {
+    ct := XorStream(key, nonce, 1, plain)
+    tag := tagOf(key, nonce, aad, ct)
+    out := Array<U8>(ct.Len() + 16)
+    for i in range ct.Len(): out[i] = ct[i]
+    for i in range 16: out[ct.Len() + i] = tag[i]
+    return out
+}
+
+# the message Seal sealed, where the tag proves nothing was changed
+fn Open(key Array<U8>&, nonce Array<U8>&, aad Array<U8>&, sealed Array<U8>&) Array<U8> ? Bad {
+    if sealed.Len() < 16: error Bad.Forged
+    n := sealed.Len() - 16
+    ct :~ sealed[:n]
+    tag := tagOf(key, nonce, aad, ct)
+    if not subtle.Equal(tag, sealed[n:]): error Bad.Forged
+    return XorStream(key, nonce, 1, ct)
+}
+
+# Seal with a 24-byte nonce (XChaCha20-Poly1305): the subkey comes from the key and the nonce's first 16 bytes
+fn XSeal(key Array<U8>&, nonce Array<U8>&, aad Array<U8>&, plain Array<U8>&) Array<U8> {
+    return Seal(HChaCha(key, nonce[:16]), tail12(nonce), aad, plain)
+}
+
+# Open for XSeal
+fn XOpen(key Array<U8>&, nonce Array<U8>&, aad Array<U8>&, sealed Array<U8>&) Array<U8> ? Bad {
+    return try Open(HChaCha(key, nonce[:16]), tail12(nonce), aad, sealed)
+}
+
+# four zero bytes and the last eight of a 24-byte nonce
+fn tail12(nonce Array<U8>&) Array<U8> {
+    n := Array<U8>(12)
+    for i in range 8: n[4 + i] = nonce[16 + i]
+    return n
+}
+
+if TestBuild {
+
+import "hex"
+
+fn hx(s String&) Array<U8> { return hex.Decode(s)! }
+
+fn count(n I64, from I64) Array<U8> {
+    a := Array<U8>(n)
+    for i in range n: a[i] = U8(from + i)
+    return a
+}
+
+Ladies String = "Ladies and Gentlemen of the class of '99: If I could offer you only one tip for the future, sunscreen would be it."
+
+test Block "RFC 8439 2.3.2's block" {
+    assert hex.Encode(Block(count(32, 0), hx("000000090000004a00000000"), 1)) ==
+        "10f1e7e4d13b5915500fdd1fa32071c4c7d1f4c733c068030422aa9ac3d46c4ed2826446079faa0914c2d705d98b02a2b5129cd1de164eb9cbd083e8a2503c4e"
+}
+
+test XorStream "RFC 8439 2.4.2's encryption, and decryption back" {
+    ct := XorStream(count(32, 0), hx("000000000000004a00000000"), 1, Ladies)
+    assert hex.Encode(ct) == "6e2e359a2568f98041ba0728dd0d6981e97e7aec1d4360c20a27afccfd9fae0bf91b65c5524733ab8f593dabcd62b3571639d624e65152ab8f530c359f0861d807ca0dbf500d6a6156a38e088a22b65e52bc514d16ccf806818ce91ab77937365af90bbf74a35be6b40b8eedf2785e42874d"
+    assert String(XorStream(count(32, 0), hx("000000000000004a00000000"), 1, ct)) == Ladies
+}
+
+test Mac "RFC 8439 2.5.2's tag" {
+    assert hex.Encode(Mac(hx("85d6be7857556d337f4452fe42d506a80103808afb0db2fd4abff6af4149f51b"), "Cryptographic Forum Research Group")) ==
+        "a8061dc1305136c6c22b8baf0c0127a9"
+}
+
+test Seal "RFC 8439 2.8.2's AEAD; any change, or another key, fails to open" {
+    key := count(32, 0x80)
+    nonce := hx("070000004041424344454647")
+    aad := hx("50515253c0c1c2c3c4c5c6c7")
+    sealed := Seal(key, nonce, aad, Ladies)
+    assert hex.Encode(sealed) == "d31a8d34648e60db7b86afbc53ef7ec2a4aded51296e08fea9e2b5a736ee62d63dbea45e8ca9671282fafb69da92728b1a71de0a9e060b2905d6a5b67ecd3b3692ddbd7f2d778b8c9803aee328091b58fab324e4fad675945585808b4831d7bc3ff4def08e4b7a9de576d26586cec64b61161ae10b594f09e26a7e902ecbd0600691"
+    assert String(try Open(key, nonce, aad, sealed) catch default Array<U8>(0)) == Ladies
+    for i in Array<I64>[0, 60, sealed.Len() - 1] {
+        bad := sealed
+        bad[i] ^= 4
+        assert (try Open(key, nonce, aad, bad) catch default Array<U8>(0)).Len() == 0
+    }
+    assert (try Open(key, nonce, "x", sealed) catch default Array<U8>(0)).Len() == 0
+    assert (try Open(count(32, 1), nonce, aad, sealed) catch default Array<U8>(0)).Len() == 0
+    assert String(try Open(key, nonce, "", Seal(key, nonce, "", "")) catch default "x") == ""
+}
+
+test HChaCha "draft-irtf-cfrg-xchacha's HChaCha20 vector" {
+    assert hex.Encode(HChaCha(count(32, 0), hx("000000090000004a0000000031415927"))) ==
+        "82413b4227b27bfed30e42508a877d73a0f9e4d58a74a853c12ec41326d3ecdc"
+}
+
+test XSeal "XChaCha20-Poly1305 round trip against a reference, and forgery" {
+    key := count(32, 0x80)
+    nonce := count(24, 0x40)
+    aad := hx("50515253c0c1c2c3c4c5c6c7")
+    sealed := XSeal(key, nonce, aad, Ladies)
+    assert hex.Encode(sealed) ==
+        "bd6d179d3e83d43b9576579493c0e939572a1700252bfaccbed2902c21396cbb731c7f1b0b4aa6440bf3a82f4eda7e39ae64c6708c54c216cb96b72e1213b4522f8c9ba40db5d945b11b69b982c1bb9e3f3fac2bc369488f76b2383565d3fff921f9664c97637da9768812f615c68b13b52ec0875924c1c7987947deafd8780acf49"
+    assert String(try XOpen(key, nonce, aad, sealed) catch default Array<U8>(0)) == Ladies
+    bad := sealed
+    bad[3] ^= 1
+    assert (try XOpen(key, nonce, aad, bad) catch default Array<U8>(0)).Len() == 0
+}
+
+}
