@@ -1,0 +1,268 @@
+# ed25519 - Ed25519 signatures (RFC 8032) on Edwards25519: Public gives the 32-byte public key of a 32-byte private
+# seed, Sign the 64-byte signature of a message by the holder of the seed, Verify whether a signature of a message is
+# valid under a public key. Seeds are any 32 random bytes the caller supplies (this module reads no randomness).
+# Constant time on secrets: signing and key generation choose no branch and no memory address by a secret bit (the
+# scalar multiplication keeps its sums by masks); Verify works on public data only. Built on std/curve25519's field
+# and std/sha512.
+# Imported with `import "std/ed25519"`.
+
+import fld "curve25519"
+import "sha512"
+import "subtle"
+
+type BadPoint error {
+    Off                                            # not a point of the curve, or not its canonical encoding
+}
+
+# a point in extended coordinates: x = X/Z, y = Y/Z, xy = T/Z
+type Pt struct(x fld.Fe, y fld.Fe, z fld.Fe, t fld.Fe) { x, y, z, t }
+
+D fld.Fe = fld.Mul(fld.Neg(fld.Fe.Of(121665)), fld.Invert(fld.Fe.Of(121666)))   # the curve's d = -121665/121666
+D2 fld.Fe = fld.Add(D, D)
+SqrtM1 fld.Fe = fld.Pow(fld.Fe.Of(2), 252, Array<I64>[2])          # 2^((p-1)/4), a square root of -1
+Base Pt = Pt.Gen()
+Order Array<U64> = Array<U64>[0x5812631a5cf5d3ed, 0x14def9dea2f79cd6, 0, 0x1000000000000000]   # L = 2^252 + 27742317777372353535851937790883648493
+
+fn Pt.Gen() Pt {
+    b := Array<U8>(32, 0x66)                       # y = 4/5, x positive
+    b[0] = 0x58
+    return try Pt.Decode(b) catch default Pt.Identity()
+}
+
+fn Pt.Identity() Pt { return Pt(fld.Fe.Of(0), fld.Fe.Of(1), fld.Fe.Of(1), fld.Fe.Of(0)) }
+
+# p + q (the unified formula: right for p = q too, so it doubles as well)
+fn padd(p Pt, q Pt) Pt {
+    a := fld.Mul(fld.Sub(p.y, p.x), fld.Sub(q.y, q.x))
+    b := fld.Mul(fld.Add(p.y, p.x), fld.Add(q.y, q.x))
+    c := fld.Mul(fld.Mul(p.t, D2), q.t)
+    d := fld.Mul(fld.Add(p.z, p.z), q.z)
+    e := fld.Sub(b, a)
+    f := fld.Sub(d, c)
+    g := fld.Add(d, c)
+    h := fld.Add(b, a)
+    return Pt(fld.Mul(e, f), fld.Mul(g, h), fld.Mul(f, g), fld.Mul(e, h))
+}
+
+fn psel(p Pt, q Pt, b U64) Pt { return Pt(fld.Sel(p.x, q.x, b), fld.Sel(p.y, q.y, b), fld.Sel(p.z, q.z, b), fld.Sel(p.t, q.t, b)) }
+
+# s p for a 32-byte little-endian scalar s: every bit costs one doubling and one addition, the sum kept by a mask
+fn smul(s Array<U8>&, p Pt) Pt {
+    q := Pt.Identity()
+    i := 255
+    for i >= 0 {
+        q = padd(q, q)
+        r := padd(q, p)
+        q = psel(q, r, U64((s[i >> 3] >> U8(i & 7)) & 1))
+        i--
+    }
+    return q
+}
+
+fn encode(p Pt) Array<U8> {
+    zi := fld.Invert(p.z)
+    out := fld.Pack(fld.Mul(p.y, zi))
+    out[31] ^= (fld.Pack(fld.Mul(p.x, zi))[0] & 1) << 7
+    return out
+}
+
+# the point a 32-byte encoding names, or none (not on the curve, or not canonical); public data only
+fn Pt.Decode(s Array<U8>&) Pt ? BadPoint {
+    if s.Len() != 32: error BadPoint.Off
+    y := fld.Fe.Unpack(s)
+    canon := fld.Pack(y)
+    for i in range 31 { if canon[i] != s[i]: error BadPoint.Off }
+    if canon[31] != (s[31] & 0x7f): error BadPoint.Off
+    sign := U64(s[31] >> 7)
+    y2 := fld.Sq(y)
+    u := fld.Sub(y2, fld.Fe.Of(1))
+    v := fld.Add(fld.Mul(D, y2), fld.Fe.Of(1))
+    v3 := fld.Mul(fld.Sq(v), v)
+    x := fld.Mul(fld.Mul(u, v3), fld.Pow(fld.Mul(u, fld.Mul(fld.Sq(v3), v)), 251, Array<I64>[1]))   # u v^3 (u v^7)^((p-5)/8)
+    vx2 := fld.Mul(v, fld.Sq(x))
+    if not subtle.Equal(fld.Pack(vx2), fld.Pack(u)) {
+        if not subtle.Equal(fld.Pack(vx2), fld.Pack(fld.Neg(u))): error BadPoint.Off
+        x = fld.Mul(x, SqrtM1)
+    }
+    xb := fld.Pack(x)
+    if subtle.IsZero(xb) and sign == 1: error BadPoint.Off
+    if U64(xb[0] & 1) != sign: x = fld.Neg(x)
+    return Pt(x, y, fld.Fe.Of(1), fld.Mul(x, y))
+}
+
+# ---- scalars modulo L
+
+fn limbs(b Array<U8>&, at I64, n I64) Array<U64> {
+    w := Array<U64>(n)
+    for i in range n {
+        v U64 = 0
+        for j in range 8: v |= U64(b[at + 8 * i + j]) << U64(8 * j)
+        w[i] = v
+    }
+    return w
+}
+
+fn bytesOf(w Array<U64>&) Array<U8> {
+    out := Array<U8>(8 * w.Len())
+    for i in range out.Len(): out[i] = U8((w[i / 8] >> U64(8 * (i % 8))) & 0xff)
+    return out
+}
+
+# a little-endian number of up to 512 bits (in 64-bit words) modulo L, as 32 bytes: one bit at a time from the top
+# the accumulator doubled and L taken off by a mask where it reaches L - the same work for every value
+fn reduce(w Array<U64>&) Array<U8> {
+    acc := Array<U64>(4)
+    i := 64 * w.Len() - 1
+    for i >= 0 {
+        carry := (w[i / 64] >> U64(i % 64)) & 1
+        for j in range 4 {
+            top := acc[j] >> 63
+            acc[j] = (acc[j] << 1) | carry
+            carry = top
+        }
+        d := Array<U64>(4)
+        borrow U64 = 0
+        for j in range 4 {
+            t := U128(acc[j]) - U128(Order[j]) - U128(borrow)
+            d[j] = U64(t)
+            borrow = U64(t >> 127)
+        }
+        m := borrow - 1                            # all ones where acc >= L (no borrow): take the difference
+        for j in range 4: acc[j] ^= m & (acc[j] ^ d[j])
+        i--
+    }
+    return bytesOf(acc)
+}
+
+# (r + k a) mod L, each 32 bytes
+fn mulAddL(k Array<U8>&, a Array<U8>&, r Array<U8>&) Array<U8> {
+    x := limbs(k, 0, 4)
+    y := limbs(a, 0, 4)
+    p := Array<U64>(8)
+    for i in range 4 {
+        carry U128 = 0
+        for j in range 4 {
+            t := U128(x[i]) * U128(y[j]) + U128(p[i + j]) + carry
+            p[i + j] = U64(t)
+            carry = t >> 64
+        }
+        p[i + 4] = U64(carry)
+    }
+    z := limbs(r, 0, 4)
+    carry U128 = 0
+    for i in range 8 {
+        t := U128(p[i]) + (U128(z[i]) if i < 4 else 0) + carry
+        p[i] = U64(t)
+        carry = t >> 64
+    }
+    return reduce(p)
+}
+
+fn hashL(parts ...Array<U8>&) Array<U8> {
+    h := sha512.Hasher()
+    for p in parts: h.Push(p)
+    return reduce(limbs(h.Sum(), 0, 8))
+}
+
+# the expanded private key: the clamped scalar and the prefix
+fn expand(seed Array<U8>&) Array<U8>, Array<U8> {
+    h := sha512.Sum(seed)
+    a := Array<U8>(32)
+    for i in range 32: a[i] = h[i]
+    a[0] &= 248
+    a[31] &= 127
+    a[31] |= 64
+    return a, h[32:]
+}
+
+# the 32-byte public key of a 32-byte private seed
+fn Public(seed Array<U8>&) Array<U8> {
+    a, _ := expand(seed)
+    return encode(smul(a, Base))
+}
+
+# the 64-byte signature of msg by the holder of seed
+fn Sign(seed Array<U8>&, msg Array<U8>&) Array<U8> {
+    a, prefix := expand(seed)
+    pub := encode(smul(a, Base))
+    r := hashL(prefix, msg)
+    rb := encode(smul(r, Base))
+    s := mulAddL(hashL(rb, pub, msg), a, r)
+    out := Array<U8>(64)
+    for i in range 32 {
+        out[i] = rb[i]
+        out[32 + i] = s[i]
+    }
+    return out
+}
+
+# whether sig is pub's signature of msg (RFC 8032 5.1.7, S below L, the cofactorless equation [S]B = R + [k]A)
+fn Verify(pub Array<U8>&, msg Array<U8>&, sig Array<U8>&) Bool {
+    if sig.Len() != 64 or pub.Len() != 32: return false
+    s := limbs(sig, 32, 4)
+    i := 3
+    for i >= 0 {                      # S < L, word by word from the top
+        if s[i] < Order[i]: break
+        if s[i] > Order[i] or i == 0: return false
+        i--
+    }
+    an := try Pt.Decode(pub) catch { return false }
+    na := Pt(fld.Neg(an.x), an.y, an.z, fld.Neg(an.t))
+    rb :~ sig[:32]
+    k := hashL(rb, pub, msg)
+    return subtle.Equal(encode(padd(smul(sig[32:], Base), smul(k, na))), rb)
+}
+
+if TestBuild {
+
+import "hex"
+
+fn hx(s String&) Array<U8> { return hex.Decode(s)! }
+
+test Sign "RFC 8032 7.1's tests 1, 2, 3 and SHA(abc); a changed message, signature or key does not verify" {
+    cases := Array<String>[
+        "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60", ""
+        "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+        "e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b"
+        "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb", "72"
+        "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c"
+        "92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00"
+        "c5aa8df43f9f837bedb7442f31dcb7b166d38535076f094b85ce3a2e0b4458f7", "af82"
+        "fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025"
+        "6291d657deec24024827e69c3abe01a30ce548a284743a445e3680d7db5ac3ac18ff9b538d16f290ae67f760984dc6594a7c15e9716ed28dc027beceea1ec40a"
+        "833fe62409237b9d62ec77587520911e9a759cec1d19755b7da901b96dca3d42"
+        "ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f"
+        "ec172b93ad5e563bf4932c70e1245034c35467ef2efd4d64ebf819683467e2bf"
+        "dc2a4459e7369633a52b1bf277839a00201009a3efbf3ecb69bea2186c26b58909351fc9ac90b3ecfdfbc7c66431e0303dca179c138ac17ad9bef1177331a704"]
+    for i in range 0, cases.Len(), 4 {
+        seed := hx(cases[i])
+        msg := hx(cases[i + 1])
+        pub := Public(seed)
+        assert hex.Encode(pub) == cases[i + 2]
+        sig := Sign(seed, msg)
+        assert hex.Encode(sig) == cases[i + 3] and Verify(pub, msg, sig)
+        bad := sig
+        bad[5] ^= 1
+        assert not Verify(pub, msg, bad)
+        more := Array<U8>(msg.Len() + 1, 0x61)
+        for j in range msg.Len(): more[j] = msg[j]
+        assert not Verify(pub, more, sig)
+        assert not Verify(Public(hx(cases[(i + 4) % cases.Len()])), msg, sig)
+    }
+}
+
+test Verify "S at or above L, a key not on the curve and a short signature are refused" {
+    seed := hx("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60")
+    pub := Public(seed)
+    sig := Sign(seed, "x")
+    big := sig
+    for i in range 32: big[32 + i] = bytesOf(Order)[i]
+    assert not Verify(pub, "x", big) and not Verify(pub, "x", sig[:63])
+    off := Array<U8>(32)
+    off[0] = 2                                     # y = 2 is on no point of the curve
+    ok := true
+    try Pt.Decode(off) catch { ok = false }
+    assert not ok and not Verify(off, "x", sig)
+}
+
+}

@@ -1,0 +1,137 @@
+# curve25519 - arithmetic in the field GF(2^255 - 19), the field of Curve25519 and Edwards25519, shared by std/x25519
+# (key agreement) and std/ed25519 (signatures); most programs want one of those. A field element Fe is held as five
+# 51-bit limbs (radix 2^51) in U64 and multiplied through U128. Every operation takes the same time whatever the
+# values: Sel picks between two elements by a mask, not a branch. Pack gives the canonical 32 bytes, Unpack reads them.
+# Imported with `import "std/curve25519"`.
+
+M51 U64 = 0x7ffffffffffff                          # 2^51 - 1
+
+# a field element: l0 + l1 2^51 + l2 2^102 + l3 2^153 + l4 2^204, each limb a little over 51 bits at most
+type Fe struct(l0 U64, l1 U64, l2 U64, l3 U64, l4 U64) { l0, l1, l2, l3, l4 }
+
+# the limbs carried down to 51 bits (the top's carry folded into the bottom times 19, as 2^255 = 19)
+fn Fe.Carried(a U64, b U64, c U64, d U64, e U64) Fe {
+    b2 := b + (a >> 51)
+    c2 := c + (b2 >> 51)
+    d2 := d + (c2 >> 51)
+    e2 := e + (d2 >> 51)
+    a2 := (a & M51) + 19 * (e2 >> 51)
+    return Fe(a2 & M51, (b2 & M51) + (a2 >> 51), c2 & M51, d2 & M51, e2 & M51)
+}
+
+fn Add(f Fe, g Fe) Fe { return Fe.Carried(f.l0 + g.l0, f.l1 + g.l1, f.l2 + g.l2, f.l3 + g.l3, f.l4 + g.l4) }
+
+# f - g, with 4p added so no limb goes below zero
+fn Sub(f Fe, g Fe) Fe {
+    return Fe.Carried(f.l0 + 0x1fffffffffffb4 - g.l0, f.l1 + 0x1ffffffffffffc - g.l1, f.l2 + 0x1ffffffffffffc - g.l2
+        f.l3 + 0x1ffffffffffffc - g.l3, f.l4 + 0x1ffffffffffffc - g.l4)
+}
+
+fn Neg(f Fe) Fe { return Sub(Fe(0, 0, 0, 0, 0), f) }
+
+# the U128 sums of products carried down to five limbs
+fn Fe.Wide(r0 U128, r1 U128, r2 U128, r3 U128, r4 U128) Fe {
+    s1 := r1 + (r0 >> 51)
+    s2 := r2 + (s1 >> 51)
+    s3 := r3 + (s2 >> 51)
+    s4 := r4 + (s3 >> 51)
+    top := U64(s4 >> 51)
+    return Fe.Carried((U64(r0) & M51) + 19 * top, U64(s1) & M51, U64(s2) & M51, U64(s3) & M51, U64(s4) & M51)
+}
+
+fn Mul(f Fe, g Fe) Fe {
+    f0 := U128(f.l0)
+    f1 := U128(f.l1)
+    f2 := U128(f.l2)
+    f3 := U128(f.l3)
+    f4 := U128(f.l4)
+    g0 := U128(g.l0)
+    g1 := U128(g.l1)
+    g2 := U128(g.l2)
+    g3 := U128(g.l3)
+    g4 := U128(g.l4)
+    h1 := 19 * g1
+    h2 := 19 * g2
+    h3 := 19 * g3
+    h4 := 19 * g4
+    return Fe.Wide(f0 * g0 + f1 * h4 + f2 * h3 + f3 * h2 + f4 * h1, f0 * g1 + f1 * g0 + f2 * h4 + f3 * h3 + f4 * h2
+        f0 * g2 + f1 * g1 + f2 * g0 + f3 * h4 + f4 * h3, f0 * g3 + f1 * g2 + f2 * g1 + f3 * g0 + f4 * h4
+        f0 * g4 + f1 * g3 + f2 * g2 + f3 * g1 + f4 * g0)
+}
+
+fn Sq(f Fe) Fe { return Mul(f, f) }
+
+# f to the power whose bits top..0 are all set but the ones named in clear (the exponents used here are of that form)
+fn Pow(f Fe, top I64, clear Array<I64>&) Fe {
+    r := f
+    i := top - 1
+    for i >= 0 {
+        r = Sq(r)
+        set := true
+        for c in clear { if c == i: set = false }   # the exponent is public: a branch on it reveals nothing
+        if set: r = Mul(r, f)
+        i--
+    }
+    return r
+}
+
+fn Invert(f Fe) Fe { return Pow(f, 254, Array<I64>[4, 2]) }           # f^(p-2), p-2 = 2^255 - 21
+
+# g where b is 1, f where it is 0, without a branch
+fn Sel(f Fe, g Fe, b U64) Fe {
+    m := 0 - b
+    return Fe(f.l0 ^ (m & (f.l0 ^ g.l0)), f.l1 ^ (m & (f.l1 ^ g.l1)), f.l2 ^ (m & (f.l2 ^ g.l2))
+        f.l3 ^ (m & (f.l3 ^ g.l3)), f.l4 ^ (m & (f.l4 ^ g.l4)))
+}
+
+# 32 little-endian bytes, the top bit ignored (RFC 7748 5)
+fn Fe.Unpack(s Array<U8>&) Fe {
+    w := Array<U64>(4)
+    for i in range 4 {
+        v U64 = 0
+        for j in range 8: v |= U64(s[8 * i + j]) << U64(8 * j)
+        w[i] = v
+    }
+    return Fe(w[0] & M51, ((w[0] >> 51) | (w[1] << 13)) & M51, ((w[1] >> 38) | (w[2] << 26)) & M51
+        ((w[2] >> 25) | (w[3] << 39)) & M51, (w[3] >> 12) & M51)
+}
+
+# the canonical 32 bytes: fully reduced below p
+fn Pack(f Fe) Array<U8> {
+    h := Fe.Carried(f.l0, f.l1, f.l2, f.l3, f.l4)
+    h = Fe.Carried(h.l0, h.l1, h.l2, h.l3, h.l4)
+    q := (h.l0 + 19) >> 51                         # 1 where h >= p: then h + 19 reaches 2^255
+    q = (h.l1 + q) >> 51
+    q = (h.l2 + q) >> 51
+    q = (h.l3 + q) >> 51
+    q = (h.l4 + q) >> 51
+    a := h.l0 + 19 * q
+    b := h.l1 + (a >> 51)
+    c := h.l2 + (b >> 51)
+    d := h.l3 + (c >> 51)
+    e := (h.l4 + (d >> 51)) & M51                  # 2^255 dropped
+    a &= M51
+    b &= M51
+    c &= M51
+    d &= M51
+    w := Array<U64>[a | (b << 51), (b >> 13) | (c << 38), (c >> 26) | (d << 25), (d >> 39) | (e << 12)]
+    out := Array<U8>(32)
+    for i in range 32: out[i] = U8((w[i / 8] >> U64(8 * (i % 8))) & 0xff)
+    return out
+}
+
+fn Fe.Of(n U64) Fe { return Fe(n, 0, 0, 0, 0) }
+
+if TestBuild {
+
+test "an element times its inverse is one; Pack reduces fully" {
+    a := Fe.Of(123456789)
+    assert Pack(Mul(a, Invert(a))) == Pack(Fe.Of(1))
+    assert Pack(Sub(a, a)) == Pack(Fe.Of(0))
+    p := Array<U8>(32, 0xff)                       # 2^255 - 1 with the top bit ignored reads as p + 18: reduces to 18
+    p[0] = 0xed
+    p[31] = 0x7f
+    assert Pack(Fe.Unpack(p)) == Pack(Fe.Of(0))
+}
+
+}

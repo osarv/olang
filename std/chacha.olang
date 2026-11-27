@@ -3,8 +3,10 @@
 # the message back, or fails when anything (the message, the tag, the associated data) was changed or the key is
 # another. A nonce must never repeat under one key. XSeal and XOpen are XChaCha20-Poly1305: the same with a 24-byte
 # nonce, long enough to be chosen at random. Constant time: no branch and no address depends on the key or the data,
-# and the tag is compared without stopping at the first difference (Equal does that for any two byte strings).
+# and the tag is compared without stopping at the first difference (std/subtle).
 # Imported with `import "std/chacha"`.
+
+import "subtle"
 
 type Bad error {
     Forged                                         # the tag does not match: changed in transit, or another key
@@ -231,17 +233,8 @@ fn Open(key Array<U8>&, nonce Array<U8>&, aad Array<U8>&, sealed Array<U8>&) Arr
     n := sealed.Len() - 16
     ct :~ sealed[:n]
     tag := tagOf(key, nonce, aad, ct)
-    if not Equal(tag, sealed[n:]): error Bad.Forged
+    if not subtle.Equal(tag, sealed[n:]): error Bad.Forged
     return XorStream(key, nonce, 1, ct)
-}
-
-# whether two byte strings are equal, looking at every byte whatever the first difference: for tags, MACs and secrets,
-# where stopping early tells an attacker how much matched. Differing lengths are unequal at once (lengths are not secret)
-fn Equal(a Array<U8>&, b Array<U8>&) Bool {
-    if a.Len() != b.Len(): return false
-    diff U8 = 0
-    for i in range a.Len(): diff |= a[i] ^ b[i]
-    return diff == 0
 }
 
 # Seal with a 24-byte nonce (XChaCha20-Poly1305): the subkey comes from the key and the nonce's first 16 bytes
@@ -324,12 +317,6 @@ test XSeal "XChaCha20-Poly1305 round trip against a reference, and forgery" {
     bad := sealed
     bad[3] ^= 1
     assert (try XOpen(key, nonce, aad, bad) catch default Array<U8>(0)).Len() == 0
-}
-
-test Equal "compares whole strings" {
-    assert Equal(count(16, 0), count(16, 0))
-    assert not Equal(count(16, 0), count(16, 1))
-    assert not Equal(count(16, 0), count(15, 0))
 }
 
 }

@@ -1,0 +1,29 @@
+# subtle - comparisons whose time does not depend on the data compared, for tags, MACs, keys and other secrets, where
+# stopping at the first difference would tell an attacker how much of a guess matched. Equal compares two byte strings,
+# IsZero tests one for being all zero. Both look at every byte; only the lengths (never secret) are compared early.
+# Imported with `import "std/subtle"`.
+
+# whether a and b are equal: false at once for different lengths, else every byte looked at whatever the first difference
+fn Equal(a Array<U8>&, b Array<U8>&) Bool {
+    if a.Len() != b.Len(): return false
+    diff U8 = 0
+    for i in range a.Len(): diff |= a[i] ^ b[i]
+    return diff == 0
+}
+
+# whether every byte of a is zero
+fn IsZero(a Array<U8>&) Bool {
+    acc U8 = 0
+    for b in a: acc |= b
+    return acc == 0
+}
+
+if TestBuild {
+
+test "Equal and IsZero" {
+    assert Equal(Array<U8>[1, 2, 3], Array<U8>[1, 2, 3]) and Equal(Array<U8>(0), Array<U8>(0))
+    assert not Equal(Array<U8>[1, 2, 3], Array<U8>[1, 2, 4]) and not Equal(Array<U8>[1, 2, 3], Array<U8>[1, 2])
+    assert IsZero(Array<U8>(8)) and not IsZero(Array<U8>[0, 0, 1])
+}
+
+}
