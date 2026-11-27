@@ -1662,15 +1662,25 @@ fn (c mut Config&) listLink(objs Vec<String&>&, prog Program&, dir String&, ir B
     args.Push(c.Clang)
     for f in c.ModeFlags(): args.Push(f)
     if c.Thin: args.Push($"-Wl,-plugin-opt,-import-instr-limit=" + $ImportLimit)
-    args.Push("-Wl,-plugin-opt=save-temps" if ir else "-Wl,-plugin-opt=emit-asm")
-    args.Push($"-Wl,-plugin-opt=opt-remarks-filename=" + $dir + "/link.yaml")
-    args.Push($"-Wl,-plugin-opt=opt-remarks-passes=" + $RemarkPasses)
+    if c.Target.Os == "windows" and ir {
+        # B12f: lld's MinGW driver takes no -plugin-opt: the COFF linker's own save-temps, and no remarks (-asm's
+        # listing of its --lto-emit-asm output is not read yet: it stays refused)
+        args.Push("-Wl,--Xlink=-lldsavetemps")
+    } else {
+        args.Push("-Wl,-plugin-opt=save-temps" if ir else "-Wl,-plugin-opt=emit-asm")
+        args.Push($"-Wl,-plugin-opt=opt-remarks-filename=" + $dir + "/link.yaml")
+        args.Push($"-Wl,-plugin-opt=opt-remarks-passes=" + $RemarkPasses)
+    }
     args.Push("-o")
     args.Push($dir + "/code")
     for o in objs: args.Push(o)
     for x in prog.Links: args.Push(x)
     for x in c.SystemLibs(): args.Push(x)
     if prog.Dyncall != "": args.Push("-lffi")
+    if c.Target.Os == "windows" {
+        args.Push("-static")
+        args.Push("-fuse-ld=lld")             # as Link links for COFF
+    }
     if c.Clang == "": error Failed.Unbuilt
     parts Vec<String&>
     for a in args: parts.Push(a)

@@ -944,6 +944,9 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   kept, the local only read for the copy and left in its block (O8f, gap 17, 2026-11-25). What such a copied instance
   views of its arguments the constructor only reads - a value local's copy, a call's value - is built in the innermost
   scope open, read only until that copy is made, never where the instance's local lives (wt-liftcopy, 2026-11-25).
+  Early freeing's feeder (a local built from its declaration on in the region of the place its last-mention copy goes
+  to, moved there) is never one a part of which is given storage after its declaration (`s.Model = Models[i]`): that
+  value is built where the local lives, and the move left it there (wt-winglobal, 2026-11-27).
 - **A fresh value given to a reference is built where the reference goes (E12c, O6; 2026-11-23, mine).** A text
   (`v.Push($s)` into a `Vec<String&>`) or a call's result whose callee hands back no view of its arguments
   (`v.Push(b.ToString())`), promoted to a read-only reference to a run-time-length array, is built in the reference's

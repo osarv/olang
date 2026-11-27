@@ -1,0 +1,31 @@
+# D9i, O8d: a local copied from a global, given parts, then stored back whole (feedpartsave.Save), where the global's
+# place keeps (an export fn C is given reaches a global): the parts given after the copy were built in the frame while
+# the local was moved into the global - the global named freed text once Save returned
+import "feedpartsave"
+
+type Pair struct(key I32, tag U8) {
+    key
+    tag
+}
+
+extern fn qsort(base mut Array<Pair>&, n I64, size I64, cmp fn&(a Pair&, b Pair&) I32)
+
+export fn fpByKey(a Pair&, b Pair&) I32 {
+    feedpartsave.Save(I64(a.key) % 3)
+    return a.key - b.key
+}
+
+fn fpChurn() {
+    for k in range 1000 {
+        t := "text made over what Save built " + $k
+        if t.Len() == 0: Println(t)
+    }
+}
+
+test "D9i: a local given parts after its copy from a global is stored back with them" {
+    xs := Array<Pair>[Pair(5, 'e'), Pair(2, 'b')]
+    qsort(xs, xs.Len(), 8, fpByKey)
+    fpChurn()
+    assert feedpartsave.P.Model == "medium"
+    assert feedpartsave.P.Key == "k2"
+}

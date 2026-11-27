@@ -117,6 +117,9 @@ test block cannot make (programs that must fail to compile, whole builds) live i
 - `cfnptr.olang`, `cfnptr/` - C function pointers (X13a) with a C file of the corpus's own, imported: a struct of them
   filled from export fns and called by C, C's own called through, and a table reached through a pointer to a pointer as
   JNI's is; a fresh struct's nulls and its layout decided while compiling.
+- `feedpart.olang`, `feedpartsave.olang` - a local copied from a struct global, a field given an element of a global
+  array, then stored back whole, in a module whose global's place keeps (an export fn handed to C reaches a global):
+  every field the global holds afterwards is its own (D9i, O8d).
 
 Imports are relative to the importing file. A module's identity is its path from the
 working directory (M22), so these are `tests/shared`, `tests/geom/rect` and so on.

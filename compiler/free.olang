@@ -2061,6 +2061,11 @@ fn (f mut Free&) feedStore(b I64, l I64, init typed.Expr&, cs I64, p typed.Lvalu
     for a in u.AliasOf {
         if a == l: return
     }
+    # (nor one a part of which is given storage after its declaration - `s.name = Names[i]`: that value is built where
+    # the local lives, not in the region its declaration's value is built in, and would be left there by the move)
+    for a in u.StoreAt {
+        if a == l: return
+    }
     k := -1
     match p {
         case typed.Lvalue.Field(_, _, _, _) { k = f.placeOfPlace(p) }

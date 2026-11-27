@@ -44399,3 +44399,23 @@ its callers copy where they keep it - so retView now marks the calls it hands ba
 there, whatever the statement. Checks' viewreturns (a Next through v.Iter() and an nth, 20,000 passes over 100 elements,
 under 8 MB) ran out of memory before. A type whose Copy is declared still copies (E31d), in its callee too.
 
+
+## 2026-11-27: a feeder given parts after its declaration is no feeder (O8d, D9i; mine; wt-winglobal)
+
+Viska's settings dialog (Windows) saved its settings as `s := settings.S`, `s.Model = settings.Models[i]`, more fields,
+`settings.S = s` - and after Save returned, `settings.S.Model` read the bytes of freed text. Not Windows' doing: the
+same shape fails on Linux once Save sits in a module of its own and an export fn handed to C reaches a global (so the
+global's place keeps - O8d condition 3 - and its region is decided only at link time). Early freeing made `s` a feeder
+(free.findFeeds): a local copied whole at its last mention into an owner place, its declaration's value built in a
+region for that place from the start, and the store a move (lowering's movable leaves the copy out, D9i). But the
+values given to its fields afterwards - the element's copy, `String(...)`, a conditional - were built where the scope
+pass puts the local, the frame, and the move carried pointers into the frame into the global. Where the place is kept
+the declaration's value falls back to the place's scope (the program's) while the fields' values stay in the frame;
+nothing tied them to the feeder's region either way. feedStore now refuses a local a part of which is given storage
+after its declaration (LocalUses.StoreAt): the store then copies, as it does for any other local. Building such values
+in the feeder's region instead (as feedFits does for a writable call's builds) would keep the move; not done, the
+copy is what every other local pays. Test: tests/feedpart.olang (with feedpartsave.olang), which printed freed text
+before. Found along the way: `explain -ir` on the Windows target linked with the host's ld, which takes no COFF
+objects - listLink now links as Link does (lld, -static) and asks lld's COFF linker for its save-temps
+(`--Xlink=-lldsavetemps`; the MinGW driver takes no -plugin-opt, so no remarks there). `-asm` there is still refused:
+lld writes its assembly, but the listing does not yet find a function in COFF's.
