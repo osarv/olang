@@ -1,0 +1,475 @@
+# url - URLs (RFC 3986): parsed into their parts and written back, percent-encoding, query strings, and a reference
+# resolved against a base. Ordinary olang: no extern, so it runs while compiling (K1) and under -i as in a built program.
+#
+#     u := try url.Url.Parse("https://user@example.com:8443/a/b?x=1#top")
+#     u.Scheme, u.User, u.Host, u.Port, u.Path, u.Query, u.Fragment     # "https" "user" "example.com" "8443" ...
+#     port := try u.PortNumber()                                         # 8443; 443 for https with none written
+#     next := try u.Resolve("../c?y=2")                                  # https://user@example.com:8443/c?y=2
+#     params := try url.ParseQuery(u.Query)                              # Param("x", "1")
+#     q := url.EncodeQuery(Array<url.Param>[url.Param("q", "a b&c")])     # "q=a+b%26c"
+#
+# A Url holds each part as it was written - escaped, as on the wire - so writing it back ($u) gives the same text; the
+# scheme and the host are lower-cased (they are case-insensitive), and an IPv6 host is held without its brackets. Port
+# is the port as written, "" where none was; PortNumber gives it as a number, or the scheme's default. HasAuthority,
+# HasQuery and HasFragment say whether "//", "?" and "#" were written at all (a part may be present and empty, as in
+# "http://a/b?" - RFC 3986 tells the two apart when resolving and writing). Unescape a part to read it as text.
+#
+# Strict where RFC 3986 is: a space, a control byte, a '%' not followed by two hex digits, a bracketed host that is not
+# an IPv6 address, or a port that is not a number up to 65535 is an Error naming the text refused.
+
+# why a text is not a URL, or a part not what was asked for
+type Error error {
+    Invalid(text String)     # a space or a control byte (0x00-0x1F, 0x7F) in the URL, or a scheme that is no scheme
+    Host(text String)        # a bracketed host that is not an IPv6 address: "[::1]" is one, "[x]" is not
+    Port(text String)        # a port that is not digits, or above 65535
+    Escape(text String)      # a '%' not followed by two hex digits
+    NoPort                   # PortNumber: no port written, and the scheme has no default
+    NoParam(name String)     # Lookup: no parameter of that name
+}
+
+# a URL or a relative reference, its parts as written (see the header)
+type Url struct() {
+    Scheme String = ""
+    User String = ""
+    Host String = ""
+    Port String = ""
+    Path String = ""
+    Query String = ""
+    Fragment String = ""
+    HasAuthority Bool = false
+    HasQuery Bool = false
+    HasFragment Bool = false
+}
+
+# one name=value pair of a query string, both unescaped
+type Param struct(Name String, Value String) {
+    Name
+    Value
+}
+
+# ---- parsing and writing ----
+
+# whether c may continue a scheme (letters, digits, '+', '-', '.')
+fn schemeChar(c Char) Bool {
+    return c >= 'a' and c <= 'z' or c >= 'A' and c <= 'Z' or c >= '0' and c <= '9' or c == '+' or c == '-' or c == '.'
+}
+
+# the value of the hex digit c, -1 when it is not one
+fn hexValue(c Char) I64 {
+    if c >= '0' and c <= '9': return I64(c) - I64('0')
+    if c >= 'a' and c <= 'f': return I64(c) - I64('a') + 10
+    if c >= 'A' and c <= 'F': return I64(c) - I64('A') + 10
+    return -1
+}
+
+# the length of the scheme t starts with (before its ':'), 0 when it starts with none
+fn schemeLen(t String&) I64 {
+    if t.Len() == 0 or not (t[0] >= 'a' and t[0] <= 'z' or t[0] >= 'A' and t[0] <= 'Z'): return 0
+    i I64 = 1
+    for i < t.Len() and schemeChar(t[i]): i++
+    return i if i < t.Len() and t[i] == ':' else 0
+}
+
+# fails naming t where it holds a space or a control byte, or a '%' not followed by two hex digits
+fn checkText(t String&) ? Error {
+    for i, c in t {
+        if c <= ' ' or c == 0x7F: error Error.Invalid(String(t))
+        if c != '%': continue
+        if i + 2 >= t.Len() or hexValue(t[i + 1]) < 0 or hexValue(t[i + 2]) < 0: error Error.Escape(String(t))
+    }
+}
+
+# the index of the first of the bytes "stops" in t at or after from, t's length where there is none
+fn upTo(t String&, from I64, stops String&) I64 {
+    for i in range from, t.Len() {
+        if t[i] in stops: return i
+    }
+    return t.Len()
+}
+
+# whether h, a bracketed host's inside, reads as an IPv6 address: hex digits and ':' (two at least), with a dotted
+# IPv4 tail allowed
+fn ipv6Like(h String&) Bool {
+    colons := 0
+    for c in h {
+        if c == ':': colons++
+        else if hexValue(c) < 0 and c != '.': return false
+    }
+    return colons >= 2
+}
+
+# t read as a URL or a relative reference
+fn Url.Parse(t String&) Url ? Error {
+    try checkText(t)
+    u := Url()
+    i := schemeLen(t)
+    if i > 0 {
+        u.Scheme = t[:i].ToLower()
+        i++
+    }
+    if t[i:].StartsWith("//") {
+        end := upTo(t, i + 2, "/?#")
+        try u.authority(t[i + 2:end])
+        i = end
+    }
+    end := upTo(t, i, "?#")
+    u.Path = String(t[i:end])
+    i = end
+    if i < t.Len() and t[i] == '?' {
+        end = upTo(t, i + 1, "#")
+        u.Query = String(t[i + 1:end])
+        u.HasQuery = true
+        i = end
+    }
+    if i < t.Len() {
+        u.Fragment = String(t[i + 1:])
+        u.HasFragment = true
+    }
+    return u
+}
+
+# the authority's parts - user info, host, port - from a, the text between "//" and the path
+fn (u mut Url&) authority(a String&) ? Error {
+    u.HasAuthority = true
+    at I64 = -1
+    for i, c in a {
+        if c == '@': at = i
+    }
+    if at >= 0: u.User = String(a[:at])
+    hp :~ a[at + 1:]
+    portAt I64 = -1
+    if hp.StartsWith("[") {
+        close := try hp.FindByte(']') catch { error Error.Host(String(hp)) }
+        if not ipv6Like(hp[1:close]): error Error.Host(String(hp))
+        u.Host = hp[1:close].ToLower()
+        if close + 1 < hp.Len() and hp[close + 1] != ':': error Error.Host(String(hp))
+        if close + 1 < hp.Len(): portAt = close + 1
+    } else {
+        portAt = try hp.FindByte(':') catch default -1
+        u.Host = hp[:portAt if portAt >= 0 else hp.Len()].ToLower()
+    }
+    if portAt < 0: return
+    port :~ hp[portAt + 1:]
+    for c in port {
+        if c < '0' or c > '9': error Error.Port(String(port))
+    }
+    if port.Len() > 5 or port.Len() > 0 and (try port.ParseInt() catch default 0) > 65535: error Error.Port(String(port))
+    u.Port = String(port)
+}
+
+# the URL written back as text: the parts as they are held, with "//", "?" and "#" where they were written
+fn (u Url&) Str() String {
+    b := StringBuilder()
+    if u.Scheme != "" {
+        b.Push(u.Scheme)
+        b.PushChar(':')
+    }
+    if u.HasAuthority {
+        b.Push("//")
+        b.Push(u.HostPort())
+    }
+    b.Push(u.Path)
+    if u.HasQuery: b.Push("?" + u.Query)
+    if u.HasFragment: b.Push("#" + u.Fragment)
+    return b.ToString()
+}
+
+# the authority as written: user info and '@' where there is user info, the host (bracketed when it is an IPv6
+# address), ':' and the port where one was written
+fn (u Url&) HostPort() String {
+    b := StringBuilder()
+    if u.User != "": b.Push(u.User + "@")
+    b.Push("[" + u.Host + "]" if ':' in u.Host else u.Host)
+    if u.Port != "": b.Push(":" + u.Port)
+    return b.ToString()
+}
+
+# the port as a number: the one written, else the scheme's default (http and ws 80, https and wss 443, ftp 21) -
+# failing with NoPort for a scheme with none
+fn (u Url&) PortNumber() U16 ? Error.NoPort {
+    if u.Port != "": return U16(try u.Port.ParseInt() catch { error Error.NoPort })
+    match u.Scheme {
+        case "http", "ws" { return 80 }
+        case "https", "wss" { return 443 }
+        case "ftp" { return 21 }
+        case _ { error Error.NoPort }
+    }
+}
+
+# what an HTTP request names: the path ("/" where it is empty) and the query, as written; never the fragment
+fn (u Url&) Target() String {
+    p :~ u.Path if u.Path != "" else "/"
+    return p + "?" + u.Query if u.HasQuery else String(p)
+}
+
+# ---- percent-encoding ----
+
+# whether c is unreserved (RFC 3986 2.3): letters, digits, '-', '.', '_', '~' - never escaped
+fn unreserved(c Char) Bool {
+    return c >= 'a' and c <= 'z' or c >= 'A' and c <= 'Z' or c >= '0' and c <= '9' or c == '-' or c == '.' or c == '_' or
+        c == '~'
+}
+
+# t with every byte but the unreserved ones and those in "keep" written %XX (upper-case hex); a space as '+' where
+# plus is set
+fn escape(t String&, keep String&, plus Bool) String {
+    digits := "0123456789ABCDEF"
+    out := Vec<Char>()
+    for c in t {
+        if unreserved(c) or c in keep {
+            out.Push(c)
+        } else if plus and c == ' ' {
+            out.Push('+')
+        } else {
+            out.Push('%')
+            out.Push(digits[c >> 4])
+            out.Push(digits[c & 15])
+        }
+    }
+    return String(out.ToArray())
+}
+
+# t escaped for a URL's path: what a path may hold as it is - unreserved bytes, '/', and RFC 3986's sub-delims, ':'
+# and '@' - stays; the rest ('?', '#', '%', a space, any byte above 0x7E) is written %XX
+fn EscapePath(t String&) String { return escape(t, "/!$&'()*+,;=:@", false) }
+
+# t escaped for one name or value of a query string (form encoding, as a browser sends a form): unreserved bytes stay,
+# a space becomes '+', every other byte %XX - so '&', '=', '+' and '#' in t never split or end the query
+fn EscapeQuery(t String&) String { return escape(t, "", true) }
+
+# t with each %XX replaced by the byte it names; '+' stays '+' (a path's rule). Fails with Escape where a '%' is not
+# followed by two hex digits
+fn Unescape(t String&) String ? Error.Escape { return try unescape(t, false) }
+
+# t as a query string's name or value: each %XX the byte it names, and '+' a space (form encoding)
+fn UnescapeQuery(t String&) String ? Error.Escape { return try unescape(t, true) }
+
+fn unescape(t String&, plus Bool) String ? Error.Escape {
+    out := Vec<Char>()
+    i I64 = 0
+    for i < t.Len() {
+        c := t[i]
+        i++
+        if plus and c == '+': c = ' '
+        if c != '%' {
+            out.Push(c)
+            continue
+        }
+        hi := hexValue(t[i]) if i < t.Len() else -1
+        lo := hexValue(t[i + 1]) if i + 1 < t.Len() else -1
+        if hi < 0 or lo < 0: error Error.Escape(String(t))
+        out.Push(Char(hi * 16 + lo))
+        i += 2
+    }
+    return String(out.ToArray())
+}
+
+# ---- query strings ----
+
+# a query string's name=value pairs in order, unescaped by form encoding: pairs split at '&', name from value at the
+# first '=' (a pair with none has the value ""); empty pairs ("a=1&&b=2") are skipped
+fn ParseQuery(q String&) Array<Param> ? Error.Escape {
+    out := Vec<Param>()
+    for piece in q.Split("&") {
+        if piece.Len() == 0: continue
+        eq := try piece.FindByte('=') catch default piece.Len()
+        value := try UnescapeQuery(piece[eq + 1:]) if eq < piece.Len() else ""
+        out.Push(Param(try UnescapeQuery(piece[:eq]), value))
+    }
+    return out.ToArray()
+}
+
+# the pairs written as a query string (no leading '?'), each name and value escaped by EscapeQuery
+fn EncodeQuery(params Array<Param>&) String {
+    b := StringBuilder()
+    for i, p in params {
+        if i > 0: b.PushChar('&')
+        b.Push(EscapeQuery(p.Name) + "=" + EscapeQuery(p.Value))
+    }
+    return b.ToString()
+}
+
+# the value of the first parameter named "name" - failing with NoParam when there is none
+fn Lookup(params Array<Param>&, name String&) String& ? Error.NoParam {
+    for p in params {
+        if p.Name == name: return p.Value
+    }
+    error Error.NoParam(String(name))
+}
+
+# ---- references resolved (RFC 3986 5.2) ----
+
+# ref, a URL or a relative reference, resolved against u (RFC 3986 5.2.2): the URL a link "ref" on the page at u
+# leads to. Dot segments are removed from the path as 5.2.4 says
+fn (u Url&) ResolveUrl(ref Url&) Url {
+    if ref.Scheme != "" {
+        out := ref
+        out.Path = removeDots(ref.Path)
+        return out
+    }
+    out := Url()
+    out.Scheme = u.Scheme
+    out.Fragment = ref.Fragment
+    out.HasFragment = ref.HasFragment
+    if ref.HasAuthority {
+        out.authorityOf(ref)
+        out.Path = removeDots(ref.Path)
+        out.queryOf(ref)
+        return out
+    }
+    out.authorityOf(u)
+    if ref.Path == "" {
+        out.Path = u.Path
+        out.queryOf(ref if ref.HasQuery else u)
+        return out
+    }
+    out.Path = removeDots(ref.Path if ref.Path.StartsWith("/") else merge(u, ref.Path))
+    out.queryOf(ref)
+    return out
+}
+
+# the text "ref" parsed and resolved against u
+fn (u Url&) Resolve(ref String&) Url ? Error { return u.ResolveUrl(try Url.Parse(ref)) }
+
+fn (u mut Url&) authorityOf(from Url&) {
+    u.HasAuthority = from.HasAuthority
+    u.User = from.User
+    u.Host = from.Host
+    u.Port = from.Port
+}
+
+fn (u mut Url&) queryOf(from Url&) {
+    u.Query = from.Query
+    u.HasQuery = from.HasQuery
+}
+
+# a relative path joined to the base's: after the base's last '/', or after "/" where the base has an authority and
+# an empty path (5.2.3)
+fn merge(base Url&, path String&) String {
+    if base.HasAuthority and base.Path == "": return "/" + path
+    last I64 = -1
+    for i, c in base.Path {
+        if c == '/': last = i
+    }
+    return base.Path[:last + 1] + path
+}
+
+# the path with its "." and ".." segments taken out (5.2.4): "/a/b/../c/./d" is "/a/c/d"; a ".." above the root goes
+# nowhere
+fn removeDots(p String&) String {
+    out := Vec<Char>()
+    rest :~ p
+    for rest.Len() > 0 {
+        if rest.StartsWith("../") {
+            rest ~ rest[3:]
+        } else if rest.StartsWith("./") or rest.StartsWith("/./") {
+            rest ~ rest[2:]
+        } else if rest == "/." {
+            rest ~ "/"
+        } else if rest.StartsWith("/../") or rest == "/.." {
+            rest ~ "/" if rest == "/.." else rest[3:]
+            dropLast(out)
+        } else if rest == "." or rest == ".." {
+            rest ~ ""
+        } else {
+            end := upTo(rest, 1, "/")
+            out.PushAll(rest[:end])
+            rest ~ rest[end:]
+        }
+    }
+    return String(out.ToArray())
+}
+
+# out without its last segment and the '/' before it
+fn dropLast(out mut Vec<Char>&) {
+    k := out.Len()
+    for k > 0 and out.At(k - 1) != '/': k--
+    out.Truncate(k - 1 if k > 0 else 0)
+}
+
+# ---- the tests ----
+
+if TestBuild {
+
+test Url.Parse "a URL's parts, and written back as they came" {
+    u := Url.Parse("HTTPS://user:pw@Example.COM:8443/a/b%20c?x=1&y=2#top")!
+    assert u.Scheme == "https" and u.User == "user:pw" and u.Host == "example.com" and u.Port == "8443"
+    assert u.Path == "/a/b%20c" and u.Query == "x=1&y=2" and u.Fragment == "top" and u.PortNumber()! == 8443
+    assert $u == "https://user:pw@example.com:8443/a/b%20c?x=1&y=2#top" and u.Target() == "/a/b%20c?x=1&y=2"
+    v := Url.Parse("http://[2001:DB8::1]:80")!
+    assert v.Host == "2001:db8::1" and v.Port == "80" and v.Path == "" and v.Target() == "/" and $v == "http://[2001:db8::1]:80"
+    assert Url.Parse("http://[::ffff:1.2.3.4]/")!.Host == "::ffff:1.2.3.4"
+    w := Url.Parse("https://example.com")!
+    assert w.PortNumber()! == 443 and Url.Parse("http://a/")!.PortNumber()! == 80 and Url.Parse("ws://a:/")!.Port == ""
+    for t in Array<String&>["mailto:someone@example.com", "file:///etc/hosts", "/a?", "?q", "#f", "", "a:b:c", "//h", "x?#"] {
+        assert $Url.Parse(t)! == t
+    }
+    m := Url.Parse("mailto:someone@example.com")!
+    assert m.Scheme == "mailto" and not m.HasAuthority and m.Path == "someone@example.com"
+    f := Url.Parse("file:///etc/hosts")!
+    assert f.HasAuthority and f.Host == "" and f.Path == "/etc/hosts"
+    r := Url.Parse("../x/y?q")!
+    assert r.Scheme == "" and r.Path == "../x/y" and r.HasQuery and not r.HasFragment
+    assert Url.Parse("1http://a")!.Scheme == "" and Url.Parse("a/b:c")!.Scheme == ""
+    try Url.Parse("mailto:x").PortNumber() catch Error.NoPort { } catch { unreachable }
+}
+
+test Url.Parse "malformed URLs are refused, naming the text" {
+    try Url.Parse("http://a b/") catch Error.Invalid e { assert e.text == "http://a b/" } catch { unreachable }
+    try Url.Parse("http://a/\t") catch Error.Invalid { } catch { unreachable }
+    for t in Array<String&>["http://a/%", "http://a/%4", "http://a/%zz", "/a%2"] {
+        try Url.Parse(t) catch Error.Escape { continue } catch { }
+        unreachable $t
+    }
+    for t in Array<String&>["http://[x]/", "http://[::1/", "http://[::1]x/", "http://[1.2.3.4]/"] {
+        try Url.Parse(t) catch Error.Host { continue } catch { }
+        unreachable $t
+    }
+    for t in Array<String&>["http://a:65536/", "http://a:8x/", "http://a:-1/", "http://a:1000000/"] {
+        try Url.Parse(t) catch Error.Port { continue } catch { }
+        unreachable $t
+    }
+    assert Url.Parse("http://a:65535/")!.PortNumber()! == 65535
+}
+
+test "percent-encoding: paths and query components" {
+    assert EscapePath("/a b/ü?#%") == "/a%20b/%C3%BC%3F%23%25" and EscapePath("/x;y=1,z:@!") == "/x;y=1,z:@!"
+    assert EscapeQuery("a b&c=d+e/f~") == "a+b%26c%3Dd%2Be%2Ff~"
+    assert Unescape("/a%20b+c%2f")! == "/a b+c/" and UnescapeQuery("a+b%2Bc")! == "a b+c"
+    assert Unescape(EscapePath("ünï cödé/?"))! == "ünï cödé/?" and UnescapeQuery(EscapeQuery("&=+ %"))! == "&=+ %"
+    for bad in Array<String&>["%", "%4", "%g0", "a%0"] {
+        try Unescape(bad) catch Error.Escape { continue }
+        unreachable $bad
+    }
+}
+
+test "query strings to and from name/value pairs" {
+    ps := ParseQuery("a=1&b=x+y%26z&&c&d=&a=2")!
+    assert ps.Len() == 5 and ps[1].Name == "b" and ps[1].Value == "x y&z" and ps[2].Name == "c" and ps[2].Value == ""
+    assert Lookup(ps, "a")! == "1" and Lookup(ps, "d")! == ""
+    try Lookup(ps, "zz") catch Error.NoParam e { assert e.name == "zz" }
+    assert EncodeQuery(Array<Param>[Param("q", "a b&c"), Param("é", "=")]) == "q=a+b%26c&%C3%A9=%3D"
+    assert EncodeQuery(ParseQuery("x=1&y=a+b")!) == "x=1&y=a+b" and ParseQuery("")!.Len() == 0
+    try ParseQuery("a=%zz") catch Error.Escape { } catch { unreachable }
+}
+
+test Url.Resolve "RFC 3986 5.4: the normal and abnormal examples" {
+    base := Url.Parse("http://a/b/c/d;p?q")!
+    cases := Array<String&>[
+        "g:h", "g:h", "g", "http://a/b/c/g", "./g", "http://a/b/c/g", "g/", "http://a/b/c/g/", "/g", "http://a/g"
+        "//g", "http://g", "?y", "http://a/b/c/d;p?y", "g?y", "http://a/b/c/g?y", "#s", "http://a/b/c/d;p?q#s"
+        "g#s", "http://a/b/c/g#s", "g?y#s", "http://a/b/c/g?y#s", ";x", "http://a/b/c/;x", "g;x", "http://a/b/c/g;x"
+        "g;x?y#s", "http://a/b/c/g;x?y#s", "", "http://a/b/c/d;p?q", ".", "http://a/b/c/", "./", "http://a/b/c/"
+        "..", "http://a/b/", "../", "http://a/b/", "../g", "http://a/b/g", "../..", "http://a/", "../../", "http://a/"
+        "../../g", "http://a/g"
+        "../../../g", "http://a/g", "../../../../g", "http://a/g", "/./g", "http://a/g", "/../g", "http://a/g"
+        "g.", "http://a/b/c/g.", ".g", "http://a/b/c/.g", "g..", "http://a/b/c/g..", "..g", "http://a/b/c/..g"
+        "./../g", "http://a/b/g", "./g/.", "http://a/b/c/g/", "g/./h", "http://a/b/c/g/h", "g/../h", "http://a/b/c/h"
+        "g;x=1/./y", "http://a/b/c/g;x=1/y", "g;x=1/../y", "http://a/b/c/y", "g?y/./x", "http://a/b/c/g?y/./x"
+        "g?y/../x", "http://a/b/c/g?y/../x", "g#s/./x", "http://a/b/c/g#s/./x", "g#s/../x", "http://a/b/c/g#s/../x"
+        "http:g", "http:g"]
+    for i in range 0, cases.Len(), 2: assert $base.Resolve(cases[i])! == cases[i + 1], cases[i]
+    assert $Url.Parse("http://h")!.Resolve("x")! == "http://h/x"
+}
+
+}
