@@ -98,6 +98,14 @@ Profile I64 = 13
 Api I64 = 14
 Jupyter I64 = 15
 
+# " - did you mean 'format'?" for a word that is no mode: a mode it misspells, else one it shortens (B1), "" for none
+fn nearMode(word String&) String {
+    near mut msgs.Nearest& = msgs.Nearest(word)
+    for w in ModeWords: near.Offer(w)
+    for w in ModeWords: near.OfferShortened(w)
+    return near.Hint()
+}
+
 # what each mode is, for help
 ModeUsage Array<String&> = Array<String&>[
     "olang [OPTION...] FILE.olang [ARGUMENT...] | [OPTION...] FILE.ipynb"
@@ -249,10 +257,10 @@ fn CommandLine.Parse(args Array<String&>&, c mut build.Config&, d mut diag.Diagn
         if args[1] == "serve" {
             if args.Len() < 3 or args[2].StartsWith("-"): try usage(d, msgs.ServeUsage())
             m = modeNumber($"serve " + $args[2])
-            if m < 0: try usage(d, msgs.NotAMode($"serve " + $args[2]))
+            if m < 0: try usage(d, msgs.NotAMode($"serve " + $args[2], ""))
             i = 3
         } else {
-            if m < 0: try usage(d, msgs.NotAMode(args[1]))
+            if m < 0: try usage(d, msgs.NotAMode(args[1], nearMode(args[1])))
             i = 2
         }
         cl.Mode = m
@@ -560,7 +568,7 @@ fn help(cl CommandLine&, d mut diag.Diagnostics&) String ? Bad {
         return b.ToString()
     }
     m := Run if cl.Word == "file" else modeNumber(cl.Word)
-    if m < 0: try usage(d, msgs.NotAMode(cl.Word))
+    if m < 0: try usage(d, msgs.NotAMode(cl.Word, nearMode(cl.Word)))
     b.Push($"usage: " + $ModeUsage[m] + "\n" + $ModeWhat[m] + "\n")
     found := false
     for o in range OptWords.Len() {
@@ -1650,6 +1658,9 @@ test "a command line's mistakes are said as stage 0 says them" {
         "olang: error[B1]: unknown option '-x' - 'olang help' lists the options of scripting mode\n"
     assert mistake(Array<String&>["build", "-b", "m.olang"]) ==
         "olang: error[B1]: unknown option '-b' - 'olang help' lists the options of build\n"
+    assert mistake(Array<String&>["fmt", "a.olang"]).Contains("error[B1]: 'fmt' is not a mode - did you mean 'format'?\n")
+    assert mistake(Array<String&>["bild", "a.olang"]).Contains("error[B1]: 'bild' is not a mode - did you mean 'build'?\n")
+    assert mistake(Array<String&>["comp", "a.olang"]).Contains("'comp' is not a mode - did you mean 'compile'?")
     assert mistake(Array<String&>["bogus"]) == ("olang: error[B1]: 'bogus' is not a mode\n" + $
             "olang: note: the modes are build, compile, test, run, format, explain, help, doc, fix, bindgen, profile, api " + $
             "and serve lsp, mcp or jupyter; a file ending in .olang is built and run, a notebook ending in .ipynb run\n")

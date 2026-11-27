@@ -44377,3 +44377,10 @@ the region the reference "was built in" - the caller's stack local. made() now j
 place (handleViews: a constructor call whose parameter is stored into the handle type's field place), so the place
 keeps and its let-go releases nothing; the reason says so in `-memory` ("its new value is a handle whose reference its
 constructor was given"). Checks' o8dhandlegiven (check: run) crashed before.
+
+**`olang fmt` answered with `format` (B1, 2026-11-27).** The user typed `olang fmt` and read the refusal as the
+formatter missing from the compiler. It is linked into the binary as `olang format` (B13); `fmt` was simply no mode, and
+the error listed the modes without pointing at the one meant. A second spelling was not added (one way to write each
+thing, B1's words). Instead the refusal names the mode a word misspells (msgs.Nearest, as options already did) or
+shortens - its first letter, then its letters in order (`Nearest.OfferShortened`): `fmt` -> format, `comp` -> compile,
+`tst` -> test; `lsp`, `bogus`, `nope` still get none. compiler/olang.olang's B1 test pins three.

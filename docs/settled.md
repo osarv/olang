@@ -38,7 +38,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **The command line is words (B1, the user's call 2026-10-17, reversing one-character flags).** Modes `build compile
   test run format explain help doc lsp mcp fix bindgen profile`; options `-output -debug -race -sanitize -target
   -define -update -check -quick -checked -html -library -memory -fuzz -fuzztime -caps -asm -ir -bench`, each checked against
-  the modes it applies to; old flags are gone.
+  the modes it applies to; old flags are gone. A word that is no mode is answered with the mode it misspells or
+  shortens (`'fmt' is not a mode - did you mean 'format'?`), never taken as a second spelling of it.
 - **`-quick` (B2g, the user's call 2026-10-24).** `-O2` without link-time optimization; an error beside `-debug` or
   `-race`. The default stays `-O3` + LTO (B2c).
 - **`explain FILE NAME` (B11b, the user's call 2026-10-24).** Prints one top-level item of FILE as the compiler sees it

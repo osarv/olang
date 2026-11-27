@@ -84,6 +84,17 @@ fn (n mut Nearest&) OfferBuilder(cand String&) {
     n.Far = 0
 }
 
+# a candidate the word shortens (B1: 'fmt' for format, 'comp' for compile): its first letter, then the rest of the word's
+# letters in order - taken only where no name was near and none was shortened before it
+fn (n mut Nearest&) OfferShortened(cand String&) {
+    if n.Best.Len() > 0 or n.Word.Len() < 2 or n.Word.Len() >= cand.Len() or n.Word[0] != cand[0]: return
+    j I64 = 0
+    for k in range cand.Len() {
+        if j < n.Word.Len() and cand[k] == n.Word[j]: j++
+    }
+    if j == n.Word.Len(): n.Best ~ cand
+}
+
 # " - did you mean 'x'?" for the nearest name offered, "" for none
 fn (n Nearest&) Hint() String { return $" - did you mean '" + $n.Best + "'?" if n.Best.Len() > 0 else "" }
 
@@ -1110,7 +1121,7 @@ fn ReflFnList(what String&) r.Msg { return r.Msg(Diag.ReflFnList, "G41", $what, 
 fn ReflFnCall(name String&, want I64, have I64) r.Msg { return r.Msg(Diag.ReflFnCall, "G41", $"'" + $name + "' is called with " + $want + " arguments (a method's receiver first), found " + $have) }
 fn ReflMatchSubject() r.Msg { return r.Msg(Diag.ReflMatchSubject, "G13", "'match' on a type takes a type known while compiling", "", "match a type variable, or a type a reflected member names") }
 fn Usage() r.Msg { return r.Msg(Diag.Usage, "B1", "nothing to do", "", "write a file to build and run, as 'olang main.olang', or a mode ('olang help' lists them)") }
-fn NotAMode(text String&) r.Msg { return r.Msg(Diag.NotAMode, "B1", "'" + $text + "' is not a mode", "the modes are build, compile, test, run, format, explain, help, doc, fix, bindgen, profile, api and serve lsp, mcp or jupyter; a file ending in .olang is built and run, a notebook ending in .ipynb run") }
+fn NotAMode(text String&, hint String&) r.Msg { return r.Msg(Diag.NotAMode, "B1", "'" + $text + "' is not a mode" + $hint, "the modes are build, compile, test, run, format, explain, help, doc, fix, bindgen, profile, api and serve lsp, mcp or jupyter; a file ending in .olang is built and run, a notebook ending in .ipynb run") }
 fn ModeOneFile(text String&) r.Msg { return r.Msg(Diag.ModeOneFile, "B1", $text + " takes exactly one file") }
 fn ModeNeedsFile(text String&) r.Msg { return r.Msg(Diag.ModeNeedsFile, "B1", $text + " needs a file") }
 fn UnknownFlag(text1 String&, text2 String&, hint String&) r.Msg { return r.Msg(Diag.UnknownFlag, "B1", "unknown option '" + $text1 + "'" + $hint + " - 'olang help' lists the options of " + $text2) }
