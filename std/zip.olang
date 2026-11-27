@@ -1,0 +1,231 @@
+# zip - .zip archives, read and written, in memory: the caller moves the bytes to and from files.
+#
+#   bytes := zip.Write(Array<zip.Entry>[zip.Entry("a.txt", data), zip.Entry("dir/b.bin", more)], level = 6)
+#   for e in try zip.Read(bytes): Println(e.Name + " " + $e.Data.Len() + " " + e.Time.Str())
+#
+# Entries are stored or deflated (std/flate); Write deflates an entry when that is smaller. Names are UTF-8, times are
+# DOS times (1980 to 2107, two-second steps, no zone) read and written as `time.Date`. Read finds the central
+# directory at the end of the file and checks every entry's CRC-32 and size. Not supported, and refused with
+# `zip.Error.Unsupported`: zip64, encryption, and methods other than stored and deflate. Imported with
+# `import "std/zip"`.
+
+import "std/crc32"
+import "std/flate"
+import "std/time"
+
+type Error error {
+    Truncated   # the archive ends inside a record
+    BadArchive  # no central directory, or a record that is not what it should be
+    Corrupt     # an entry's deflate data is not valid
+    BadChecksum # an entry's data differs from its CRC-32
+    BadSize     # an entry's data differs from its stored size
+    Unsupported # zip64, encryption, or a method other than stored and deflate
+}
+
+# a file of the archive: its name (a directory's ends in "/"), its bytes and its modification time
+type Entry struct(Name String, Data Array<U8>, Time time.Date = time.Date(1980, 1, 1)) { Name, Data, Time }
+
+fn put16(v mut Vec<U8>&, x I64) {
+    v.Push(U8(x & 255))
+    v.Push(U8((x >> 8) & 255))
+}
+
+fn put32(v mut Vec<U8>&, x U32) { for i in range 4: v.Push(U8((x >> U32(8 * i)) & 255)) }
+
+fn get16(d Array<U8>&, p I64) I64 { return I64(d[p]) | (I64(d[p + 1]) << 8) }
+
+fn get32(d Array<U8>&, p I64) I64 { return get16(d, p) | (get16(d, p + 2) << 16) }
+
+# the DOS time and date words of t, the year held to 1980..2107
+fn dosTime(t time.Date&) I64 { return (t.Second / 2) | (t.Minute << 5) | (t.Hour << 11) }
+
+fn dosDate(t time.Date&) I64 {
+    y := t.Year
+    if y < 1980: return 0x21
+    if y > 2107: y = 2107
+    return t.Day | (t.Month << 5) | ((y - 1980) << 9)
+}
+
+fn fromDos(tm I64, dt I64) time.Date {
+    month := (dt >> 5) & 15
+    day := dt & 31
+    return time.Date(1980 + (dt >> 9), 1 if month == 0 else month, 1 if day == 0 else day, tm >> 11, (tm >> 5) & 63, (tm & 31) * 2)
+}
+
+# the archive holding entries, in order. level is flate's (0 stores everything)
+fn Write(entries Array<Entry>&, level I64 = 6) Array<U8> {
+    out := Vec<U8>()
+    central := Vec<U8>()
+    for e in entries {
+        crc := crc32.Checksum(e.Data)
+        deflated := flate.Deflate(e.Data, level) if level > 0 and e.Data.Len() > 0 else e.Data
+        method := 8 if level > 0 and deflated.Len() < e.Data.Len() else 0
+        body := deflated if method == 8 else e.Data
+        at := U32(out.Len())
+        tm := dosTime(e.Time)
+        dt := dosDate(e.Time)
+        out.PushAll(Array<U8>[0x50, 0x4B, 3, 4])
+        put16(out, 20)
+        put16(out, 0x0800) # names are UTF-8
+        put16(out, method)
+        put16(out, tm)
+        put16(out, dt)
+        put32(out, crc)
+        put32(out, U32(body.Len()))
+        put32(out, U32(e.Data.Len()))
+        put16(out, e.Name.Len())
+        put16(out, 0)
+        out.PushAll(e.Name)
+        out.PushAll(body)
+        central.PushAll(Array<U8>[0x50, 0x4B, 1, 2])
+        put16(central, 20)
+        put16(central, 20)
+        put16(central, 0x0800)
+        put16(central, method)
+        put16(central, tm)
+        put16(central, dt)
+        put32(central, crc)
+        put32(central, U32(body.Len()))
+        put32(central, U32(e.Data.Len()))
+        put16(central, e.Name.Len())
+        for _ in range 4: put16(central, 0) # extra field, comment, disk number, internal attributes
+        put32(central, 0)
+        put32(central, at)
+        central.PushAll(e.Name)
+    }
+    start := U32(out.Len())
+    out.PushAll(central.ToArray())
+    out.PushAll(Array<U8>[0x50, 0x4B, 5, 6])
+    put16(out, 0)
+    put16(out, 0)
+    put16(out, entries.Len())
+    put16(out, entries.Len())
+    put32(out, U32(central.Len()))
+    put32(out, start)
+    put16(out, 0)
+    return out.ToArray()
+}
+
+# the offset of the end-of-central-directory record
+fn findEnd(d Array<U8>&) I64 ? Error {
+    n := d.Len()
+    if n < 22: error Error.Truncated
+    last := n - 22
+    for k in range (65536 if last > 65535 else last + 1) {
+        p := last - k
+        if d[p] == 0x50 and d[p + 1] == 0x4B and d[p + 2] == 5 and d[p + 3] == 6: return p
+    }
+    error Error.BadArchive
+}
+
+# the contents of the entry whose central record is at c
+fn entryData(d Array<U8>&, c I64, method I64, csize I64, usize I64, crc I64) Array<U8> ? Error {
+    local := get32(d, c + 42)
+    if local + 30 > d.Len(): error Error.Truncated
+    if get32(d, local) != 0x04034B50: error Error.BadArchive
+    start := local + 30 + get16(d, local + 26) + get16(d, local + 28)
+    if start + csize > d.Len(): error Error.Truncated
+    body := d[start:start + csize]
+    r Array<U8> = body
+    if method == 8: r = try flate.Inflate(body, sizeHint = usize) catch flate.Error { error Error.Corrupt }
+    if r.Len() != usize: error Error.BadSize
+    if I64(crc32.Checksum(r)) != crc: error Error.BadChecksum
+    return r
+}
+
+# the entries of an archive, in the order of its central directory
+fn Read(d Array<U8>&) Array<Entry> ? Error {
+    e := try findEnd(d)
+    count := get16(d, e + 10)
+    c := get32(d, e + 16)
+    if count == 0xFFFF or c == 0xFFFFFFFF: error Error.Unsupported
+    entries := Vec<Entry>()
+    for _ in range count {
+        if c + 46 > d.Len(): error Error.Truncated
+        if get32(d, c) != 0x02014B50: error Error.BadArchive
+        flags := get16(d, c + 8)
+        method := get16(d, c + 10)
+        csize := get32(d, c + 20)
+        usize := get32(d, c + 24)
+        nlen := get16(d, c + 28)
+        if (flags & 1) != 0 or (method != 0 and method != 8): error Error.Unsupported
+        if csize == 0xFFFFFFFF or usize == 0xFFFFFFFF: error Error.Unsupported
+        if c + 46 + nlen > d.Len(): error Error.Truncated
+        name := String(d[c + 46:c + 46 + nlen])
+        data := try entryData(d, c, method, csize, usize, get32(d, c + 16))
+        entries.Push(Entry(name, data, fromDos(get16(d, c + 12), get16(d, c + 14))))
+        c += 46 + nlen + get16(d, c + 30) + get16(d, c + 32)
+    }
+    return entries.ToArray()
+}
+
+if TestBuild {
+    import "std/hex"
+
+    Hello String = "hello hello hello hello hello\nhello hello hello hello hello\nhello hello hello hello hello\nhello hello hello hello hello\n"
+
+    fn noise(n I64) Array<U8> {
+        r := Array<U8>(n)
+        x U64 = 7
+        for i in range n {
+            x = x * 6364136223846793005 + 1442695040888963407
+            r[i] = U8(x >> 56)
+        }
+        return r
+    }
+
+    fn big() Array<U8> {
+        v := Vec<U8>()
+        v.PushAll(noise(100))
+        v.PushAll(Hello)
+        v.PushAll(noise(100000))
+        return v.ToArray()
+    }
+
+    test "an archive made by Python's zipfile is read" {
+        z := hex.Decode("504b0304140000000800af6db1566842aab7100000007800000007000000612f622e747874cb48cdc9c957c8c04e72e110a7822c00504b03041400000000007dbf9f2755dbb31a0300000003000000010000006e726177504b01021403140000000800af6db1566842aab71000000078000000070000000000000000000000800100000000612f622e747874504b010214031400000000007dbf9f2755dbb31a03000000030000000100000000000000000000008001350000006e504b0506000000000200020064000000570000000000")!
+        es := Read(z)!
+        assert es.Len() == 2
+        assert es[0].Name == "a/b.txt" and es[0].Data == Hello.Bytes() and es[0].Time == time.Date(2023, 5, 17, 13, 45, 30)
+        assert es[1].Name == "n" and String(es[1].Data) == "raw" and es[1].Time == time.Date(1999, 12, 31, 23, 59, 58)
+    }
+
+    test "write then read, deflated and stored entries" {
+        t := time.Date(2026, 11, 27, 20, 31, 10)
+        es := Array<Entry>[Entry("a.txt", Hello.Bytes(), t), Entry("dir/", Array<U8>(0)), Entry("åäö/random.bin", noise(3000)), Entry("big", big())]
+        z := Write(es)
+        back := Read(z)!
+        assert back.Len() == 4
+        for i in range 4 {
+            assert back[i].Name == es[i].Name and back[i].Data == es[i].Data
+        }
+        assert back[0].Time == t and back[1].Time == time.Date(1980, 1, 1)
+        assert z.Len() < 3000 + 100000 + 100 + 1000 + 600
+        assert Read(Write(es, level = 0))! == back
+        assert Read(Write(Array<Entry>(0)))!.Len() == 0
+    }
+
+    test "damaged archives fail with their error" {
+        z := Write(Array<Entry>[Entry("a", Hello.Bytes())])
+        ok := false
+        try Read(z[:10]) catch Error.Truncated { ok = true }
+        assert ok
+        ok = false
+        try Read(Array<U8>(100)) catch Error.BadArchive { ok = true }
+        assert ok
+        bad := z
+        bad[33] = bad[33] ^ 4 # a bit of the deflate data
+        ok = false
+        try Read(bad) catch Error { ok = true }
+        assert ok
+        stored := Write(Array<Entry>[Entry("a", "abcdef".Bytes())], level = 0)
+        flipped := stored
+        flipped[31] = flipped[31] ^ 1 # a stored byte: the CRC-32 differs
+        ok = false
+        try Read(flipped) catch Error.BadChecksum { ok = true }
+        assert ok
+        ok = false
+        try Read(stored[:stored.Len() - 3]) catch Error.BadArchive { ok = true }
+        assert ok
+    }
+}

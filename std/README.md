@@ -33,6 +33,8 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `chacha.olang` | ChaCha20-Poly1305 authenticated encryption (RFC 8439 `Seal`/`Open`) and XChaCha20-Poly1305 (`XSeal`/`XOpen`), constant time |
 | `subtle.olang` | constant-time `Equal` and `IsZero` for tags and secrets |
 | `curve25519.olang`, `x25519.olang`, `ed25519.olang` | the GF(2^255 - 19) field, X25519 key agreement (RFC 7748) and Ed25519 signatures (RFC 8032), constant time on secrets |
+| `flate.olang` | DEFLATE both ways (`Deflate(data, level = 6)`, `try Inflate(data)`: LZ77 with hash chains, dynamic Huffman, stored blocks when smaller), the zlib container (`Zlib`, `try Unzlib`, `Adler32`) and gzip (`Gzip`, `try Gunzip`, every member, CRC-32 checked); `flate.Error` |
+| `zip.olang` | .zip archives in memory: `zip.Write(entries, level = 6)`, `try zip.Read(bytes)` - stored and deflate entries, CRC-32 checked, UTF-8 names, `time.Date` modification times, no zip64 or encryption; `zip.Error` |
 | `flags.olang` | command-line flags declared with types, defaults and help, or read from a struct's parameters (`Read<T>`, `@flags.Help`, `@flags.Short`); `--help` text; `flags.Error` |
 | `regex.olang` | RE2-style regular expressions, linear time (a lazy DFA and a Pike VM): `Compile`, `Matches`, `Find`, `FindAll`, `Replace`, `Split`, groups |
 | `json.olang` | JSON parse into an immutable tree, and encode; `Encode`/`Decode<T>` of any value by reflection, keys by a `Naming` policy, `@json.Key`, `@json.Skip` |
