@@ -26,6 +26,7 @@ written `import "std/name"`; a module is one file, and a directory only groups f
 | `arith.olang` | arithmetic that fails instead of wrapping: `try arith.Add(a, b)`, `Sub`, `Mul`, `Div`, `Rem`, `Neg`, shifts, `Pow`, and `Checked<T>` whose operators are these - `arith.Error`; `Saturating<T>`, an integer whose operators clamp at its limits instead of wrapping |
 | `utf8.olang` | Unicode code points: `Rune`, `Decode`/`Encode`, `Valid`, `Count`, `Runes` |
 | `base64.olang`, `hex.olang` | RFC 4648 base64 (standard and URL-safe) and hex, strict decoding |
+| `wav.olang` | RIFF WAVE audio: read PCM 8/16/24/32-bit and float 32/64 (incl. extensible) to interleaved F32, write 16-bit PCM or 32-bit float |
 | `uuid.olang` | UUIDs (RFC 9562): version 4 random and version 7 time-ordered, canonical text, strict Parse |
 | `sha256.olang`, `crc32.olang` | the SHA-256 digest (`Sum`, `Hex`, a streaming `Hasher`, `Hmac`) and the IEEE CRC-32 |
 | `flags.olang` | command-line flags declared with types, defaults and help, or read from a struct's parameters (`Read<T>`, `@flags.Help`, `@flags.Short`); `--help` text; `flags.Error` |

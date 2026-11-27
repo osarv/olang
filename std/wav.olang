@@ -1,0 +1,271 @@
+# wav - RIFF WAVE audio. Sound.Parse(bytes) and Sound.Read(path) give a Sound: its Rate in frames a second, its Channels, and
+# Samples, every channel's samples interleaved (frame 0 channel 0, frame 0 channel 1, ...) as F32 in -1 .. 1; Mono()
+# is the channels averaged. Read: integer PCM of 8 (unsigned), 16, 24 and 32 bits, and IEEE float of 32 and 64 bits
+# (format tags 1 and 3, and WAVE_FORMAT_EXTENSIBLE holding either), any channel count; chunks other than "fmt " and
+# "data" (LIST, fact, ...) are skipped. A "data" chunk that claims more than the file holds (a recording cut off, or
+# written by a stream that could not know its length) gives the whole frames there are. Write: s.Encode() is 16-bit
+# PCM, s.Encode(true) 32-bit float (s.Write(path) and s.Write(path, true) put them in a file); samples outside -1 .. 1 are clipped in the 16-bit form. Imported with
+# `import "std/wav"`.
+
+import "std/os"
+
+type Error error {
+    NotRiff                  # not a RIFF WAVE file
+    Unsupported              # a format this does not read (compressed audio, 12-bit samples, no channels)
+    Truncated                # the file ends inside the header, or has no data chunk
+}
+
+type Sound struct(Rate I64, Channels I64, Samples Array<F32>) {
+    Rate
+    Channels
+    Samples
+}
+
+# the frames: samples for each channel at one instant
+fn (s Sound&) Frames() I64 { return s.Samples.Len() / s.Channels }
+
+# one channel: every channel's samples averaged
+fn (s Sound&) Mono() Array<F32> {
+    n := s.Frames()
+    out := Array<F32>(n)
+    for i in range n {
+        sum F32 = 0
+        for c in range s.Channels: sum += s.Samples[i * s.Channels + c]
+        out[i] = sum / F32(s.Channels)
+    }
+    return out
+}
+
+fn u16At(b Array<U8>&, i I64) I64 { return I64(b[i]) | (I64(b[i + 1]) << 8) }
+fn u32At(b Array<U8>&, i I64) I64 { return u16At(b, i) | (u16At(b, i + 2) << 16) }
+
+fn tagAt(b Array<U8>&, i I64, tag String&) Bool {
+    for k in range 4 {
+        if b[i + k] != U8(tag[k]): return false
+    }
+    return true
+}
+
+# one sample of "bits" bits at i, as a signed value except for 8 bits (unsigned, centred on 128)
+fn intAt(b Array<U8>&, i I64, bytes I64) F32 {
+    if bytes == 1: return (F32(I64(b[i])) - 128) / 128
+    v := u32At(b, i) if bytes == 4 else (u16At(b, i) | (I64(b[i + 2]) << 16) if bytes == 3 else u16At(b, i))
+    shift := I64(64 - 8 * bytes)
+    v = (v << shift) >> shift                      # sign extension
+    return F32(v) / F32(I64(1) << (8 * bytes - 1))
+}
+
+# the sound a WAVE file's bytes hold
+fn Sound.Parse(b Array<U8>&) Sound ? Error {
+    if b.Len() < 12 or not tagAt(b, 0, "RIFF") or not tagAt(b, 8, "WAVE"): error Error.NotRiff
+    tag I64 = 0
+    channels I64 = 0
+    rate I64 = 0
+    bits I64 = 0
+    at I64 = 12
+    for at + 8 <= b.Len() {
+        n := u32At(b, at + 4)
+        body := at + 8
+        if tagAt(b, at, "fmt ") {
+            if n < 16 or body + n > b.Len(): error Error.Truncated
+            tag = u16At(b, body)
+            channels = u16At(b, body + 2)
+            rate = u32At(b, body + 4)
+            bits = u16At(b, body + 14)
+            if tag == 0xFFFE {
+                if n < 26: error Error.Truncated
+                tag = u16At(b, body + 24)          # the sub-format's first two bytes are the format tag
+            }
+        } else if tagAt(b, at, "data") {
+            if channels == 0: error Error.Unsupported
+            return try Sound.decode(b, body, (b.Len() - body).Min(n), tag, channels, rate, bits)
+        }
+        at = body + n + n % 2
+    }
+    error Error.Truncated
+}
+
+fn Sound.decode(b Array<U8>&, at I64, n I64, tag I64, channels I64, rate I64, bits I64) Sound ? Error.Unsupported {
+    isFloat := tag == 3
+    if tag != 1 and not isFloat: error Error.Unsupported
+    if isFloat and bits != 32 and bits != 64: error Error.Unsupported
+    if not isFloat and (bits != 8 and bits != 16 and bits != 24 and bits != 32): error Error.Unsupported
+    bytes := bits / 8
+    count := n / (bytes * channels) * channels
+    out := Array<F32>(count)
+    for i in range count {
+        p := at + i * bytes
+        if not isFloat: out[i] = intAt(b, p, bytes)
+        else if bytes == 4: out[i] = F32.FromBits(U32(u32At(b, p)))
+        else: out[i] = F32(F64.FromBits(U64(u32At(b, p)) | (U64(u32At(b, p + 4)) << 32)))
+    }
+    return Sound(rate, channels, out)
+}
+
+# the sound in the file at "path"
+fn Sound.Read(path String&) Sound ? Error, os.Error {
+    b :~ try os.ReadFile(path)
+    return try Sound.Parse(b)
+}
+
+fn put16(out mut Array<U8>&, i I64, v I64) {
+    out[i] = U8(v & 0xFF)
+    out[i + 1] = U8((v >> 8) & 0xFF)
+}
+
+fn put32(out mut Array<U8>&, i I64, v I64) {
+    put16(out, i, v)
+    put16(out, i + 2, v >> 16)
+}
+
+fn putTag(out mut Array<U8>&, i I64, tag String&) {
+    for k in range 4: out[i + k] = U8(tag[k])
+}
+
+# the bytes of a WAVE file holding "s": 16-bit PCM, or 32-bit float when "float" is true
+fn (s Sound&) Encode(float Bool = false) Array<U8> {
+    bytes := 4 if float else 2
+    size := s.Samples.Len() * bytes
+    out := Array<U8>(44 + size)
+    putTag(out, 0, "RIFF")
+    put32(out, 4, 36 + size)
+    putTag(out, 8, "WAVE")
+    putTag(out, 12, "fmt ")
+    put32(out, 16, 16)
+    put16(out, 20, 3 if float else 1)
+    put16(out, 22, s.Channels)
+    put32(out, 24, s.Rate)
+    put32(out, 28, s.Rate * s.Channels * bytes)
+    put16(out, 32, s.Channels * bytes)
+    put16(out, 34, 8 * bytes)
+    putTag(out, 36, "data")
+    put32(out, 40, size)
+    for i in range s.Samples.Len() {
+        x := s.Samples[i]
+        if float: put32(out, 44 + 4 * i, I64(x.Bits()))
+        else: put16(out, 44 + 2 * i, I64(x.Max(-1).Min(1) * 32767 + (0.5 if x >= 0 else -0.5)))
+    }
+    return out
+}
+
+# writes the sound as a WAVE file at "path"
+fn (s Sound&) Write(path String&, float Bool = false) ? os.Error { try os.WriteFile(path, s.Encode(float)) }
+
+if TestBuild {
+
+fn Sound.ramp() Sound {
+    return Sound(16000, 2, Array<F32>[0, 0.5, -0.5, 1, -1, 0.25])
+}
+
+fn near(a F32, b F32, eps F32) Bool { return (a - b).Abs() <= eps }
+
+# a file by hand: "fmt " then "data", with a LIST chunk of odd size between them
+fn build(tag I64, channels I64, bits I64, body Array<U8>&, extensible Bool = false) Array<U8> {
+    fmtSize := 40 if extensible else 16
+    out := Array<U8>(12 + 8 + fmtSize + 8 + 10 + 8 + body.Len())
+    putTag(out, 0, "RIFF")
+    put32(out, 4, out.Len() - 8)
+    putTag(out, 8, "WAVE")
+    putTag(out, 12, "fmt ")
+    put32(out, 16, fmtSize)
+    put16(out, 20, 0xFFFE if extensible else tag)
+    put16(out, 22, channels)
+    put32(out, 24, 8000)
+    put32(out, 28, 8000 * channels * bits / 8)
+    put16(out, 32, channels * bits / 8)
+    put16(out, 34, bits)
+    if extensible {
+        put16(out, 36, 22)
+        put16(out, 38, bits)
+        put32(out, 40, 3)
+        put16(out, 44, tag)                         # the sub-format GUID starts with the tag
+    }
+    at := 20 + fmtSize
+    putTag(out, at, "LIST")
+    put32(out, at + 4, 9)                           # odd: one pad byte follows
+    at += 8 + 10
+    putTag(out, at, "data")
+    put32(out, at + 4, body.Len())
+    for i in range body.Len(): out[at + 8 + i] = body[i]
+    return out
+}
+
+test "16-bit PCM and 32-bit float round trip" {
+    s := Sound.ramp()
+    r := Sound.Parse(s.Encode())!
+    assert r.Rate == 16000 and r.Channels == 2 and r.Frames() == 3
+    for i in range 6: assert near(r.Samples[i], s.Samples[i], 1.0 / 32767)
+    f := Sound.Parse(s.Encode(true))!
+    assert f.Samples == s.Samples
+    assert s.Encode().Len() == 44 + 12 and s.Encode(true).Len() == 44 + 24
+}
+
+test "clipping, and a mono mixdown" {
+    r := Sound.Parse(Sound(8000, 1, Array<F32>[2, -3, 0.5]).Encode())!
+    assert near(r.Samples[0], 1, 1e-4) and near(r.Samples[1], -1, 1e-4) and near(r.Samples[2], 0.5, 1e-4)
+    m := Sound.ramp().Mono()
+    assert m.Len() == 3 and near(m[0], 0.25, 1e-6) and near(m[1], 0.25, 1e-6) and near(m[2], -0.375, 1e-6)
+}
+
+test "8, 24 and 32-bit integers, 64-bit float, with a chunk skipped" {
+    a := Sound.Parse(build(1, 1, 8, Array<U8>[0, 128, 255]))!
+    assert near(a.Samples[0], -1, 1e-6) and a.Samples[1] == 0 and near(a.Samples[2], 127.0 / 128, 1e-6)
+    b := Sound.Parse(build(1, 1, 24, Array<U8>[0, 0, 0x80, 0xFF, 0xFF, 0x7F, 0, 0, 0x40]))!
+    assert b.Rate == 8000 and b.Samples[0] == -1 and near(b.Samples[1], 1, 1e-6) and b.Samples[2] == 0.5
+    c := Sound.Parse(build(1, 2, 32, Array<U8>[0, 0, 0, 0xC0, 0, 0, 0, 0x40]))!
+    assert c.Samples[0] == -0.5 and c.Samples[1] == 0.5
+    d := Sound.Parse(build(3, 1, 64, Array<U8>[0, 0, 0, 0, 0, 0, 0xE0, 0x3F]))!
+    assert d.Samples[0] == 0.5
+}
+
+test "WAVE_FORMAT_EXTENSIBLE holding PCM and float" {
+    a := Sound.Parse(build(1, 1, 16, Array<U8>[0, 0x40, 0, 0xC0], true))!
+    assert a.Samples[0] == 0.5 and a.Samples[1] == -0.5
+    f := Sound.Parse(build(3, 1, 32, Array<U8>[0, 0, 0, 0x3F], true))!
+    assert f.Samples[0] == 0.5
+}
+
+# Python: w = wave.open(f, "wb"); setnchannels(1); setsampwidth(2); setframerate(8000); writeframes(struct.pack("<4h", 0, 16384, -16384, 32767))
+test "a file made by Python's wave module" {
+    b := Array<U8>[0x52, 0x49, 0x46, 0x46, 0x2C, 0, 0, 0, 0x57, 0x41, 0x56, 0x45, 0x66, 0x6D, 0x74, 0x20, 16, 0, 0, 0, 1, 0, 1, 0
+        0x40, 0x1F, 0, 0, 0x80, 0x3E, 0, 0, 2, 0, 16, 0, 0x64, 0x61, 0x74, 0x61, 8, 0, 0, 0, 0, 0, 0, 0x40, 0, 0xC0, 0xFF, 0x7F]
+    s := Sound.Parse(b)!
+    assert s.Rate == 8000 and s.Channels == 1 and s.Samples.Len() == 4
+    assert s.Samples[0] == 0 and s.Samples[1] == 0.5 and s.Samples[2] == -0.5 and near(s.Samples[3], 1, 1e-4)
+}
+
+test "a data chunk longer than the file gives the whole frames there are" {
+    b := Sound.ramp().Encode()
+    put32(b, 40, 1000000)
+    s := Sound.Parse(b)!
+    assert s.Frames() == 3
+    t := Sound.Parse(b[:44 + 10])!
+    assert t.Frames() == 2
+}
+
+fn why(b Array<U8>&) String {
+    try Sound.Parse(b) catch Error.NotRiff { return "riff" } catch Error.Truncated { return "truncated" } catch Error.Unsupported { return "unsupported" }
+    return "ok"
+}
+
+test "malformed and unsupported inputs" {
+    good := Sound.ramp().Encode()
+    bad := Sound.ramp().Encode()
+    bad[8] = 0x58
+    assert why(good) == "ok" and why(Array<U8>[1, 2, 3]) == "riff" and why(bad) == "riff"
+    assert why(good[:30]) == "truncated" and why(good[:40]) == "truncated" and why(good[:12]) == "truncated"
+    assert why(build(6, 1, 8, Array<U8>[1, 2])) == "unsupported"
+    assert why(build(1, 1, 12, Array<U8>[1, 2])) == "unsupported"
+    assert why(build(1, 0, 16, Array<U8>[1, 2])) == "unsupported"
+}
+
+test "files round trip" {
+    dir :~ os.MkTemp()!
+    p := dir + "/a.wav"
+    Sound.ramp().Write(p)!
+    assert Sound.Read(p)!.Frames() == 3
+    try Sound.Read(dir + "/missing.wav") catch os.Error { return }
+    unreachable
+}
+
+}
