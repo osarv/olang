@@ -1140,6 +1140,7 @@ f77a45ec34d427aa 881d61adfa24e17a checks/cases/o8dfngiven.olang
 7c083bd9aa5c785a c83563d1bbf5d620 checks/cases/o8dfnpurerun.olang
 27a1877f44861574 543c60025899f1e3 checks/cases/o8dfnremoves.olang
 2b2b419c22df4eb6 3a2531a8e7d6dd86 checks/cases/o8dglobal.olang
+26ccba13d0f39df2 3fcf2f3fc36574b7 checks/cases/o8dhandlegiven.olang
 3634caa80c549a61 737a44dc5b532baa checks/cases/o8dmapkeyfree.olang
 7666ff4fb055366a 58394090b63a3b4e checks/cases/o8dmapkeyfreesan.olang
 3a4f50a7982a7905 17ed50810ba89a3a checks/cases/o8dmapkeytext.olang
@@ -2154,7 +2155,7 @@ de7aedc8bf904e88 662badc9c4b34dab checks/cases/x2result.olang
 be8ad4d232250c0f d9e5a463d0b6875d checks/cases/zeroeffect.olang
 ac0cb24df228eac5 494276e48e18f7fa checks/cases/zerofails.olang
 94ae6b408242df2d 30ea45a10a2424d8 checks/cases/zeroshared.olang
-aaf563eaccadd68c 4128bc2beca6b5c6 checks/checks.olang
+cf7af6eeac6a21b8 ca5cf72391b73da8 checks/checks.olang
 3636f5eb375a6811 737569dbddb4fa8a checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 efb54136ad6286dc checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb 11ac830c3b4509ca checks/fixtures/agree/math.olang
@@ -2367,6 +2368,7 @@ f85984a883699b5b d1435b41191fdd8d checks/fixtures/freeing/vecvecs.olang
 3a1ac5c7165fb700 bb21ffeb076f8298 checks/fixtures/freeing/viewholders.olang
 46b0b434df761947 80bd30d7cd94e83a checks/fixtures/freeing/viewlocals.olang
 52f8b4324961f7a9 c5ae98e516c477de checks/fixtures/freeing/viewother.olang
+7aa62c5479847cae 11b8f63e81e91ef8 checks/fixtures/freeing/viewreturns.olang
 4fc59a4c968365c6 d4b940863933ebdc checks/fixtures/freeing/views.olang
 453a5268906379f5 fa0094022be3dda4 checks/fixtures/freeing/viewself.olang
 c3ad44b6663d515e 22c912e473e0d910 checks/fixtures/freeing/walkcopy.olang
@@ -2603,16 +2605,16 @@ dd300861d8c6791c 480098af83525b7f compiler/generic.olang
 275831117231eac8 b6d71244063fc9c4 compiler/lineedit.olang
 be0a631c6e218907 04f094570df2288a compiler/listing.olang
 56acab361dc82d81 23425a28be563259 compiler/load.olang
-9e95eaa59cefe4f6 a8163ee245c59f75 compiler/lower.olang
+c0acc433816017a9 eac942e3c829b0dc compiler/lower.olang
 c57ed09cf7ebd444 4729b238f12f0aa4 compiler/lsp.olang
 4ae3a7800c5bae72 42a1226bb8e95e02 compiler/mcp.olang
 58d176a3e635da8e 17f4e1dc03b84b98 compiler/measure.olang
 64e7191aaade86a2 266e0cdd2017bef0 compiler/mir.olang
-ad1ece667017dd58 0aa52767cb7e44a4 compiler/msgs.olang
+39ed86bc4af9607d d3d4f78c8be6d4a0 compiler/msgs.olang
 fbc0f3f80ef75028 585036c51eb91a6d compiler/names.olang
 fc66faef5211dbff 206306da21572454 compiler/needs.olang
 3413eebc906e8793 9f656d8ad54bf6a2 compiler/notebook.olang
-4cf82bc3634f513e 7c6dc4a5cf6bd0a9 compiler/olang.olang
+5876ec2b828bbfac 1f72a69bbbe216f3 compiler/olang.olang
 62692d71f9fa7f6c 803ef59935de2dfe compiler/paint.olang
 aab3407a3541d000 df3996d76bfb8a28 compiler/parse.olang
 7601a21002df9198 ae5049d965566643 compiler/profile.olang
@@ -2894,7 +2896,7 @@ c452c9cb509c23e1 dca352c6c89a7600 tests/structpat.olang
 b043808fc75ce994 65143d47c35f3f5a tests/textfields.olang
 0d4b3ba0fcda27dc f54bfde8d599baa6 tests/textplus.olang
 efa9158973628919 076d42fc92d9a0b8 tests/textslot.olang
-15d8321c264566d3 f8f23e619f076983 tests/tile.olang
+ac1e414f357dd4a2 a8add8a2bf6b6d98 tests/tile.olang
 306278cf38ee3057 34b0c2b9622614a4 tests/topassert.olang
 15c409d6ee376b77 8cba4fb7f1438c4d tests/tuplefacts.olang
 865512a5b10174be 415d01faaa817e2d tests/typedefaults.olang
