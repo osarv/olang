@@ -88,6 +88,9 @@ declare i32 @pthread_detach(i64)
 ; The four below are declared identically by any extern that names them, so they never clash.
 declare i32 @pthread_mutex_lock(ptr)
 declare i32 @pthread_mutex_unlock(ptr)
+declare i32 @pthread_rwlock_rdlock(ptr)
+declare i32 @pthread_rwlock_wrlock(ptr)
+declare i32 @pthread_rwlock_unlock(ptr)
 declare i32 @pthread_cond_wait(ptr, ptr)
 declare i32 @pthread_cond_broadcast(ptr)
 declare i32 @setjmp(ptr) returns_twice
@@ -591,7 +594,9 @@ declare i32 @getrlimit(i32, ptr)
 @__olang_large = global ptr null
 @__olang_large_n = global i64 0
 @__olang_large_cap = global i64 0
-@__olang_large_lock = global [40 x i8] zeroinitializer
+; a reader-writer lock: finds (every scope found at run time for large storage) read beside each other, adds and
+; removes write
+@__olang_large_lock = global [64 x i8] zeroinitializer, align 8
 declare i32 @mprotect(ptr, i64, i32)
 declare i32 @madvise(ptr, i64, i32)
 declare void @llvm.memmove.p0.p0.i64(ptr, ptr, i64, i1)
@@ -2015,7 +2020,7 @@ out:
 ; chunk c, of len bytes, entered in the large table (in order of start), the table grown by doubling
 define void @__olang_large_add(ptr %c, i64 %len) noinline {
 entry:
-  call i32 @pthread_mutex_lock(ptr @__olang_large_lock)
+  call i32 @pthread_rwlock_wrlock(ptr @__olang_large_lock)
   %n = load i64, ptr @__olang_large_n
   %cap = load i64, ptr @__olang_large_cap
   %tab0 = load ptr, ptr @__olang_large
@@ -2050,14 +2055,14 @@ put:
   store i64 %end, ptr %endp
   %n1 = add i64 %n, 1
   store atomic i64 %n1, ptr @__olang_large_n monotonic, align 8
-  call i32 @pthread_mutex_unlock(ptr @__olang_large_lock)
+  call i32 @pthread_rwlock_unlock(ptr @__olang_large_lock)
   ret void
 }
 
 ; chunk c taken out of the large table, where it is there
 define void @__olang_large_remove(ptr %c) noinline {
 entry:
-  call i32 @pthread_mutex_lock(ptr @__olang_large_lock)
+  call i32 @pthread_rwlock_wrlock(ptr @__olang_large_lock)
   %n = load i64, ptr @__olang_large_n
   %tab = load ptr, ptr @__olang_large
   %ci = ptrtoint ptr %c to i64
@@ -2079,7 +2084,7 @@ drop:
   store atomic i64 %n1, ptr @__olang_large_n monotonic, align 8
   br label %done
 done:
-  call i32 @pthread_mutex_unlock(ptr @__olang_large_lock)
+  call i32 @pthread_rwlock_unlock(ptr @__olang_large_lock)
   ret void
 }
 
@@ -2090,7 +2095,7 @@ entry:
   %empty = icmp eq i64 %n0, 0
   br i1 %empty, label %none, label %lock
 lock:
-  call i32 @pthread_mutex_lock(ptr @__olang_large_lock)
+  call i32 @pthread_rwlock_rdlock(ptr @__olang_large_lock)
   %n = load i64, ptr @__olang_large_n
   %tab = load ptr, ptr @__olang_large
   %after = call i64 @__olang_large_after(ptr %tab, i64 %n, i64 %a)
@@ -2106,10 +2111,10 @@ hit:
   %sp = getelementptr { i64, i64 }, ptr %tab, i64 %at, i32 0
   %start = load i64, ptr %sp
   %h = inttoptr i64 %start to ptr
-  call i32 @pthread_mutex_unlock(ptr @__olang_large_lock)
+  call i32 @pthread_rwlock_unlock(ptr @__olang_large_lock)
   ret ptr %h
 miss:
-  call i32 @pthread_mutex_unlock(ptr @__olang_large_lock)
+  call i32 @pthread_rwlock_unlock(ptr @__olang_large_lock)
   br label %none
 none:
   ret ptr null
