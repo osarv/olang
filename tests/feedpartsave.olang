@@ -1,0 +1,17 @@
+# feedpart.olang's module: a struct global, a global array of texts, and a store of a local copy of the global back into
+# it after a field is given an element of the array (D9i: the local moved into the global at its last mention only
+# where every part of it was built for the global)
+type Prefs struct() {
+    Model String = "small"
+    Key String = ""
+}
+
+P mut Prefs = Prefs()
+Sizes Array<String> = Array<String>["base", "small", "medium"]
+
+fn Save(i I64) {
+    s := P
+    s.Model = Sizes[i]
+    s.Key = "k" + $i
+    P = s
+}

@@ -286,6 +286,11 @@
 === test tests/factsfailing.olang
 | status 0
 | ok - Checked: a failing way still builds its text, and the error carries it
+=== test tests/feedpart.olang
+| status 0
+| ok - D9i: a local given parts after its copy from a global is stored back with them
+=== test tests/feedpartsave.olang
+| status 0
 === test tests/fieldnarrow.olang
 | status 0
 | ok - a field path narrows by a null test, at depth one and two, and in a call's arguments
