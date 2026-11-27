@@ -163,6 +163,7 @@
 | ok - while compiling, as at run time
 | ok - parallel: copies each value of a parallel declaration and assignment
 | ok - captured: copies what a captured value owns, by its Copy
+| ok - a declared Copy copying its own type copies part by part
 === test tests/cshare.olang
 | status 0
 | ok - a struct two C modules translate alike is one type
