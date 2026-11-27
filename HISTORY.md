@@ -44364,6 +44364,7 @@ loaded again between slices, which is exact in F32, and each element's steps sti
 B 32-64 columns wide reaches ~620 GMAC/s unpacked; copying 256 rows of A for 64 columns does not pay). Tried and
 dropped: software prefetch of the next block or of C (slower), A copied into tile order rather than rows (no gain),
 depth slices of 512 or more (A's chunk falls out of L1).
+
 ## 2026-11-27: a handle given its reference is not made for the place it is stored in (O8d; mine; wt-regiondrop)
 
 oann's kernels/gemm GemmLeft test segfaulted in `__olang_region_drop` at the end of GemmLeft, alone and on master:
