@@ -3126,6 +3126,9 @@
 === run o8dglobal.olang
 | status 0
 | 3007 450 126 1378
+=== run o8dhandlegiven.olang
+| status 0
+| 15.5
 === run o8dmapkeyfree.olang
 | status 0
 === run o8dmapkeyfreesan.olang

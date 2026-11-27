@@ -44364,3 +44364,15 @@ loaded again between slices, which is exact in F32, and each element's steps sti
 B 32-64 columns wide reaches ~620 GMAC/s unpacked; copying 256 rows of A for 64 columns does not pay). Tried and
 dropped: software prefetch of the next block or of C (slower), A copied into tile order rather than rows (no gain),
 depth slices of 512 or more (A's chunk falls out of L1).
+## 2026-11-27: a handle given its reference is not made for the place it is stored in (O8d; mine; wt-regiondrop)
+
+oann's kernels/gemm GemmLeft test segfaulted in `__olang_region_drop` at the end of GemmLeft, alone and on master:
+`fa := foreign<L>(a)`, L a handle (`type rowsOf struct(m Mat<F64>&)`, a struct of one reference) the caller built as
+`rowsOf(a)` around its own local matrix. The free pass decided foreign's field 0 - a handle place - sole: the store's
+value, a parameter, was judged at each call (parStored), and there freshSite took any constructor call as built at its
+site. That holds for a handle whose constructor builds what its reference names (std/list's `List()`), not for one
+whose reference is a constructor parameter: the region made for the site held nothing, and the place's let-go released
+the region the reference "was built in" - the caller's stack local. made() now judges such a store not made for the
+place (handleViews: a constructor call whose parameter is stored into the handle type's field place), so the place
+keeps and its let-go releases nothing; the reason says so in `-memory` ("its new value is a handle whose reference its
+constructor was given"). Checks' o8dhandlegiven (check: run) crashed before.
