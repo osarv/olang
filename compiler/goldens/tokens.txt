@@ -314,6 +314,7 @@ b009d10ebaf2183f 82f29b7d526bc6e7 checks/cases/condmut.olang
 a17cd673701a9480 18f4a2926c2535db checks/cases/condtypes.olang
 2fe51a2e41898f30 7cd8c96894575e4a checks/cases/condvaluefield.olang
 9269de34977c4925 75f1f7a4c083979e checks/cases/condvaluesame.olang
+ded7e00a56219d47 de3888de656dbdfc checks/cases/condviewloop.olang
 c0e9f8fb09f6744e 6d223cc9f031366e checks/cases/constraintarg.olang
 20c4b9b3e84684cb c075e7fefde02c8d checks/cases/constraintcall.olang
 dc129a71b0352c53 85f8a8d2c4a456d5 checks/cases/constraintnotiface.olang
@@ -2605,7 +2606,7 @@ dd300861d8c6791c 480098af83525b7f compiler/generic.olang
 275831117231eac8 b6d71244063fc9c4 compiler/lineedit.olang
 be0a631c6e218907 04f094570df2288a compiler/listing.olang
 56acab361dc82d81 23425a28be563259 compiler/load.olang
-ea7825970f950a9d b24cdf0fa4f9f80f compiler/lower.olang
+498fa0cf17c55df3 48b1fc7d240c187d compiler/lower.olang
 c57ed09cf7ebd444 4729b238f12f0aa4 compiler/lsp.olang
 4ae3a7800c5bae72 42a1226bb8e95e02 compiler/mcp.olang
 58d176a3e635da8e 17f4e1dc03b84b98 compiler/measure.olang

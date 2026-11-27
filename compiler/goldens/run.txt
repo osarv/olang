@@ -1644,6 +1644,14 @@
 | ok - Token.After: a deadline fires on the virtual clock
 | ok - a busy task stops when the token is cancelled
 | ok - a deferred Cancel lets a join block's tasks stop, on an error too
+=== test std/chacha.olang
+| status 0
+| ok - Block: RFC 8439 2.3.2's block
+| ok - XorStream: RFC 8439 2.4.2's encryption, and decryption back
+| ok - Mac: RFC 8439 2.5.2's tag
+| ok - Seal: RFC 8439 2.8.2's AEAD; any change, or another key, fails to open
+| ok - HChaCha: draft-irtf-cfrg-xchacha's HChaCha20 vector
+| ok - XSeal: XChaCha20-Poly1305 round trip against a reference, and forgery
 === test std/chan.olang
 | status 0
 | ok - the ring buffer wraps
@@ -1679,11 +1687,18 @@
 | ok - Rows read while compiling as at run time
 | ok - Decode: records read as structs by their header's names, written back by Encode
 | ok - Error: an error carries where the text went wrong
+=== test std/curve25519.olang
+| status 0
+| ok - an element times its inverse is one; Pack reduces fully
 === test std/deque.olang
 | status 0
 | ok - a Deque is pushed and popped at both ends
 | ok - a Deque used as a ring wraps and grows in order
 | ok - a Deque of text
+=== test std/ed25519.olang
+| status 0
+| ok - Sign: RFC 8032 7.1's tests 1, 2, 3 and SHA(abc); a changed message, signature or key does not verify
+| ok - Verify: S at or above L, a key not on the curve and a short signature are refused
 === test std/ffi.olang
 | status 0
 | ok - Has finds the C library's functions, and the math library's
@@ -1707,6 +1722,15 @@
 | ok - Flags.Read: a struct's parameters are flags, its key enums their help and short names
 | ok - the help text lists every flag
 | ok - Error: an error names the flag and what it was given
+=== test std/flate.olang
+| status 0
+| ok - round trips at every level
+| ok - round trips through zlib and gzip
+| ok - levels order the sizes, and compressible data gets small
+| ok - stored and empty streams
+| ok - zlib's and gzip's own output (made by Python) is read
+| ok - Adler-32
+| ok - malformed streams fail with their error
 === test std/frame.olang
 | status 0
 | ok - Read: reads CSV records into columns; Csv and Json write them back
@@ -1734,6 +1758,17 @@
 | ok - curl's exit status names the Error
 | ok - what cannot be sent as given is refused before anything runs
 | ok - requests against a local server
+=== test std/http1.olang
+| status 0
+| ok - a request read from bytes, and written back
+| ok - a response read from bytes: by length, chunked, to the close, and none
+| ok - chunked coding: encoded, decoded, and its edge cases
+| ok - malformed heads are refused, long ones too
+| ok - redirects make the next request
+| ok - the server on loopback answers the client
+=== test std/https.olang
+| status 0
+| ok - plain http goes through http1, https dials TLS, other schemes are refused
 === test std/io.olang
 | status 0
 | ok - Write reports a failure from the underlying syscall
@@ -1938,11 +1973,22 @@
 | ok - a Set holds each value once
 | ok - Set algebra
 | ok - a Set of text
+=== test std/sha1.olang
+| status 0
+| ok - the FIPS 180-4 test vectors
+| ok - the WebSocket handshake accept key (RFC 6455 1.3)
+| ok - Hmac: RFC 2202's test vectors, the data whole or in pieces
+| ok - a Hasher fed in pieces gives the digest of the whole
 === test std/sha256.olang
 | status 0
 | ok - the FIPS 180-4 test vectors
 | ok - Hmac: RFC 4231's test vectors, the data whole or in pieces
 | ok - a Hasher fed in pieces gives the digest of the whole
+=== test std/sha512.olang
+| status 0
+| ok - the FIPS 180-4 test vectors
+| ok - a Hasher fed in pieces gives the digest of the whole
+| ok - Hmac: RFC 4231's test vectors, the data whole or in pieces
 === test std/stats.olang
 | status 0
 | ok - Sum, Mean, Variance and StdDev
@@ -1951,6 +1997,9 @@
 | ok - Min, Max and Histogram
 | ok - Bins: counts the values in bins of equal width from the least to the greatest
 | ok - the statistics computed while compiling equal the run time's
+=== test std/subtle.olang
+| status 0
+| ok - Equal and IsZero
 === test std/sync.olang
 | status 0
 | ok - a Mutex keeps every task's increments
@@ -1976,10 +2025,44 @@
 | status 0
 | ok - a session to a server whose certificate is trusted and names the host carries bytes both ways
 | ok - a session to a port nothing listens at fails with the TCP error
+| ok - a handshake with a server that never answers ends after HandshakeMs
+=== test std/url.olang
+| status 0
+| ok - Url.Parse: a URL's parts, and written back as they came
+| ok - Url.Parse: malformed URLs are refused, naming the text
+| ok - percent-encoding: paths and query components
+| ok - query strings to and from name/value pairs
+| ok - Url.Resolve: RFC 3986 5.4: the normal and abnormal examples
 === test std/utf8.olang
 | status 0
 | ok - code points are written and read back
 | ok - what is not UTF-8 is refused, and walked as replacement characters
+=== test std/uuid.olang
+| status 0
+| ok - parse and format round trip, with a known vector
+| ok - parsing is strict
+| ok - version 4 is random with its version and variant bits
+| ok - version 7 sorts by time
+=== test std/wav.olang
+| status 0
+| ok - 16-bit PCM and 32-bit float round trip
+| ok - clipping, and a mono mixdown
+| ok - 8, 24 and 32-bit integers, 64-bit float, with a chunk skipped
+| ok - WAVE_FORMAT_EXTENSIBLE holding PCM and float
+| ok - a file made by Python's wave module
+| ok - a data chunk longer than the file gives the whole frames there are
+| ok - malformed and unsupported inputs
+| ok - files round trip
+=== test std/x25519.olang
+| status 0
+| ok - X25519: RFC 7748 5.2's vectors and its iterated one (1000 times)
+| ok - Public: RFC 7748 6.1: Alice and Bob reach the same secret
+| ok - Shared: an all-zero public key (small order) is refused
+=== test std/zip.olang
+| status 0
+| ok - an archive made by Python's zipfile is read
+| ok - write then read, deflated and stored entries
+| ok - damaged archives fail with their error
 === test std/zmtp.olang
 | status 0
 | ok - Socket: a DEALER and a ROUTER exchange messages of several frames, short and long
