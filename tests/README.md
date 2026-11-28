@@ -120,6 +120,8 @@ test block cannot make (programs that must fail to compile, whole builds) live i
 - `feedpart.olang`, `feedpartsave.olang` - a local copied from a struct global, a field given an element of a global
   array, then stored back whole, in a module whose global's place keeps (an export fn handed to C reaches a global):
   every field the global holds afterwards is its own (D9i, O8d).
+- `winspawn.olang` - a console program started from a program with no console (a GUI program) runs with
+  CREATE_NO_WINDOW and its output still comes back; the Windows runtime's source held to that flag (B12f).
 
 Imports are relative to the importing file. A module's identity is its path from the
 working directory (M22), so these are `tests/shared`, `tests/geom/rect` and so on.
