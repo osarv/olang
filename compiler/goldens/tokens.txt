@@ -2437,6 +2437,7 @@ fa714b2389dd3627 d47194511f0d70d3 checks/fixtures/listloop/loop.olang
 e05172f3768d29d6 d739d266030bea72 checks/fixtures/memoryplaced/memoryplaced.olang
 0af4bc43029d7391 ef1ea21d3d2a3960 checks/fixtures/memoryplaced/plain.olang
 890daac9c8713079 3ff2364f28f1b31c checks/fixtures/memoryplaced/tail.olang
+14aa4534af9cfa61 cb66eca2bda7a584 checks/fixtures/mutate/m.olang
 09c82eded1ce547e cae8b0e25ded0ea5 checks/fixtures/nodump/dump.olang
 76fffb29d63c5b89 2873b06c439368a6 checks/fixtures/objnames/a.olang
 3e9f430920663be8 390571c66ec1da0f checks/fixtures/objnames/a/b.olang
@@ -2612,6 +2613,7 @@ c57ed09cf7ebd444 4729b238f12f0aa4 compiler/lsp.olang
 58d176a3e635da8e 17f4e1dc03b84b98 compiler/measure.olang
 64e7191aaade86a2 266e0cdd2017bef0 compiler/mir.olang
 508e18e8bb3b1a4f 8642440712bf5fef compiler/msgs.olang
+dfc9f4d0db039d88 1d73ed106b003116 compiler/mutate.olang
 fbc0f3f80ef75028 585036c51eb91a6d compiler/names.olang
 fc66faef5211dbff 206306da21572454 compiler/needs.olang
 3413eebc906e8793 9f656d8ad54bf6a2 compiler/notebook.olang
