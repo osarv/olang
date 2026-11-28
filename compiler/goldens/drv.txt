@@ -382,6 +382,8 @@
 |   -bench             measures what runs: with test, the benchmarks the tests run (std/bench) - time, allocations and bytes per call - and each file's build and run time; in scripting mode, its build and run time, user and system time and peak memory (B19b)
 |   -checked           builds checked as test and -debug do (redundant with them): an index, a division or a shift the program wrote stops it with FILE:LINE:COLUMN (E16g)
 |   -free MODE         early (the default) or late: late reclaims storage only as its scope closes, no let-go freeing early - an oracle for early freeing, whose output must match (B18b)
+|   -mutate            plants small faults in each file's code, one at a time, runs its tests on each, and lists the faults the tests did not catch (B26)
+|   -since COMMIT      with -mutate: plants faults only in the lines changed since COMMIT (B26)
 | stderr:
 | status 0
 === olang help run
@@ -508,7 +510,7 @@
 | option    ::= "-output" PATH | "-debug" | "-quick" | "-checked" | "-race" | "-sanitize" | "-target" NAME
 |             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
 |             | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-bench" | "-runs" COUNT | "-install" | "-continue"
-|             | "-free" ( "early" | "late" )
+|             | "-free" ( "early" | "late" ) | "-mutate" | "-since" COMMIT
 | ```
 | 
 | A word ending in `.olang` in the mode's place is a file to run, and one ending in `.ipynb` a notebook to run (B24); any
@@ -535,6 +537,7 @@
 | | `-memory` | scripting mode, build, test, run | B18 |
 | | `-free early`, `-free late` | scripting mode, build, test, run | B18b |
 | | `-fuzz NAME`, `-fuzztime SECONDS` | test | B19 |
+| | `-mutate`, `-since COMMIT` | test | B26 |
 | | `-bench` | scripting mode, test, run | B19b |
 | | `-runs COUNT` | scripting mode, run | B19b |
 | | `-caps` | explain | B11c |
@@ -636,6 +639,7 @@
 | status 1
 === olang test W/none.olang W/adir /dev/null
 | stdout:
+| olang: tests that start a task run under the race detector (P7), but clang's ThreadSanitizer runtime is not installed (libclang_rt.tsan-x86_64.a, in Debian and Ubuntu libclang-rt-N-dev): they run without it
 | W/none.olang: error: cannot open this file
 | W/none.olang: cannot be built, skipping
 | W/adir: error[M1]: a directory - a module is one .olang file
@@ -698,6 +702,7 @@
 | status 1
 === in a directory of programs: olang test tests.olang
 | stdout:
+| olang: tests that start a task run under the race detector (P7), but clang's ThreadSanitizer runtime is not installed (libclang_rt.tsan-x86_64.a, in Debian and Ubuntu libclang-rt-N-dev): they run without it
 | tests.olang:8:18: error[S18c]: this assertion is false, evaluated while compiling
 |     8 |     assert two() == 3
 |       |                  ^~

@@ -4170,7 +4170,7 @@ Array<std/prelude/text:String&, 0>	0 8	[0 x { i64, ptr }]	-	-
 Array<std/prelude/text:String&, 16>	256 8	[16 x { i64, ptr }]	-	-
 Array<std/prelude/text:String&, 7>	112 8	[7 x { i64, ptr }]	-	-
 Array<std/prelude/text:String&, 9>	144 8	[9 x { i64, ptr }]	-	-
-compiler/build:Config	720 8	%"compiler/build:Config"	{ { i64, ptr }, { i64, ptr }, %"compiler/target:Target", %"compiler/cond:Consts", i1, i1, i1, i1, i1, i1, i1, i1, { i64, ptr }, i1, i1, i1, { i64, ptr }, i64, i1, i1, i1, i64, i1, { i64, ptr }, i1, i1, i1, i1, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", i64, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", i64, i1, i1, { i64, ptr }, { i64, ptr }, i64, i64, i1, i1, { i64, ptr }, { i64, ptr } }	fields 0,16,32,184,440,441,442,443,444,445,446,447,448,464,465,466,472,488,496,497,498,504,512,520,536,537,538,539,544,576,584,616,624,625,632,648,664,672,680,681,688,704
+compiler/build:Config	760 8	%"compiler/build:Config"	{ { i64, ptr }, { i64, ptr }, %"compiler/target:Target", %"compiler/cond:Consts", i1, i1, i1, i1, i1, i1, i1, i1, { i64, ptr }, i1, i1, i1, { i64, ptr }, i64, i1, i1, i1, i64, i1, { i64, ptr }, i1, i1, i1, i1, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", i64, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", i64, i1, i1, { i64, ptr }, { i64, ptr }, i64, i64, i1, i1, { i64, ptr }, { i64, ptr }, i64, { i64, ptr }, { i64, ptr } }	fields 0,16,32,184,440,441,442,443,444,445,446,447,448,464,465,466,472,488,496,497,498,504,512,520,536,537,538,539,544,576,584,616,624,625,632,648,664,672,680,681,688,704,720,728,744
 compiler/build:Config&	8 8	ptr	-	-
 compiler/build:Failed	4 4	i32	-	-
 compiler/build:Kind	4 4	i32	-	-
@@ -8713,7 +8713,7 @@ std/prelude/map:MapIter<I64, compiler/typed:Expr&>	16 8	%"std/prelude/map:MapIte
 == compiler/olang.olang
 Array<compiler/emit:Object>&	16 8	{ i64, ptr }	-	-
 compiler/olang:Bad	4 4	i32	-	-
-compiler/olang:CommandLine	248 8	%"compiler/olang:CommandLine"	{ i64, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", { i64, ptr }, i1, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", { i64, ptr }, { i64, ptr }, i1, { i64, ptr }, i1, { i64, ptr }, i1, i1, i1, i1 }	fields 0,8,40,72,88,96,128,160,176,192,200,216,224,240,241,242,243
+compiler/olang:CommandLine	264 8	%"compiler/olang:CommandLine"	{ i64, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", { i64, ptr }, i1, %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", %"std/prelude/vec:Vec.64e7ca1f48df489627458d7bcd916e44", { i64, ptr }, { i64, ptr }, i1, { i64, ptr }, i1, { i64, ptr }, i1, i1, i1, i1, i1, { i64, ptr } }	fields 0,8,40,72,88,96,128,160,176,192,200,216,224,240,241,242,243,244,248
 compiler/olang:CommandLine&	8 8	ptr	-	-
 compiler/olang:Passes	72 8	%"compiler/olang:Passes"	{ i64, { i64, ptr }, { i64, ptr }, { i64, ptr }, { i64, ptr } }	fields 0,8,24,40,56
 fn() compiler/olang:CommandLine	16 8	{ ptr, ptr }	-	ret void pass 

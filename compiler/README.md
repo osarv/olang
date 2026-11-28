@@ -61,6 +61,7 @@ which builds the optimized one); `make fixedpoint` checks that compiler builds i
 | `cabi.olang` | the C calling conventions (X11): how a plain-data struct crosses to C by value on x86-64 (System V) and AArch64 (AAPCS64), as clang passes it |
 | `bindgen.olang` | a C import translated (X17-X19: the declarations clang reads, macros, the C to compile beside), and `olang bindgen HEADER.h` (X16) writing them down |
 | `fix.olang` | `olang fix` (B17): the migration tools of `tools/`, built into the cache and run over the files in the order the changes were made |
+| `mutate.olang` | `olang test -mutate` (B26): the faults a file's code can be given, found in its syntax tree (`Faults`), each run by a compiler of its own with the changed text in the file's place (`OLANG_PLANT`), the lines changed since a commit (`Changed`), and the report |
 | `profile.olang` | `olang profile` (B20): the program built with the runtime's sampler (`std/runtime/prof.ll`) and run, its samples read and named by `llvm-symbolizer`, the report and the HTML flame graph |
 | `fmt.olang` | the formatter (B13): the layout, over the scanner's tokens, and `olang format` over files |
 | `unparse.olang` | a syntax tree written back as source: the formatter's held branches, `dump roundtrip` |

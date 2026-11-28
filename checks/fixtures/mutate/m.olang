@@ -1,0 +1,30 @@
+# what test -mutate plants faults in (the checks scenario "mutate"): Clamp's tests miss its edges, Loud has no test,
+# Sum's loop never ends with a fault in its step, and Join's "+" has no "-" to become
+
+fn Clamp(x I64, lo I64, hi I64) I64 {
+    if x < lo: return lo
+    if x > hi: return hi
+    return x
+}
+
+fn Loud(x I64) Bool { return x >= 100 }
+
+fn Sum(n I64) I64 {
+    total := 0
+    i := 0
+    for i < n {
+        total += i
+        i++
+    }
+    return total
+}
+
+fn Join(a String&, b String&) String { return a + b }
+
+test Clamp "inside and outside" {
+    assert Clamp(5, 0, 10) == 5 and Clamp(-3, 0, 10) == 0 and Clamp(30, 0, 10) == 10
+}
+
+test Sum "of the first four" { assert Sum(4) == 6 }
+
+test Join "two texts" { assert Join("a", "b") == "ab" }

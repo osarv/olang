@@ -44446,3 +44446,26 @@ before. Found along the way: `explain -ir` on the Windows target linked with the
 objects - listLink now links as Link does (lld, -static) and asks lld's COFF linker for its save-temps
 (`--Xlink=-lldsavetemps`; the MinGW driver takes no -plugin-opt, so no remarks there). `-asm` there is still refused:
 lld writes its assembly, but the listing does not yet find a function in COFF's.
+
+## 2026-11-28: test -mutate plants faults and says which the tests catch (B26; mine, for the testing product)
+
+The testing product needs one honest number for a test suite: of the small faults that could be in this code, how
+many would these tests notice. Its prototype planted faults by rewriting source lines (a `<` between spaces made
+`<=`), which lands in texts and comments it has to guess its way around, cannot tell a `+` of numbers from one joining
+texts, and wrote each fault into the file itself. `olang test -mutate FILE` does it in the compiler: the faults are
+found by walking the parsed file (compiler/mutate.olang, `Faults`) - outside tests and asserts - and each is one edit
+of the text at a node's span, so every other line stays where it was and a survivor is reported at its own line and
+column. A fault is run by a compiler process of its own, told through the environment to read the changed text in the
+module's place (`OLANG_PLANT`, the overlay the language server already loads unsaved files through); the file on disk
+is never touched, records and objects are shared in the build directory as any two builds share them (keys are
+hashes of the text), and only the test binary is a worker's own. Decisions: status 0 whatever the score (equivalent
+faults exist, so a score is a measure and the caller sets the bar); `-since COMMIT` reads `git diff -U0` and keeps the
+faults on changed lines, which is what a review of one change wants; a comparison gets two faults (moved by one, and
+turned about) because the first alone says nothing where no test reaches the branch; a number above 16 is made 0
+rather than one more, since nothing can tell 86400 from 86401 but anything that uses the number tells it from 0. A
+test the evaluator decides false while compiling (S18c) ends the build, so a planted build that fails with S18c alone
+is a fault caught, not one that did not build. A fault can make a loop endless and the test binary is the compiler's
+child's child, so the limit is kept by the process that runs the binary (`OLANG_PLANT_LIMIT`, `execTests`), which
+ends with 5. Measured: Viska's core/store.olang, one test, 63% of 36 faults caught in about 35 s on four cores;
+OAgent's core/pool.olang 70% of 224 in four and a half minutes (each fault is a build of the module and a link; one build holding every fault behind a switch is the known way to make it one
+build, not done). Tests: compiler/mutate.olang's own, the checks scenario `mutate`.
