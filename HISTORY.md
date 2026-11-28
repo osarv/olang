@@ -44466,3 +44466,14 @@ the native ones - Locations objects, libraries - by their first four bytes). wer
 multiply-adds against 235 before (Linux 432). Measured on the user's PC by a hand-made link of the same steps: 8.5 ->
 125 GFLOPS on one thread, 28 -> 470 on four. Left: a ThinLTO link for Windows has the same pipeline and is not
 changed; `explain -ir` there shows lld's own optimization, not the three steps'.
+
+## 2026-11-28: a BF16 converted to an integer is widened to an F32 first (T4, O45; mine)
+
+Found by oann's image work: a generic loop filling an `Array<I32>` from BF16 bits (checkpoint's reader, `Get<I32>` of
+a BF16 tensor) stopped the build in LLVM's X86 back end, "Cannot select: f16 = fp_to_fp16", on the cloud machines,
+whose CPU (as clang resolves native) has AVX512-FP16 and not AVX512-BF16. The loop vectorizer had made `fptosi <N x
+bfloat> to <N x iM>`; llc fails on it for every N from 2 to 32 and integer widths 8 to 32 with those features, while
+scalar `fptosi bfloat`, every F16 conversion and every integer-to-BF16 one select. The emitter now widens a BF16 by its
+bits (`widenBF16`, as O45 does for every BF16 widening) and converts the F32: the same value, since the widening is
+exact. tests/bf16int.olang converts BF16 to I16, I32, I64 and U8 across a vectorized loop (it stopped the old
+compiler's build on such a machine).

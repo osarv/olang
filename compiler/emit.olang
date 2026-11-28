@@ -6096,7 +6096,13 @@ fn (fe mut fnEm&) convert(v String&, from types.TypeId, to types.TypeId) String 
         return fe.let("fptrunc double " + $fenced + " to half")
     }
     if fi and t.IsFloat(g) { return fe.let($("uitofp " if t.IsUnsigned(f) else "sitofp ") + $fl + " " + $v + " to " + $gl) }
-    if t.IsFloat(f) and gi { return fe.let($("fptoui " if t.IsUnsigned(g) else "fptosi ") + $fl + " " + $v + " to " + $gl) }
+    if t.IsFloat(f) and gi {
+        # a BF16 widened to an F32 first, exactly: LLVM 18 cannot select a vectorized "fptosi <N x bfloat>" where the CPU
+        # has AVX512-FP16 without AVX512-BF16 ("Cannot select: f16 = fp_to_fp16"), and the loop vectorizer makes one
+        op := "fptoui " if t.IsUnsigned(g) else "fptosi "
+        if fl == "bfloat": return fe.let($op + "float " + $fe.widenBF16($v, "float") + " to " + $gl)
+        return fe.let($op + $fl + " " + $v + " to " + $gl)
+    }
     if t.IsFloat(f) and t.IsFloat(g) {
         # a BF16 widened by its bits, exactly, and an F32 narrowed to one in integers (T4: LLVM 18's own conversions
         # call the runtime library, or at -O0 round twice); F16 and BF16 meet through an F32

@@ -1690,7 +1690,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   written otherwise. A base read through a reference local is read before the loop only where that reference is never null (review3). A slice span is unchecked only where every slice written there (comptime copies) is proven.
   Changes no meaning: the checks left out cannot fail, and a loop whose test fails runs as written.
 - **BF16 widening stays integer (O45, mine, 2026-11-18).** A BF16 widened is its bits `zext` to i32, `shl` 16 and
-  `bitcast` to float (`widenBF16`), never `fpext bfloat`: LLVM 18 scalarizes that one (no SLP, a scalar FMA a lane) and
+  `bitcast` to float (`widenBF16`), never `fpext bfloat`, and a BF16 converted to an integer is widened so first (2026-11-28: LLVM 18 cannot select a vectorized `fptosi <N x bfloat>` on AVX512-FP16 without AVX512-BF16): LLVM 18 scalarizes `fpext bfloat` (no SLP, a scalar FMA a lane) and
   its vector form stops the X86 backend ("Do not know how to soft promote"). The integer form vectorizes (vpmovzxwd,
   vpslld, a zmm FMA a vector); what took apart BF16 dot products with more than two sum chains is LLVM's SLP order, not
   the IR: it visits a loop's exit block before its header, so a total of two chains' own lane sums (or two rows' results

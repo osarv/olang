@@ -1,0 +1,27 @@
+# T4: BF16 values converted to integers in a loop the vectorizer widens - LLVM 18 could not select "fptosi <N x bfloat>"
+# on a CPU with AVX512-FP16 and without AVX512-BF16 ("Cannot select: f16 = fp_to_fp16"), so a BF16 is widened to an F32
+# (exactly) before it is converted. Each result is the conversion's own: truncated toward zero
+
+fn into<T>(out mut Array<T>&, xs Array<BF16>&) {
+    for i in range xs.Len(): out[i] = T(xs[i])
+}
+
+test "BF16 to I32, I16, U8 and I64 across a vectorized loop truncate toward zero" {
+    xs := Array<BF16>(64)
+    for i in range 64: xs[i] = BF16(F32(i) * 1.5 - 20.25)
+    a := Array<I32>(64)
+    into(a, xs)
+    b := Array<I16>(64)
+    into(b, xs)
+    c := Array<I64>(64)
+    into(c, xs)
+    for i in range 64 {
+        want := I64(F32(xs[i]))
+        assert I64(a[i]) == want and I64(b[i]) == want and c[i] == want, $i
+    }
+    ys := Array<BF16>(64)
+    for i in range 64: ys[i] = BF16(F32(i) * 3.75)
+    d := Array<U8>(64)
+    into(d, ys)
+    for i in range 64: assert U64(d[i]) == U64(F32(ys[i])), $i
+}
