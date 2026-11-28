@@ -1,0 +1,30 @@
+# B12f: a program with no console of its own (a GUI program, here one that let its console go) starts a console
+# program with CREATE_NO_WINDOW (std/runtime/windows.ll): no window shows, and the child's streams still come back.
+# Elsewhere the same run checks the ordinary path.
+import "std/os"
+
+if TargetOs == "windows" {
+    extern fn FreeConsole() I32
+}
+
+fn echoed() String ? os.Error {
+    if TargetOs == "windows": return (try os.Output.Exec("cmd", "/c", "echo hi")).Stdout.Trim()
+    return (try os.Output.Exec("sh", "-c", "echo hi")).Stdout.Trim()
+}
+
+test "a console program started from a program with no console runs and its output comes back" {
+    assert (try echoed()) == "hi"          # with this program's console, where it has one
+    if TargetOs == "windows": FreeConsole()
+    assert (try echoed()) == "hi"          # with none: CREATE_NO_WINDOW
+}
+
+# the flag itself: a Windows console window can't be seen from a test (Wine shows none either way), so the runtime's
+# source is held to it - a GUI parent's CreateProcessA passes CREATE_NO_WINDOW (0x08000000)
+Runtime Array<U8>& = embed "../std/runtime/windows.ll"
+
+test "the Windows runtime starts a console program from a GUI program with CREATE_NO_WINDOW" {
+    src := String(Runtime)
+    assert src.Contains("call ptr @GetConsoleWindow()")
+    assert src.Contains("select i1 %nocon, i32 134217728, i32 0")
+    assert src.Contains("i32 1, i32 %cflags, ptr null, ptr %dirp")
+}

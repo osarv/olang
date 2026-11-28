@@ -617,6 +617,7 @@ entry:
 }
 
 declare i32 @CreateProcessA(ptr, ptr, ptr, ptr, i32, i32, ptr, ptr, ptr, ptr)
+declare ptr @GetConsoleWindow()
 declare ptr @GetStdHandle(i32)
 declare i64 @_get_osfhandle(i32)
 declare i32 @SetHandleInformation(ptr, i32, i32)
@@ -678,7 +679,13 @@ entry:
   %d0 = load i8, ptr %dir
   %nodir = icmp eq i8 %d0, 0
   %dirp = select i1 %nodir, ptr null, ptr %dir
-  %ok = call i32 @CreateProcessA(ptr %appp, ptr %cmd, ptr null, ptr null, i32 1, i32 0, ptr null, ptr %dirp, ptr %si, ptr %pi)
+  ; a process with no console of its own (a GUI program) starts a console program with CREATE_NO_WINDOW: the child has
+  ; its console, its streams as given, and no window pops up (Windows Terminal, the default console host, shows one
+  ; for any console made otherwise, and closing that window ends the parent attached to it)
+  %cw = call ptr @GetConsoleWindow()
+  %nocon = icmp eq ptr %cw, null
+  %cflags = select i1 %nocon, i32 134217728, i32 0
+  %ok = call i32 @CreateProcessA(ptr %appp, ptr %cmd, ptr null, ptr null, i32 1, i32 %cflags, ptr null, ptr %dirp, ptr %si, ptr %pi)
   %failed = icmp eq i32 %ok, 0
   br i1 %failed, label %fail, label %started
 started:

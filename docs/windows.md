@@ -52,7 +52,9 @@ clipboard ([its README](../examples/windows/README.md)). `make windows-example` 
 - The prelude, `io`, `os` (files, directories, the environment, `Run`, `Exec`, `Process`), `time`, `sync`, `chan`,
   `cancel` and the rest of std that is plain olang work as on Linux.
 - `os` starts programs with CreateProcess, each argument quoted as Windows programs take their command line apart; a
-  program named without a path is found as Windows finds it (PATH, `.exe` added). `os.Run` runs a command through
+  program named without a path is found as Windows finds it (PATH, `.exe` added). A program with no console of its own (a GUI
+  program) starts a console program with CREATE_NO_WINDOW: the child keeps its streams and no window shows, since
+  Windows Terminal would show one for a console made otherwise, and closing it would end the program. `os.Run` runs a command through
   `cmd.exe` (C's `system`) and gives the command's exit code. `os.ExecInPlace` runs the program and ends this one with
   its status: Windows never puts another program in a process's place. `os.ReadLink` fails with `Failed`. A temporary
   directory (`os.MkTemp`) is made in `TMPDIR`, else `TEMP` or `TMP`.
