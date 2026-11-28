@@ -2156,7 +2156,7 @@ de7aedc8bf904e88 662badc9c4b34dab checks/cases/x2result.olang
 be8ad4d232250c0f d9e5a463d0b6875d checks/cases/zeroeffect.olang
 ac0cb24df228eac5 494276e48e18f7fa checks/cases/zerofails.olang
 94ae6b408242df2d 30ea45a10a2424d8 checks/cases/zeroshared.olang
-cf7af6eeac6a21b8 ca5cf72391b73da8 checks/checks.olang
+29b329cbb8778d76 5a84afa5fa2fdfdd checks/checks.olang
 3636f5eb375a6811 737569dbddb4fa8a checks/fixtures/agree/agree.olang
 403c0d2e6952d5d4 efb54136ad6286dc checks/fixtures/agree/bfrand.olang
 7a26040b03756cbb 11ac830c3b4509ca checks/fixtures/agree/math.olang
@@ -2582,7 +2582,7 @@ e2e32b6bf736edf4 f2e3de4f89ad0d10 checks/fixtures/weak/good.olang
 1949f8159548a19e 017803e1b22cd281 compiler/api.olang
 35316b4b75116c9f d794179a620708bf compiler/ast.olang
 0238a8da29dc1b01 a049a5606ab9b89f compiler/bindgen.olang
-03c2ef7134790355 fc8771c6a8d16853 compiler/build.olang
+9d2519e909321531 2f2c5b2babfc9ffd compiler/build.olang
 86b0f621e0dc4ecd 59322b5bdf83538c compiler/cabi.olang
 7058f80ed1bd6dff 36ac28ef54ff03e2 compiler/cells.olang
 4d92461b4d66affe 33252ab761c8934f compiler/check.olang
@@ -2611,11 +2611,11 @@ c57ed09cf7ebd444 4729b238f12f0aa4 compiler/lsp.olang
 4ae3a7800c5bae72 42a1226bb8e95e02 compiler/mcp.olang
 58d176a3e635da8e 17f4e1dc03b84b98 compiler/measure.olang
 64e7191aaade86a2 266e0cdd2017bef0 compiler/mir.olang
-39ed86bc4af9607d d3d4f78c8be6d4a0 compiler/msgs.olang
+508e18e8bb3b1a4f 8642440712bf5fef compiler/msgs.olang
 fbc0f3f80ef75028 585036c51eb91a6d compiler/names.olang
 fc66faef5211dbff 206306da21572454 compiler/needs.olang
 3413eebc906e8793 9f656d8ad54bf6a2 compiler/notebook.olang
-5876ec2b828bbfac 1f72a69bbbe216f3 compiler/olang.olang
+12604446f72d4b21 880783c8d20e77e2 compiler/olang.olang
 62692d71f9fa7f6c 803ef59935de2dfe compiler/paint.olang
 aab3407a3541d000 df3996d76bfb8a28 compiler/parse.olang
 7601a21002df9198 ae5049d965566643 compiler/profile.olang
@@ -2651,7 +2651,7 @@ fabae779f9a4bdd7 95b08450803b2fd4 compiler/tools/diaggold.olang
 f8f003fca3efebb2 76df305882c8ff29 compiler/tools/diaggold_capture.olang
 f7120d51fcb91c74 50e0f8d32a4d0677 compiler/tools/drvdiff.olang
 5ae1355bcb93f45f db44332853492896 compiler/tools/dump.olang
-456ad2d1cb1968a4 abd724a64f39c3fd compiler/tools/evaldiff.olang
+0411f4e7146b6b37 6f624f53925f7b47 compiler/tools/evaldiff.olang
 f346cce1f71db7d9 7315e5669bde713a compiler/tools/fmt.olang
 2bf531e33ecf0b04 49d84ed4ba1dc63d compiler/tools/layoutdiff.olang
 e5d9bb146e4b1569 da4533027b407e71 compiler/tools/layoutgold.olang

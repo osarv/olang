@@ -8604,7 +8604,7 @@ server    ::= "lsp" | "mcp" | "jupyter"
 option    ::= "-output" PATH | "-debug" | "-quick" | "-checked" | "-race" | "-sanitize" | "-target" NAME
             | "-define" NAME "=" VALUE | "-update" | "-check" | "-html" DIR | "-library" | "-memory"
             | "-fuzz" NAME | "-fuzztime" SECONDS | "-caps" | "-asm" | "-ir" | "-bench" | "-runs" COUNT | "-install" | "-continue"
-            | "-free" ( "early" | "late" )
+            | "-free" ( "early" | "late" ) | "-mutate" | "-since" COMMIT
 ```
 
 A word ending in `.olang` in the mode's place is a file to run, and one ending in `.ipynb` a notebook to run (B24); any
@@ -8631,6 +8631,7 @@ beginning with `-` that is no option is an error:
 | `-memory` | scripting mode, build, test, run | B18 |
 | `-free early`, `-free late` | scripting mode, build, test, run | B18b |
 | `-fuzz NAME`, `-fuzztime SECONDS` | test | B19 |
+| `-mutate`, `-since COMMIT` | test | B26 |
 | `-bench` | scripting mode, test, run | B19b |
 | `-runs COUNT` | scripting mode, run | B19b |
 | `-caps` | explain | B11c |
@@ -8995,6 +8996,45 @@ per processor online, but no more than the memory available when the compiles st
 each, and at least one. With `OLANG_TIMES` set, a build says on the standard error each phase as it ends - the front
 end's passes, the compiles (each as it ends, `n/m`), the link - with how long it took and the compiler's resident
 memory, now and at most. Neither changes what is built.
+
+**B26 (planted faults).** `test -mutate FILE...` says how much of each file's behaviour its tests check. The compiler
+plants a **fault** in the file's code - one small change of what it does - runs the file's tests with it as a test run
+runs them (the options and the words naming tests applying as they do there), and does so for every fault, one at a
+time, several side by side. A fault the tests fail with is **caught**; one they still pass with **survived**: no test
+checks the behaviour it changed. Each survivor is listed where it stands - `survived  FILE:LINE:COLUMN  WHAT` and the
+line below it - in the order of the file, then the file's line: `FILE: N of M faults caught (P%)`, P rounded down. The
+file itself is never written to: each fault's text is read in its place by a compiler process of its own.
+
+The faults are found in the syntax tree, in the bodies of the file's functions and methods, its constructors and
+destructors and the values of its globals that are a literal alone - never in a test, an `assert`, a comment, a text,
+a type or what `extern` declares. They are:
+
+| the code | made |
+|---|---|
+| `<` `<=` `>` `>=` | moved by one (`<` to `<=`, `>=` to `>`) and turned about (`<` to `>=`), a fault each |
+| `==` `!=`, `is` `is not`, `in` `not in`, `and` `or` | the other of the pair |
+| `+` `-`, `*` `/`, `+=` `-=`, `*=` `/=`, `++` `--` | the other of the pair (a `+` joining texts, by its form, is left) |
+| `not x`, `-x` | `x` |
+| `true`, `false` | the other |
+| a whole number in decimal | 0 and 1 exchanged; up to 16 one more; above it 0 |
+| the condition of an `if`, a loop, a conditional expression, a guard or a filter that is no comparison, `not` or literal | negated |
+| `break`, `continue` | the other |
+| a statement that is an expression (a call) or an assignment | left out |
+
+A fault the file does not build with is none and is not counted (their number is said); a test the compiler finds
+false while compiling (S18c) catches its fault as a failing run does. A fault whose tests have not ended after the
+second and five times what the file takes to build and test unchanged is stopped and counted as caught (their number
+is said): a fault may make a loop endless.
+
+`-since COMMIT` plants faults only in the lines of each file that differ from the commit COMMIT of the repository the
+file is in - what is not committed with them, and every line of a file the commit does not have; a COMMIT that names
+none, or a file in no repository, is an error (status 2). Given without `-mutate` it is an error, as `-mutate` is with
+`-fuzz`, `-bench` or `-memory`.
+
+The file's tests are run unchanged first: where they fail, their output is written, no fault is planted and the status
+is 1, as it is for a file that cannot be read or does not parse. Otherwise the status is 0 however many faults
+survived: the score is a measure, not a verdict - a fault may change nothing a program can observe (`i < n` and
+`i != n` in a loop counting up), so not every survivor is a missing test.
 
 **B25 (the busy indicator).** Where a compiler process waits - on the front end, clang's compiles, the link, a fetch of a
 remote package, a prompt cell's build and run - and its standard error is a terminal (and `TERM` is not `dumb`), it draws on

@@ -130,6 +130,8 @@ type Diag enum {
     FuzzTimeNotNumber
     FuzzTimeAlone
     BenchFuzz
+    SinceAlone
+    MutateWith
     RunsNotNumber
     FreeNotMode
     RunsAlone
@@ -1134,6 +1136,8 @@ fn RunsNotNumber(text String&) r.Msg { return r.Msg(Diag.RunsNotNumber, "B19b", 
 fn FreeNotMode(text String&) r.Msg { return r.Msg(Diag.FreeNotMode, "B18b", "-free takes early or late, and '" + $text + "' is neither") }
 fn RunsAlone() r.Msg { return r.Msg(Diag.RunsAlone, "B19b", "-runs says how many times -bench runs the program - give -bench with it") }
 fn BenchFuzz() r.Msg { return r.Msg(Diag.BenchFuzz, "B19b", "-bench and -fuzz are given together", "-bench measures the tests a build runs, and -fuzz runs one test on a fuzzer's inputs", "give one") }
+fn SinceAlone() r.Msg { return r.Msg(Diag.SinceAlone, "B26", "-since says which lines -mutate plants faults in - give -mutate with it") }
+fn MutateWith(text String&) r.Msg { return r.Msg(Diag.MutateWith, "B26", "-mutate and " + $text + " are given together", "-mutate runs the tests once per fault it plants, as a plain test run runs them", "give one") }
 fn FuzzNoTest(word String&) r.Msg { return r.Msg(Diag.FuzzNoTest, "B19", "-fuzz " + $word + " names no test of this file", "", "give a test's target, its target's type or a word of its description") }
 fn MemoryGaps(n I64) r.Msg { return r.Msg(Diag.MemoryGaps, "B18", $n + " let-go" + $("" if n == 1 else "es") + " early freeing does not follow (O8f) - the report above names each", "", "keep what is let go of in a place early freeing follows: a local, a field, a global") }
 fn FuzzManyTests(word String&, names String&) r.Msg { return r.Msg(Diag.FuzzManyTests, "B19", "-fuzz " + $word + " names several tests (" + $names + ") - give a word that names one") }

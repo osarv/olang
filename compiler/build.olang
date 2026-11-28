@@ -11,6 +11,7 @@
 # - test over several files runs the compiler again once per file (TestFiles), one at a time in the order listed, so a
 import "std/os"
 import "std/chan"
+import "std/cancel"
 import "diag"
 import "msgs"
 import "diagmsg"
@@ -215,6 +216,11 @@ type Config struct() {
     # OLANG_CHECKS=hoist (an experiment, docs/checks-measure.md): each object's IR through LLVM's inductive range check
     # elimination before clang, so an index check of a counted loop is made once per loop rather than per element
     Hoist Bool = false
+    # B26: a fault planted by test -mutate (compiler/mutate.olang) - the module at Plant (its path in full) read from the
+    # file PlantText instead, its tests stopped after PlantLimit milliseconds; "" and 0 for none
+    Plant String& = ""
+    PlantText String& = ""
+    PlantLimit I64 = 0
     Store String& = ""  # OLANG_OBJECTS: a directory of objects shared by builds in other directories (B3j); "" for none
     version String& = ""
 }
@@ -424,6 +430,8 @@ fn (c mut Config&) clangVersion() String& {
 
 # B3m: how many compiles run at once - Jobs, else OLANG_JOBS, else one per core this machine has online, but no more than
 # the memory available now holds at JobMemory each (at least one)
+fn (c Config&) Width() I64 { return c.width() }
+
 fn (c Config&) width() I64 {
     if c.Jobs > 0: return c.Jobs
     asked := try (try os.Env("OLANG_JOBS") catch os.Error default "").Trim().ParseInt() catch default 0
@@ -1137,7 +1145,9 @@ fn (c mut Config&) testBinary<F Frontend>(fe mut F&, file String&, d mut diag.Di
     try c.ensureDir(d) catch Failed { return finish(d), "" }
     objs := try c.Objects(prog, d) catch Failed { return finish(d), "" }
     Phase("compile")
-    bin := c.exe($c.Dir + "/" + $Readable(prog.rootIdentity()) + "_test" + $c.modeSuffix())
+    # B26: a planted fault's binary is its worker's own, beside the file's (PlantText is the worker's file)
+    plant := $"." + $filepath.Base(c.PlantText) if c.Plant != "" else ""
+    bin := c.exe($c.Dir + "/" + $Readable(prog.rootIdentity()) + "_test" + $c.modeSuffix() + $plant)
     try c.Link(objs, bin, prog.Dyncall != "", prog.Links) catch Failed {
         sayln(c.paint("31", $file + ": native compilation failed"))
         return 1, ""
@@ -1176,9 +1186,18 @@ fn (c Config&) runTests(run Array<String&>&, bin String&, file String&, filters 
 # run used
 fn execTests(c Config&, cmd Array<String&>&, built I64) I32 {
     if c.Timed: return measure.Measure(cmd, built)
+    if c.PlantLimit > 0 {
+        # B26: a planted fault's tests are stopped at the limit (a fault may make a loop endless), the process ending with 5
+        tok := cancel.Token.After(c.PlantLimit)
+        out := try os.Output.ExecUntil(tok, ...cmd, capture = false) catch os.Error { return -1 } catch cancel.Stopped { os.Exit(5) }
+        return out.Status
+    }
     out := try os.Output.Exec(...cmd, capture = false) catch os.Error { return -1 }
     return out.Status
 }
+
+# B26: the status of a file that did not build, which with a fault planted is 4 - the fault is none
+fn (c Config&) planted(status I32) I32 { return 4 if c.Plant != "" and status != 0 else status }
 
 # test FILE with one file: its test binary built and run here (B3a). 0 when every test passed
 fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagnostics&, filters Array<String&>& = Array<String&>(0)) I32 {
@@ -1190,7 +1209,7 @@ fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagn
     c.TestPart = 1 if split else 0
     prog := Program()
     status, bin := c.testBinary(fe, file, d, prog, split)
-    if status >= 0: return status
+    if status >= 0: return c.planted(status)
     # B3a, P7: no test starts a task - the one binary has them all, as a build always had
     split = split and prog.Spawning.Len() > 0
     if not split: c.TestPart = 0
@@ -1200,7 +1219,7 @@ fn TestFile<F Frontend>(fe mut F&, c mut Config&, file String&, d mut diag.Diagn
         raceProg := Program()
         raceD := diag.Diagnostics(c.Color)
         status, race = c.raceBinary(fe, file, raceD, raceProg, prog.Spawning)
-        if status >= 0: return status
+        if status >= 0: return c.planted(status)
     }
     spin.End()
     c.TestHeader(file)

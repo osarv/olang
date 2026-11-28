@@ -37,7 +37,7 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   extern blocks, a match's clauses) say "this takes a block here, not a one-line body: write { }".
 - **The command line is words (B1, the user's call 2026-10-17, reversing one-character flags).** Modes `build compile
   test run format explain help doc lsp mcp fix bindgen profile`; options `-output -debug -race -sanitize -target
-  -define -update -check -quick -checked -html -library -memory -fuzz -fuzztime -caps -asm -ir -bench`, each checked against
+  -define -update -check -quick -checked -html -library -memory -fuzz -fuzztime -caps -asm -ir -bench -mutate -since`, each checked against
   the modes it applies to; old flags are gone. A word that is no mode is answered with the mode it misspells or
   shortens (`'fmt' is not a mode - did you mean 'format'?`), never taken as a second spelling of it.
 - **`-quick` (B2g, the user's call 2026-10-24).** `-O2` without link-time optimization; an error beside `-debug` or
@@ -575,6 +575,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
 - **Fuzzing and property tests (B19, B19a, docs/survey2.md section 5, 2026-10-26).** `olang test -fuzz NAME FILE
   [-fuzztime SECONDS]` runs one test per input with libFuzzer. `std/fuzz` and `std/prop` (parameters made by
   reflection, failures shrunk and saved).
+- **Planted faults (B26, 2026-11-28; mine, for the testing product).** `olang test -mutate FILE... [-since COMMIT]`
+  plants small faults found in the syntax tree, one at a time, runs the file's tests on each and lists the survivors
+  with the share caught; status 0 whatever the score. Each fault runs in a compiler process of its own that reads the
+  changed text in the file's place (`OLANG_PLANT`, the loader's overlay); the file is never written to.
 - **Benchmarks are tests (B19b, QCX 4, the user's "sure" 2026-11-07; built 2026-11-08).** `bench.Run(fn() { ... })` in
   a test runs the work once in every build; `olang test -bench FILE [WORD...]` grows the calls to a second (Go's rule)
   and writes ns/op, allocs/op, B/op (counted only in that build) and instr/op where a counter exists. `bench.Keep(v)`

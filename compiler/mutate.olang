@@ -1,0 +1,648 @@
+# mutate - `olang test -mutate FILE...` (B26): how much of a file's behaviour its tests check. A small fault is planted
+# in the file's code, one at a time - a comparison moved by one, an operator turned, a condition negated, a statement
+# left out - and the file's tests are run on each. A fault the tests still pass with survived: nothing checks the
+# behaviour it changed. The share of faults the tests caught is the file's mutation score.
+#
+# The faults are found in the syntax tree (Faults), outside tests and asserts, so none lands in a comment, a text or a
+# type; each is one edit of the file's text, which keeps every other line where it was. A fault is run by this
+# compiler in a process of its own, which reads the edited text in the file's place (OLANG_PLANT, load's overlay) and
+# never touches the file. -since REV plants faults only in the lines changed since the commit REV (Changed).
+
+import "std/os"
+import "std/io"
+import "std/time"
+import "std/chan"
+import "std/filepath"
+import "ast"
+import "token"
+import "source"
+import "scan"
+import "parse"
+import "diag"
+import "fmt"
+import "load"
+import "spin"
+import "build"
+
+# one fault: the text [Start, End) of the file made Now; What says it ("'<' made '<='")
+type Fault struct(Start I64, End I64, Now String, What String) { Start, End, Now, What }
+
+# the file's text with the fault in it
+fn (f Fault&) In(text String&) String { return $text[:f.Start] + f.Now + $text[f.End:] }
+
+type finder struct(Text String&) {
+    Text
+    Out Vec<Fault> = Vec<Fault>()
+}
+
+fn (f mut finder&) add(start I64, end I64, now String&, what String&) {
+    for o in f.Out {
+        if o.Start == start and o.End == end and o.Now == now: return
+    }
+    f.Out.Push(Fault(start, end, $now, $what))
+}
+
+# the word an operator is turned into, "" for one left as it is
+fn turned(op token.Tok) String& {
+    return match op {
+        case token.Tok.Lt: "<="
+        case token.Tok.Le: "<"
+        case token.Tok.Gt: ">="
+        case token.Tok.Ge: ">"
+        case token.Tok.EqEq: "!="
+        case token.Tok.NotEq: "=="
+        case token.Tok.Plus: "-"
+        case token.Tok.Minus: "+"
+        case token.Tok.Star: "/"
+        case token.Tok.Slash: "*"
+        case token.Tok.And: "or"
+        case token.Tok.Or: "and"
+        case token.Tok.Is: "is not"
+        case token.Tok.IsNot: "is"
+        case token.Tok.In: "not in"
+        case token.Tok.PlusEq: "-="
+        case token.Tok.MinusEq: "+="
+        case token.Tok.StarEq: "/="
+        case token.Tok.SlashEq: "*="
+        case token.Tok.Inc: "--"
+        case token.Tok.Dec: "++"
+        case token.Tok.Break: "continue"
+        case token.Tok.Continue: "break"
+        case _: ""
+    }
+}
+
+# the word an ordering is turned about into (its opposite: the branch taken is the other one), "" for another operator -
+# beside the move by one turned gives it
+fn opposite(op token.Tok) String& {
+    return match op {
+        case token.Tok.Lt: ">="
+        case token.Tok.Le: ">"
+        case token.Tok.Gt: "<="
+        case token.Tok.Ge: "<"
+        case _: ""
+    }
+}
+
+# the operator word turned where it stands, between from and to
+fn (f mut finder&) turn(op token.Tok, from I64, to I64) {
+    if turned(op) == "" or from >= to: return
+    word :~ op.Text()
+    at := from + (try f.Text[from:to].Find(word) catch { return })
+    for now in Array<String&>[turned(op), opposite(op)] {
+        if now != "": f.add(at, at + word.Len(), now, $"'" + $word + "' made '" + $now + "'")
+    }
+}
+
+# whether an expression is text by its form - a text literal, a rendering "$x", or texts joined - whose "+" has no "-"
+fn textual(x ast.Expr&) Bool {
+    return match x {
+        case ast.Expr.Lit(_, kind): kind == token.Tok.StrLit or kind == token.Tok.CharLit
+        case ast.Expr.Unary(_, op, _): op == token.Tok.Dollar
+        case ast.Expr.Paren(_, y): textual(y)
+        case ast.Expr.Binary(_, op, a, b): op == token.Tok.Plus and (textual(a) or textual(b))
+        case _: false
+    }
+}
+
+# whether a condition has a fault of its own that turns it - a comparison, a "not", a literal - so negating it whole
+# would plant the same fault twice
+fn turnsItself(x ast.Expr&) Bool {
+    return match x {
+        case ast.Expr.Paren(_, y): turnsItself(y)
+        case ast.Expr.Lit(_, _), ast.Expr.NotIn(_, _, _), ast.Expr.Chain(_, _): true
+        case ast.Expr.Unary(_, op, _): op == token.Tok.Not
+        case ast.Expr.Binary(_, op, _, _): turned(op) != "" and op != token.Tok.And and op != token.Tok.Or
+        case _: false
+    }
+}
+
+# a condition: negated whole where nothing in it turns it, then what is in it
+fn (f mut finder&) cond(x ast.Expr?&) {
+    if x is null: return
+    sp := x.Span()
+    if not turnsItself(x) {
+        f.add(I64(sp.Start), I64(sp.End), $"not (" + $f.Text[I64(sp.Start):I64(sp.End)] + ")", "condition negated")
+    }
+    f.expr(x)
+}
+
+# a literal: true and false exchanged; a whole number moved by one where it is small (a count, an offset: 0 and 1
+# exchanged), made 0 where it is large (a size, a limit - one more of which nothing could tell)
+fn (f mut finder&) lit(sp source.Span, kind token.Tok) {
+    was :~ f.Text[I64(sp.Start):I64(sp.End)]
+    now String& = ""
+    if kind == token.Tok.BoolLit: now ~ "false" if was == "true" else "true"
+    if kind == token.Tok.IntLit {
+        n := try was.ParseInt(10) catch { return }
+        now ~ "0" if n == 1 or n > 16 else $(n + 1)
+    }
+    if now != "": f.add(I64(sp.Start), I64(sp.End), now, $"'" + $was + "' made '" + $now + "'")
+}
+
+fn (f mut finder&) exprs(xs Array<ast.Expr&>&) {
+    for x in xs: f.expr(x)
+}
+
+fn (f mut finder&) catches(cs Array<ast.Catch&>&) {
+    for k in cs {
+        f.stmts(k.Body)
+        f.exprs(k.Defaults)
+    }
+}
+
+fn (f mut finder&) matched(m ast.Match&) {
+    f.expr(m.Subject)
+    for cs in m.Cases {
+        f.cond(cs.Guard)
+        f.stmts(cs.Body)
+        f.expr(cs.Value)
+    }
+}
+
+fn (f mut finder&) binary(op token.Tok, a ast.Expr&, b ast.Expr&) {
+    f.expr(a)
+    f.expr(b)
+    if op == token.Tok.Plus and (textual(a) or textual(b)): return
+    f.turn(op, I64(a.Span().End), I64(b.Span().Start))
+}
+
+fn (f mut finder&) unary(sp source.Span, op token.Tok, x ast.Expr&) {
+    f.expr(x)
+    if op == token.Tok.Inc or op == token.Tok.Dec: f.turn(op, I64(sp.Start), I64(x.Span().Start))
+    if op != token.Tok.Not and op != token.Tok.Minus: return
+    f.add(I64(sp.Start), I64(x.Span().Start), "", $"'" + $op.Text() + "' left out")
+}
+
+fn (f mut finder&) expr(x ast.Expr?&) {
+    if x is null: return
+    match x {
+        case ast.Expr.Lit(sp, kind) { f.lit(sp, kind) }
+        case ast.Expr.Paren(_, y), ast.Expr.Named(_, _, y), ast.Expr.Spread(_, y), ast.Expr.Member(_, y, _) { f.expr(y) }
+        case ast.Expr.As(_, y, _), ast.Expr.Generic(_, y, _) { f.expr(y) }
+        case ast.Expr.Unary(sp, op, y) { f.unary(sp, op, y) }
+        case ast.Expr.Postfix(sp, op, y) {
+            f.expr(y)
+            f.turn(op, I64(y.Span().End), I64(sp.End))
+        }
+        case ast.Expr.Binary(_, op, a, b) { f.binary(op, a, b) }
+        case ast.Expr.NotIn(_, a, b) {
+            f.expr(a)
+            f.expr(b)
+            from := I64(a.Span().End)
+            at := from + (try f.Text[from:I64(b.Span().Start)].Find("not") catch { return })
+            f.add(at, at + 4, "", "'not in' made 'in'")
+        }
+        case ast.Expr.Chain(_, ch) {
+            f.exprs(ch.Xs)
+            for i in range ch.Ops.Len(): f.turn(ch.Ops[i], I64(ch.Xs[i].Span().End), I64(ch.Xs[i + 1].Span().Start))
+        }
+        case ast.Expr.Cond(_, a, k, b) {
+            f.expr(a)
+            f.cond(k)
+            f.expr(b)
+        }
+        case ast.Expr.Call(_, g, args), ast.Expr.Index(_, g, args) {
+            f.expr(g)
+            f.exprs(args)
+        }
+        case ast.Expr.Slice(_, y, lo, hi) {
+            f.expr(y)
+            f.expr(lo)
+            f.expr(hi)
+        }
+        case ast.Expr.Axis(_, lo, hi) {
+            f.expr(lo)
+            f.expr(hi)
+        }
+        case ast.Expr.ArrayLit(_, _, items), ast.Expr.Row(_, items), ast.Expr.Variadic(_, items), ast.Expr.Range(_, items) { f.exprs(items) }
+        case ast.Expr.Try(_, y, cs) {
+            f.expr(y)
+            f.catches(cs)
+        }
+        case ast.Expr.MatchE(_, m) { f.matched(m) }
+        case ast.Expr.Compr(_, k) {
+            f.expr(k.Value)
+            f.expr(k.Source)
+            f.cond(k.Filter)
+        }
+        case ast.Expr.Lambda(_, g) { f.stmts(g.Body) }
+        case _ { }
+    }
+}
+
+# a statement left out: an empty block in its place
+fn (f mut finder&) leftOut(sp source.Span) { f.add(I64(sp.Start), I64(sp.End), "{ }", "statement left out") }
+
+fn (f mut finder&) branches(i ast.If&) {
+    f.cond(i.Cond)
+    if i.Then is not null: f.stmts(i.Then!.Body)
+    f.stmt(i.Else)
+}
+
+fn (f mut finder&) stmts(body Array<ast.Stmt&>&) {
+    for st in body: f.stmt(st)
+}
+
+fn (f mut finder&) stmt(st ast.Stmt?&) {
+    if st is null: return
+    match st {
+        case ast.Stmt.ExprS(sp, x) {
+            f.expr(x)
+            f.leftOut(sp)
+        }
+        case ast.Stmt.Var(_, v) { f.exprs(v.Values) }
+        case ast.Stmt.Multi(_, m) { f.exprs(m.Values) }
+        case ast.Stmt.Assign(sp, op, t, v) {
+            f.expr(t)
+            f.expr(v)
+            if not textual(v): f.turn(op, I64(t.Span().End), I64(v.Span().Start))
+            f.leftOut(sp)
+        }
+        case ast.Stmt.TryStore(_, inner, cs) {
+            f.stmt(inner)
+            f.catches(cs)
+        }
+        case ast.Stmt.If(_, i) { f.branches(i) }
+        case ast.Stmt.Forever(_, b), ast.Stmt.Block(_, b) { f.stmts(b) }
+        case ast.Stmt.While(_, k, b), ast.Stmt.DoFor(_, b, k) {
+            f.cond(k)
+            f.stmts(b)
+        }
+        case ast.Stmt.For3(_, l) {
+            f.stmt(l.Init)
+            f.cond(l.Cond)
+            f.stmt(l.Post)
+            f.stmts(l.Body)
+        }
+        case ast.Stmt.ForIn(_, l) {
+            f.expr(l.Source)
+            f.stmts(l.Body)
+            f.catches(l.Clauses)
+        }
+        case ast.Stmt.MatchS(_, m) { f.matched(m) }
+        case ast.Stmt.Return(_, xs) { f.exprs(xs) }
+        case ast.Stmt.Become(_, x), ast.Stmt.Yield(_, x) { f.expr(x) }
+        case ast.Stmt.Jump(sp, kind, _) { f.turn(kind, I64(sp.Start), I64(sp.End)) }
+        case ast.Stmt.Spawn(_, _, call) { f.expr(call) }
+        case ast.Stmt.Join(_, j) {
+            f.stmts(j.Body)
+            f.catches(j.Clauses)
+        }
+        case ast.Stmt.Defer(_, d, _) { f.stmt(d) }
+        case _ { }
+    }
+}
+
+# a global's value where it is a literal alone (a table's numbers are left as they are)
+fn (f mut finder&) global(v ast.VarDecl&) {
+    for x in v.Values {
+        match x {
+            case ast.Expr.Lit(sp, kind) { f.lit(sp, kind) }
+            case _ { }
+        }
+    }
+}
+
+fn (f mut finder&) typeBody(b ast.TypeBody?&) {
+    if b is null: return
+    match b {
+        case ast.TypeBody.Struct(s) {
+            f.stmts(s.Body)
+            f.stmts(s.Dtor)
+        }
+        case ast.TypeBody.Over(_, ctor) {
+            if ctor is not null: f.stmts(ctor.Body)
+        }
+        case _ { }
+    }
+}
+
+fn (f mut finder&) topIf(i ast.TopIf?&) {
+    if i is null: return
+    if i.Then is not null: f.decls(i.Then!.Decls)
+    f.topIf(i.ElseIf)
+    if i.Else is not null: f.decls(i.Else!.Decls)
+}
+
+# the code of a file: its functions, its types' constructors and destructors, its plain globals - never its tests, its
+# top-level asserts or what C defines
+fn (f mut finder&) decls(ds Array<ast.Decl&>&) {
+    for d in ds {
+        match d {
+            case ast.Decl.Fn(g) {
+                if g.Bodied: f.stmts(g.Body)
+            }
+            case ast.Decl.Type(_, t) { f.typeBody(t.Body) }
+            case ast.Decl.Global(_, v) { f.global(v) }
+            case ast.Decl.If(_, i) { f.topIf(i) }
+            case _ { }
+        }
+    }
+}
+
+# a file that does not scan or parse: its diagnostics said, as the compiler says them
+type Unparsed error { Syntax }
+
+# every fault the code of the file at path, text its text, can be given, in the order of the text
+fn Faults(path String&, text String&, color Bool = false) Vec<Fault> ? Unparsed {
+    src := source.Source(path, text)
+    names := source.Names()
+    d := diag.Diagnostics(color)
+    std := load.StdDir()
+    o := fmt.OracleFor(path, std, fmt.PreludeTypes(std), names)
+    file := d.AddFile(path, text)
+    ts := scan.Tokens.Scan(text)
+    p := parse.Parser(src, ts, names, o, d, file)
+    decls :~ p.File()
+    if ts.Diags.Len() > 0 or d.AllSaid().Len() > 0 {
+        say(d.Render())
+        error Unparsed.Syntax
+    }
+    f := finder(text)
+    f.decls(decls)
+    f.Out.Sort(fn(a Fault, b Fault) Bool { return a.Start < b.Start or (a.Start == b.Start and a.End > b.End) })
+    return f.Out
+}
+
+# ---- the lines changed since a commit (-since) ----
+
+# no commit by that name where the file is, or no git to ask
+type NoCommit error { Unknown }
+
+# lines Lo to Hi of a file, from 1
+type Lines struct(Lo I64, Hi I64) { Lo, Hi }
+
+fn git(dir String&, args ...String&) os.Output ? NoCommit {
+    cmd Vec<String&>
+    cmd.Push("git")
+    cmd.Push("-C")
+    cmd.Push(dir)
+    for a in args: cmd.Push(a)
+    return try os.Output.Exec(...cmd.ToArray()) catch os.Error { error NoCommit.Unknown }
+}
+
+# the lines a hunk's header gives the file as it is now: "@@ -12,3 +14,2 @@" is lines 14 and 15; none where it only
+# takes lines away
+fn Lines.Hunk(line String&) Lines {
+    none := Lines(1, 0)
+    plus := try line.Find(" +") catch { return none }
+    rest :~ line[plus + 2:]
+    end := try rest.Find(" ") catch { return none }
+    words := rest[:end].Split(",")
+    lo := try words[0].ParseInt(10) catch { return none }
+    n := 1 if words.Len() < 2 else try words[1].ParseInt(10) catch default 0
+    return Lines(lo, lo + n - 1)
+}
+
+# the lines of the file at real (its path in full) that differ from the commit rev, as the file is now - uncommitted
+# changes with them; every line where the commit has no such file
+fn Changed(real String&, rev String&) Vec<Lines> ? NoCommit {
+    dir := $filepath.Dir(real)
+    name := $"./" + $filepath.Base(real)
+    known := try git(dir, "rev-parse", "--verify", "--quiet", $rev + "^{commit}")
+    if known.Status != 0: error NoCommit.Unknown
+    out := Vec<Lines>()
+    had := try git(dir, "cat-file", "-e", $rev + ":" + $name)
+    if had.Status != 0 {
+        out.Push(Lines(1, I64.Max))
+        return out
+    }
+    diff := try git(dir, "diff", "-U0", rev, "--", name)
+    for line in diff.Stdout.Split("\n") {
+        if not line.StartsWith("@@"): continue
+        h := Lines.Hunk(line)
+        if h.Lo <= h.Hi: out.Push(h)
+    }
+    return out
+}
+
+fn within(ls Vec<Lines>&, line I64) Bool {
+    for l in ls {
+        if l.Lo <= line <= l.Hi: return true
+    }
+    return false
+}
+
+# ---- running the faults ----
+
+# what became of a fault: the tests passed with it (Survived), failed with it (Caught), did not end in time (Slow,
+# caught), or the file did not build with it (Unbuilt: no fault at all, not counted)
+Survived I32 = 0
+Caught I32 = 1
+Slow I32 = 2
+Unbuilt I32 = 3
+
+# the statuses a compiler given a fault (OLANG_PLANT) ends with beside test's own: the file did not build with the
+# fault, and its tests were stopped at the limit
+StatusUnbuilt I32 = 4
+StatusSlow I32 = 5
+
+# one file's run: the compiler and the command line each fault is tested with, the file's text and its faults, where
+# the faults' texts are written, and how long a fault's tests may run
+type job struct(Exe String&, Opts Array<String&>&, File String&, Real String&, Filters Array<String&>&, Text String&
+    All Vec<Fault>&, Work String&) {
+    Exe
+    Opts
+    File
+    Real
+    Filters
+    Text
+    All
+    Work
+    LimitMs I64 = 0
+}
+
+# the file's tests run by a compiler of their own - with the text at plant in the file's place where plant is given:
+# what it wrote and its status
+fn (j job&) test(plant String&) os.Output ? os.Error {
+    cmd Vec<String&>
+    if plant != "" {
+        cmd.Push("env")
+        cmd.Push($"OLANG_PLANT=" + $j.Real)
+        cmd.Push($"OLANG_PLANT_TEXT=" + $plant)
+        cmd.Push($"OLANG_PLANT_LIMIT=" + $j.LimitMs)
+    }
+    cmd.Push(j.Exe)
+    cmd.Push("test")
+    for o in j.Opts: cmd.Push(o)
+    cmd.Push(j.File)
+    for w in j.Filters: cmd.Push(w)
+    return try os.Output.Exec(...cmd.ToArray())
+}
+
+fn (j job&) fate(k I64, plant String&) I32 {
+    try os.WriteFile(plant, j.All[k].In(j.Text)) catch os.Error { return Unbuilt }
+    out := try j.test(plant) catch os.Error { return Unbuilt }
+    if out.Status == 0: return Survived
+    if out.Status == StatusUnbuilt: return Caught if falseAsserts($out.Stdout + $out.Stderr) else Unbuilt
+    return Slow if out.Status == StatusSlow else Caught
+}
+
+# whether what a compiler said of a file that did not build is only asserts found false while compiling (S18c): a test
+# decided before it ran, which caught the fault as a test failing does
+fn falseAsserts(said String&) Bool {
+    found := false
+    for line in said.Split("\n") {
+        if not line.Contains(": error["): continue
+        if not line.Contains(": error[S18c]"): return false
+        found = true
+    }
+    return found
+}
+
+# how many faults have been run (the progress shown)
+Ran mut I64 = 0
+
+# one of the workers: faults taken from the queue until it is empty, each written to this worker's own file
+fn planter(queue mut chan.Chan<I64>&, j job&, w I64, fates mut Array<I32>&) {
+    plant := $j.Work + "/w" + $w
+    for k in queue {
+        fates[k] = j.fate(k, plant)
+        spin.Retitle($j.File + ": " + $(Ran.AtomicAdd(1) + 1) + " of " + $j.All.Len() + " faults run")
+    }
+}
+
+fn say(text String&) { spin.Say(io.Stdout, text) }
+
+# where a fault is, and the line it is in: "FILE:LINE:COLUMN  'x' made 'y'" and the line below it
+fn (j job&) where(src source.Source&, f Fault&) String {
+    line, col := src.LineCol(I32(f.Start))
+    from := I64(src.LineStart(line))
+    end := from + (try j.Text[from:].Find("\n") catch default j.Text.Len() - from)
+    return $j.File + ":" + $line + ":" + $col + "  " + f.What + "\n      " + $j.Text[from:end].Trim() + "\n"
+}
+
+# "31 of 40 faults caught (77%)"
+fn Score(caught I64, survived I64) String {
+    total := caught + survived
+    if total == 0: return "no fault could be planted"
+    return $caught + " of " + $total + " faults caught (" + $(100 * caught / total) + "%)"
+}
+
+# one file under -mutate: 0 once its faults were run (however many survived), 1 where the file cannot be read, does
+# not parse, or its tests do not pass as it is, 2 where -since names no commit
+fn oneFile(c build.Config&, exe String&, opts Array<String&>&, path String&, filters Array<String&>&, since String&
+    work String&, workers I64) I32 {
+    c.TestHeader(path)
+    text :~ try os.ReadFile(path) catch os.Error {
+        say($path + ": cannot be read\n")
+        return 1
+    }
+    real :~ try os.RealPath(path) catch default $path
+    all := try Faults(path, text, c.Color) catch Unparsed { return 1 }
+    src := source.Source(path, text)
+    if since != "" {
+        ls := try Changed(real, since) catch NoCommit {
+            say($path + ": -since " + $since + " names no commit of the repository the file is in\n")
+            return 2
+        }
+        kept := Vec<Fault>()
+        for f in all {
+            if within(ls, I64(src.Line(I32(f.Start)))): kept.Push(f)
+        }
+        all = kept
+    }
+    j := job(exe, opts, path, real, filters, text, all, work)
+    spin.Begin($path + ": its tests as it is")
+    first := try j.test("") catch os.Error {
+        spin.End()
+        say($path + ": the compiler cannot be run\n")
+        return 1
+    }
+    if first.Status != 0 {
+        spin.End()
+        say($first.Stdout + $first.Stderr + $path + ": its tests do not pass as it is - no fault was planted\n")
+        return 1
+    }
+    if all.Len() == 0 {
+        spin.End()
+        say($path + ": " + ("no line changed since " + $since + " holds code a fault can be planted in" if since != "" else "no code a fault can be planted in") + "\n")
+        return 0
+    }
+    # the file with a line added, which is built anew as a fault's is: how long a fault's build and tests take
+    began := time.Now()
+    plain := $work + "/w0"
+    try os.WriteFile(plain, $text + "\n") catch os.Error { }
+    j.LimitMs = 600000
+    try j.test(plain) catch os.Error { }
+    j.LimitMs = 1000 + 5 * (time.Now() - began) / 1000000
+    fates mut Array<I32>& = Array<I32>(all.Len())
+    queue mut chan.Chan<I64>& = chan.Chan<I64>(all.Len())
+    for k in range all.Len() { try chan.Send(queue, k) catch chan.Error { unreachable } }
+    Ran = 0
+    join {
+        for w in range (workers if workers < all.Len() else all.Len()): spawn planter(queue, j, w, fates)
+        chan.Close(queue)
+    }
+    spin.End()
+    caught, survived, slow, unbuilt I64 = 0, 0, 0, 0
+    out := StringBuilder()
+    for k in range all.Len() {
+        if fates[k] == Survived {
+            survived++
+            out.Push($"survived  " + j.where(src, all[k]))
+        }
+        if fates[k] == Caught or fates[k] == Slow: caught++
+        if fates[k] == Slow: slow++
+        if fates[k] == Unbuilt: unbuilt++
+    }
+    out.Push($path + ": " + Score(caught, survived))
+    if slow > 0: out.Push($", " + $slow + " by the tests not ending in time")
+    if unbuilt > 0: out.Push($"; " + $unbuilt + " more did not build and count as none")
+    out.Push("\n")
+    say(out.ToString())
+    return 0
+}
+
+# test -mutate FILE... (B26): each file's faults planted one at a time and its tests run on each, the survivors listed
+# and the share caught said; passed is the command line's options, of which -mutate and -since are not handed on
+fn Mode(c build.Config&, exe String&, passed Array<String&>&, files Array<String&>&, filters Array<String&>&
+    since String&) I32 {
+    spin.End()
+    work :~ try os.MkTemp(prefix = "olang-mutate-") catch os.Error {
+        say("olang: a scratch directory cannot be made\n")
+        return 2
+    }
+    defer { try os.RemoveAll(work) catch os.Error { } }
+    opts Vec<String&>
+    skip := false
+    for o in passed {
+        if skip or o == "-mutate" or o == "-since" {
+            skip = o == "-since"
+            continue
+        }
+        opts.Push(o)
+    }
+    status I32 = 0
+    for f in files {
+        s := oneFile(c, exe, opts.ToArray(), f, filters, since, work, c.Width())
+        if s > status: status = s
+    }
+    return status
+}
+
+test Faults "found in the code, never in a comment, a text, an assert or a test" {
+    src := "fn f(a I64, b I64) Bool {\n    # a < b in a comment\n    say(\"a < b\")\n    assert a != b\n    if ready(): return a < b and not done\n    return false\n}\ntest \"t\" {\n    assert 1 < 2\n}\n"
+    path := try os.MkTemp(prefix = "olang-mutate-") + "/m.olang"
+    try os.WriteFile(path, src)
+    fs := try Faults(path, src) catch Unparsed { unreachable }
+    whats := StringBuilder()
+    for x in fs: whats.Push(x.What + "; ")
+    assert whats.ToString() == "statement left out; condition negated; '<' made '<='; '<' made '>='; 'and' made 'or'; 'not' left out; 'false' made 'true'; "
+    assert fs[2].In(src).Contains("return a <= b and not done") and fs[1].In(src).Contains("if not (ready()): return")
+    assert fs[5].In(src).Contains("a < b and done\n")
+}
+
+test Lines.Hunk "the lines a hunk gives the file as it is now" {
+    a := Lines.Hunk("@@ -12,3 +14,2 @@ fn f() {")
+    assert a.Lo == 14 and a.Hi == 15
+    b := Lines.Hunk("@@ -7 +7 @@")
+    assert b.Lo == 7 and b.Hi == 7
+    c := Lines.Hunk("@@ -7,2 +6,0 @@")
+    assert c.Lo > c.Hi
+    assert within([Lines(3, 5), a].ToVec(), 15) and not within([Lines(3, 5), a].ToVec(), 6)
+    assert falseAsserts("m.olang:2:3: error[S18c]: this assertion is false\n") and not falseAsserts("m.olang: semantic errors\n")
+    assert not falseAsserts("m.olang:2:3: error[S18c]: this assertion is false\nm.olang:4:1: error[T1]: no\n")
+    assert Score(3, 1) == "3 of 4 faults caught (75%)" and Score(0, 0) == "no fault could be planted"
+}
