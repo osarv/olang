@@ -923,11 +923,69 @@ fn (c mut Config&) Link(objs Vec<String&>&, bin String&, dyncall Bool, links Vec
     # B3m: ThinLTO's back ends side by side as many as compiles run at once, not one per core - left out of the hash,
     # which says what is linked, not how fast
     if c.Thin: args.Push($"-flto-jobs=" + $c.width())
-    out := try os.Output.Exec(...args.ToArray(), capture = false) catch os.Error { error Failed.Reported }
-    if out.Status != 0: error Failed.Reported
+    if c.mergesBeforeLink(): try c.linkMerged(args, objs, bin)
+    else {
+        out := try os.Output.Exec(...args.ToArray(), capture = false) catch os.Error { error Failed.Reported }
+        if out.Status != 0: error Failed.Reported
+    }
     c.Linked++
     info := try os.FileInfo.Stat(bin) catch os.Error { return }
     try os.WriteFile(stamp, $h + " " + $info.Size + " " + $info.ModTime + "\n") catch os.Error { }
+}
+
+# B12f: whether the link is done in three steps (linkMerged): an optimized, full-LTO build for Windows. lld's COFF
+# linker (LLVM 18 to 20) optimizes the merged program without the SLP vectorizer, which the ELF linkers run and no
+# option of it turns on - and the objects' own compiles leave vectorizing to the link (B2d) - so a kernel written as
+# unrolled steps stayed scalar there (oann's gemm micro-kernel, 2026-11-28: 8.5 GFLOPS a thread against 125)
+fn (c Config&) mergesBeforeLink() Bool { return c.Target.Os == "windows" and c.vectorizesAtLink() and not c.Library }
+
+# B12f: the link of args (objs their objects, bin their output) for Windows in three steps: lld merges the program's
+# bitcode objects into one module, knowing from the whole link what must stay visible (bin.lto.bc); clang compiles
+# that at -O3, vectorizers included (bin.lto.o); and the link is run again with that object in the bitcode objects'
+# place
+fn (c mut Config&) linkMerged(args Vec<String&>&, objs Vec<String&>&, bin String&) ? Failed {
+    merged := $bin + ".lto.bc"
+    obj := $bin + ".lto.o"
+    bitcode Vec<String&>
+    for o in objs {
+        if isBitcode(o): bitcode.Push(o)
+    }
+    emit Vec<String&>
+    for a in args: emit.Push(merged if a == bin else a)
+    emit.Push("-Wl,--Xlink=-lldemit:llvm")
+    try runLink(emit)
+    cc Vec<String&>
+    cc.Push(c.Clang)
+    for f in c.DataFlags(): cc.Push(f)
+    for f in Array<String&>["-c", "-x", "ir", merged, "-o", obj]: cc.Push(f)
+    try runLink(cc)
+    final Vec<String&>
+    placed := false
+    for a in args {
+        if a not in bitcode {
+            final.Push(a)
+            continue
+        }
+        if not placed: final.Push(obj)
+        placed = true
+    }
+    try runLink(final)
+    try os.Remove(merged) catch os.Error { }
+    try os.Remove(obj) catch os.Error { }
+}
+
+# a command of the link run to its end, its messages shown
+fn runLink(args Vec<String&>&) ? Failed {
+    out := try os.Output.Exec(...args.ToArray(), capture = false) catch os.Error { error Failed.Reported }
+    if out.Status != 0: error Failed.Reported
+}
+
+# whether the file at path is LLVM bitcode (an object compiled for link-time optimization) and not machine code
+fn isBitcode(path String&) Bool {
+    f := try os.File.Open(path) catch os.Error { return false }
+    buf := Array<U8>(4)
+    got := try f.Read(buf) catch io.Error { return false }
+    return got.Len() == 4 and got[0] == 'B' and got[1] == 'C' and got[2] == 0xC0 and got[3] == 0xDE
 }
 
 # the C libraries every link names after the program's own: libm, libpthread and libdl (os.RunOnStack asks glibc's
@@ -2089,4 +2147,14 @@ test "the caches' caps: a cache's files held by stem, a directory whole, what wa
     assert try os.ReadDir(dir) == Array<String&>["a1.c", "a1.olang", "c3.c"]
     Touch($dir + "/c3.c")
     assert (try os.FileInfo.Stat($dir + "/c3.c")).ModTime > Recent()
+}
+
+test "a bitcode object is told from machine code by its first bytes" {
+    dir :~ try os.MkTemp("", "olang-bitcode-")
+    try os.WriteFile($dir + "/a.o", "BC\xC0\xDE rest") catch os.Error { }
+    try os.WriteFile($dir + "/b.o", "\x7FELF rest") catch os.Error { }
+    try os.WriteFile($dir + "/c.o", "BC") catch os.Error { }
+    assert isBitcode($dir + "/a.o") and not isBitcode($dir + "/b.o") and not isBitcode($dir + "/c.o")
+    assert not isBitcode($dir + "/none.o")
+    try os.RemoveAll(dir) catch os.Error { }
 }
