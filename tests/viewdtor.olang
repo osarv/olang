@@ -1,0 +1,53 @@
+# R1, O15: a value a builder makes holding a reference to an outer value (Res.Make(d, n)), then viewed by a local
+# struct holding a reference to it (View(r, 0)), is lent to the view as the storage it is - its own block's - so its
+# destructor runs as that block closes, not when the outer value's scope does (oann's GPU buffers stayed allocated until
+# the device went). A view kept past the block lifts the storage where the view goes
+
+ViewFreed mut I64 = 0
+
+type ViewDev unique struct() {
+    h U64 = 7
+}
+
+type ViewRes unique struct(dev ViewDev&, n I64) {
+    dev
+    N I64 = n
+} destruct {
+    ViewFreed++
+}
+
+fn ViewRes.Make(dev mut ViewDev&, n I64) ViewRes { return ViewRes(dev, n) }
+
+type ViewOf struct(Data ViewRes&, Off I64) {
+    Data
+    Off
+}
+
+fn viewedOnce(d mut ViewDev&) I64 {
+    r := ViewRes.Make(d, 1)
+    v := ViewOf(r, 0)
+    return v.Data.N + v.Off
+}
+
+fn ViewOf.Kept(d mut ViewDev&, n I64) ViewOf {
+    r := ViewRes.Make(d, n)
+    return ViewOf(r, 1)
+}
+
+test "a viewed value made by a builder taking an outer reference is destructed as its own function returns" {
+    d := ViewDev()
+    before := ViewFreed
+    for _ in range 3: assert viewedOnce(d) == 1
+    assert ViewFreed == before + 3
+    assert d.h == 7
+}
+
+test "a view handed back keeps what it views until the view goes" {
+    d := ViewDev()
+    before := ViewFreed
+    for i in range 3 {
+        w := ViewOf.Kept(d, i)
+        assert w.Data.N == i and w.Off == 1
+    }
+    assert ViewFreed == before + 3
+}

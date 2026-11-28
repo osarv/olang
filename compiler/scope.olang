@@ -2797,7 +2797,11 @@ fn (s mut Scoper&) bndFieldRecs(p typed.Lvalue&, out mut Vec<fnRec>&) {
 # whether x is a constructor's call (its arguments judged at a boundary as before)
 fn (s mut Scoper&) ctorCall(x typed.Expr&) Bool {
     c :~ typed.Call.Of(s.unAway(x))
-    if c is null: return false
+    return c is not null and s.isCtorCall(c)
+}
+
+# whether call c is of a constructor: its instance, its result, is the one place it keeps what it is given
+fn (s mut Scoper&) isCtorCall(c typed.Call&) Bool {
     b := s.bodyOf(c.Target)
     return b >= 0 and s.Bodies[b].Of == typed.BodyOf.Ctor
 }
@@ -12091,6 +12095,13 @@ fn (s mut Scoper&) argExisting(c typed.Call&, i I64, owner Array<I64>&, beta Arr
         # declaration runs); refused only where nothing can be lifted
         # (where they live is one of several, O12: found at run time from the one reference the value holds, O29)
         if (rf.Runs() or s.argRoot(a) is not null) and not s.calleeKeepsSelf(c, i): return Val.existing(rf)
+        # (one a constructor keeps in its instance but neither stores into nor builds through - a view of it, as
+        # View(r, 0) - is lent as the storage it is too: the instance is the caller's value, which lives no longer than
+        # that storage, its references outliving it, and a keep of the instance past it is a relation failing at the
+        # call, which lifts the storage there (liftAtCall). Lent where its references live, its storage went there with
+        # them: a value with a destructor ran it only as that scope closed. A function keeping it elsewhere - stored into
+        # another argument, captured - is judged as before)
+        if s.isCtorCall(c) and not s.calleeStoresArg(c, i) and not s.calleePutsArg(c, i): return v
         if rf.Runs() and s.liftSplit(a, rf): return Val.existing(rf)
         s.wantPromotion(a)
         if s.report: s.splitRefused(a)

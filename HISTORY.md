@@ -44477,3 +44477,20 @@ scalar `fptosi bfloat`, every F16 conversion and every integer-to-BF16 one selec
 bits (`widenBF16`, as O45 does for every BF16 widening) and converts the F32: the same value, since the widening is
 exact. tests/bf16int.olang converts BF16 to I16, I32, I64 and U8 across a vectorized loop (it stopped the old
 compiler's build on such a machine).
+
+## 2026-11-28: a view's value is lent as the storage it is (O17, R1, O15; mine)
+
+Found by oann's Vulkan work (repro/destructlate.olang there): `r := Buf<S>.Make(dev, n)` then `m := DMat(r, ...)`,
+a struct holding a reference to r, kept every temporary buffer until the Device went - bench/vktune ran two GPUs out of
+memory. r is a split value: its references (to dev) live in the device's scope, its storage in its block. The View's
+constructor keeps its argument itself (UseOwn), so argExisting lent r where its references live and R1's liftSplit
+moved r's storage there too, its destructor registered with the device's scope. Built with the type's constructor
+directly, or moved to another local first, r stayed in its block, which is what showed the lift was a choice, not a
+need. A constructor keeps what it is given only in its instance, the caller's value; one that neither stores into its
+argument nor builds through it (Stores, Puts) has no use for where the references live: r is now lent as the storage it
+is, and a keep past it (the view handed back, stored
+outward) is a relation failing at the call, whose liftAtCall lifts the storage where it is kept - as before for those.
+Any function keeping it was tried first: o17ccapture, o17nullstore (a by-value parameter's storage stored into another
+argument, captured) then compiled and o17templambdacond was refused, so the rule stays a constructor's.
+tests/viewdtor.olang counts the destructor at each return, and a view handed back still reads what it views.
+

@@ -967,7 +967,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   (references living elsewhere than its storage) is lent where its references live, so a callee builds where they hang;
   its own storage is lifted there too only where the callee keeps it (stores, captures, returns or hands on the
   parameter itself), a local built there each time its declaration runs - not "always lift", which would hold a copy's
-  header per call. Held by reference or sliced (O17a), its local is lifted likewise. Refused only where nothing can be
+  header per call. A constructor keeping the storage in its instance but neither storing into it nor building through
+  it (a view, `View(r, 0)`) is lent the storage as it is (2026-11-28): a keep past it fails a relation at the call, which lifts it;
+  lifted where its references live, a destructor-bearing local ran its destructor only as the outer scope closed.
+  Held by reference or sliced (O17a), its local is lifted likewise. Refused only where nothing can be
   placed (a by-value parameter's storage); where its references live is one of several, O29 finds it.
   A local declared from a constructor's instance holding a parameter (`w := W(v)`) is no keep by itself (O17c,
   2026-11-18): what is done with it is done with the parameter's region; a lambda capturing it keeps the region (review3).

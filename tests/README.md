@@ -49,6 +49,8 @@ test block cannot make (programs that must fail to compile, whole builds) live i
   its UTF-8 bytes (`Len` counts them), equality, joins and `$`; baked and decided while compiling beside the run time.
 - `paramdefaults.olang` - defaults reading the parameters before them (D8a): the receiver, a reference, a
   constructor's, each argument evaluated once and in order, decided while compiling too.
+- `viewdtor.olang` - a value made by a builder holding an outer reference, viewed by a local struct, destructed as its
+  function returns; a view handed back keeps it (O17, R1, O15).
 - `bf16int.olang` - BF16 values converted to integers across a loop the vectorizer widens, truncated toward zero
   (T4; the BF16 is widened to an F32 first, which LLVM 18 needs on AVX512-FP16 without AVX512-BF16).
 - `intwidths.olang` - integers of every width, I1 to I128 and U1 to U128 (T4a), at compile time and at run time.
