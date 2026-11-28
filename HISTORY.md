@@ -44446,3 +44446,23 @@ before. Found along the way: `explain -ir` on the Windows target linked with the
 objects - listLink now links as Link does (lld, -static) and asks lld's COFF linker for its save-temps
 (`--Xlink=-lldsavetemps`; the MinGW driver takes no -plugin-opt, so no remarks there). `-asm` there is still refused:
 lld writes its assembly, but the listing does not yet find a function in COFF's.
+
+## 2026-11-28: Windows programs were linked without the SLP vectorizer (B12f, B2d; mine)
+
+A Windows build of oann's matrix product ran at 8.5 GFLOPS a thread on a CPU where the Linux build of the same source
+gives about 100 (Renskrift's transcription four times slower under Wine than native; found on the user's PC). The
+target's constants and attributes were right (`TargetVectorBits`, `prefer-vector-width`); the IR going into the link was
+the same for both targets. The difference is the link: an object's own compile leaves vectorizing to the link (B2d), and
+lld's COFF linker builds its link-time pipeline with the SLP vectorizer off (lld/COFF/LTO.cpp sets no
+`PTO.SLPVectorization` in LLVM 18, 19 and 20; fixed on LLVM's main), where gold's plugin and lld's ELF linker turn it on
+from -O2. gemm's micro-kernel is rows written out by `comptime for`, which only SLP turns into vector code, so its 96
+multiply-adds a step stayed scalar. No option of lld's reaches it (`--lto-O3`, `-mllvm -vectorize-slp`, tried).
+
+So an optimized full-LTO link for Windows is now three steps (build.linkMerged): the link as before but asking lld for
+the merged module (`--Xlink=-lldemit:llvm` - internalized by what the whole link resolves, so nothing a native object
+or the C runtime needs is lost); clang compiling that module at -O3 without -flto, the ordinary pipeline, vectorizers
+included, after its inliner; and the link again with that one object in place of the bitcode objects (told apart from
+the native ones - Locations objects, libraries - by their first four bytes). wer for x86-64-v3: 477 packed
+multiply-adds against 235 before (Linux 432). Measured on the user's PC by a hand-made link of the same steps: 8.5 ->
+125 GFLOPS on one thread, 28 -> 470 on four. Left: a ThinLTO link for Windows has the same pipeline and is not
+changed; `explain -ir` there shows lld's own optimization, not the three steps'.

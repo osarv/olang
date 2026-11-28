@@ -1432,6 +1432,10 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   policy (roots, dates, the name), a `ca` file its only anchors, pins by std/sha256; Read and Write take a `mut Conn&`
   on every target. SSPI's structures are bytes holding arrays' addresses (memcpy hands its first argument back).
   examples/windows: Win32 window, message loop, WGL, clipboard. docs/windows.md.
+  An optimized full-LTO link there is three steps (2026-11-28, build.linkMerged): lld merges the bitcode objects
+  (`--Xlink=-lldemit:llvm`), clang compiles the merged module at -O3, and the link runs again with that object - lld's
+  COFF linker (LLVM 18 to 20) optimizes without the SLP vectorizer and no option turns it on. ThinLTO links for Windows
+  and `explain -ir` there still show lld's own.
 - **Conditional compilation is a top-level `if` (B9-B10c, the user's design).** `-define Name=value` build constants;
   an immutable top-level global is a default `-define` replaces (B10c); a local `if` the build decides is conditional
   compilation too (S8b); a constant condition not depending on the build is a dead-branch error (S8a). **A comparison
