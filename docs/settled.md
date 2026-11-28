@@ -337,6 +337,8 @@ moved 2026-10-17"). "(the user's call)" marks a decision the user made; the rest
   can write it; a mutable global that may be that storage makes only a call that may store into a global (its
   whole-program fact, `D9h NAME`), a destructor run or an atomic store unquiet - no longer every call (2026-11-24,
   wt-fieldborrow: an 8 MB array copied per method call when the program had a `mut` global of the type).
+  A view call's copy inside a temporary (`f(l.Ops[0].V)`, the element's copy that `At` hands back) is made where the
+  scope pass built the temporary, never where the callee's result would live - the viewed collection's (2026-11-28).
   So too a conditional each of whose arms would be held alone (`src := a if c else b`, of locals or reference
   parameters), and what a body's read-only reference result names where its arguments are held (`a.Bytes()` of a
   reference parameter; lower.heldSrc, heldRefCall) - not copied per loop turn (2026-11-27, wt-condcopy, condviewloop).

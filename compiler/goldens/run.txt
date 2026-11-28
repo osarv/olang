@@ -2789,6 +2789,9 @@
 === run e35bangrun.olang
 | status 0
 | half of 8 is 4
+=== run elemcopyflat.olang
+| status 0
+| flat
 === run enumcomma.olang
 | status 0
 === run errcomma.olang

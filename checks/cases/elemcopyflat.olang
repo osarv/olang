@@ -1,0 +1,63 @@
+# check: run
+# D9h: a temporary read out of a collection given by reference - `Got.Mine(l.Ops[0].V)`, `json.Json.Parse(l.Ops[0].V)`
+# - is the element's copy (Vec.At hands back a view), made where the scope pass built the temporary: its block, or the
+# result scope a value viewing it goes to. It was made where the callee's result would live, the viewed collection's -
+# the region of l's caller, which for main's (or the program's, l a global) never closes: a whole element kept a call,
+# 600 kB here, ~175 MB over the loop (the OAgent Pi core grew by its files' bytes on every merge)
+import "std/os"
+
+# the resident set, in kB (as joinflat reads it)
+fn rssKb() I64 {
+    status :~ try os.ReadFile("/proc/self/status") catch default ""
+    at := try status.Find("VmRSS:") catch default -1
+    if at < 0: return -1
+    line :~ status[at + 6:]
+    end := try line.FindByte('\n') catch default line.Len()
+    return try line[:end].Trim().Split(" ")[0].ParseInt() catch default -1
+}
+
+type Op struct() {
+    K String = ""
+    V String = ""
+}
+
+type Log struct() {
+    Ops Vec<Op> = Vec<Op>()
+}
+
+type Got struct(N I64, T String&) {
+    N
+    T
+}
+
+fn Got.Mine(t String&) Got { return Got(t.Len(), t) }
+
+# the copy viewed by a local of this block
+fn viewed(l Log&) I64 {
+    g :~ Got.Mine(l.Ops[0].V)
+    return g.N
+}
+
+# ... and by the value handed back
+fn Got.Of(l Log&) Got { return Got.Mine(l.Ops[0].V) }
+
+fn main() {
+    l := Log()
+    b := StringBuilder()
+    for _ in range 600000: b.Push("x")
+    o := Op()
+    o.V = b.ToString()
+    l.Ops.Push(o)
+    before := rssKb()
+    n I64 = 0
+    for _ in range 300 {
+        n += viewed(l)
+        g := Got.Of(l)
+        assert g.T.Len() == 600000 and g.T[599999] == 'x'
+        n += g.N
+    }
+    grew := rssKb() - before
+    assert n == 360000000
+    assert grew < 8192, "grew " + $grew + " kB"
+    Println("flat")
+}

@@ -44494,3 +44494,18 @@ Any function keeping it was tried first: o17ccapture, o17nullstore (a by-value p
 argument, captured) then compiled and o17templambdacond was refused, so the rule stays a constructor's.
 tests/viewdtor.olang counts the destructor at each return, and a view handed back still reads what it views.
 
+## 2026-11-28: a temporary's view-call copy is made where the temporary is built (D9h, E16a; mine)
+
+The OAgent Pi core grew by its folders' file bytes on every merge (oagent PR 5, core/HANDOFF.md): reading an op through
+an index into a call that keeps a view of it - `json.Json.Parse(l.Ops[win].V)`, with `l oplog.Log&` - kept a whole Op
+per call. `l.Ops[0].V` is a field of a temporary (Lvalue.Temp) holding `At`'s value; `At` hands back a view of the Vec
+(D9h), so the caller passes the Vec's scope as `At`'s result scope and copies the value where it keeps it. With the
+temporary's value lent onward to a call whose result holds a reference to it, the read was not "read where it stands",
+and viewCopyAt, finding no Built for the At call's own site, copied into that result scope: the region l lives in,
+its caller's (the program's for the core's global log), which never closed. tempLocal now makes a view call's copy
+inside the temporary's value where the scope pass built the temporary (its Built: the block, or the result scope a value
+viewing it is handed back in); a region early freeing made still wins. checks' elemcopyflat (300 calls on a 600 kB
+element, both shapes) grew 345 MB before and stays under 8 MB; oagent's Log.Files at the commit before PR 5 grew 175 MB
+over 300 calls and now 44 kB. A plain `for o in l.Ops` or `o := l.Ops[i]` copied into the loop's or the local's own
+block already, and does.
+

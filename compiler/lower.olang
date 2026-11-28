@@ -594,6 +594,11 @@ type lowering struct(L mut Lowerer&, B typed.Body&, T mut types.Table&, made mut
     taskArgs Bool = false   # whether the arguments lowered next are a task's (bulk review 5, F7)
     taskCopy I64 = -1       # the call whose value a task's by-value argument is: its copy (D9h) made in the join's scope (O8f)
     copySite I64 = -1       # copyStore's view call, its copy (D9h) made in copyHere
+    # D9h: the scope a temporary being lowered is built in (tempLocal): a view call's copy inside its value with no
+    # place of its own (no Built) is made there, never where the callee's result would live - the viewed collection's,
+    # a `Log&` parameter's region kept until its caller's scope closes
+    copyIn mir.ScopeRef = mir.ScopeRef.Frame
+    copyOn Bool = false
     pushedSite I64 = -1     # the call whose value the argument lowered is, pushed onto a Vec that only grows (pushedInto)
     copyHere mir.LocalId = mir.NoLocal
     adoptSite typed.SiteId = typed.SiteId(-1)    # a fresh array promoted (promote): made at the reference's scope
@@ -951,8 +956,20 @@ fn (ln mut lowering&) tempLocal(v typed.Expr&, ty types.TypeId, sp source.Span, 
     # kept - as everything the stand-in builds is - not the frame a return closes)
     away := not ln.planned and ln.viewing
     ln.viewing = false
-    if not kept and not away: return ln.local(ln.val(v), ty, sp)
+    # (a view call's copy inside its value is made where the scope pass built the temporary, not where the callee's
+    # result would live: `Got.Mine(l.Ops[0].V)` held a whole Op a call in the region of l's caller - copyIn)
+    was, wasOn := ln.copyIn, ln.copyOn
+    if ln.siteBuilt(site) {
+        ln.copyIn = ln.scopeRef(ln.plan.Built[i])
+        ln.copyOn = true
+    }
+    if not kept and not away {
+        lv := ln.local(ln.val(v), ty, sp)
+        ln.copyIn, ln.copyOn = was, wasOn
+        return lv
+    }
     x := ln.val(v)
+    ln.copyIn, ln.copyOn = was, wasOn
     l := ln.temp(ty, sp)
     ln.F.Locals[I64(l)].Home = ln.scopeRef(ln.plan.Built[i]) if kept else mir.ScopeRef.Program
     ln.emit(mir.Stmt.Live(sp, l))
@@ -978,6 +995,11 @@ fn (ln mut lowering&) asI64(x mir.Operand, ty types.TypeId, sp source.Span) mir.
 fn (ln mut lowering&) built(site typed.SiteId) mir.ScopeRef {
     if not ln.planned or site < typed.SiteId(0) or I64(site) >= ln.plan.Built.Len(): return mir.ScopeRef.Program
     return ln.scopeRef(ln.plan.Built[I64(site)])
+}
+
+# whether the scope pass placed what is made at site (its Built)
+fn (ln mut lowering&) siteBuilt(site typed.SiteId) Bool {
+    return ln.planned and site >= typed.SiteId(0) and I64(site) < ln.plan.Built.Len() and ln.plan.Built[I64(site)] != typed.Scope.Unset
 }
 
 # whether what is made at site is built in a block of this body, in no region of early freeing's and not adopted
@@ -6569,6 +6591,9 @@ fn (ln mut lowering&) call(c typed.Call&, ty types.TypeId, sp source.Span) mir.O
         } else {
             ln.L.ViewCopies++
             at := ln.viewCopyAt(c.Site, ln.resultOf(fty, scopes))
+            # (the value of a temporary the scope pass placed: copied there - the callee's result scope is the viewed
+            # argument's, `json.Json.Parse(l.Ops[0].V)` kept a whole Op per call in the region of l's caller)
+            if ln.copyOn and not heldRef(at) and not ln.siteBuilt(c.Site): at = ln.copyIn
             # (O8f: a task's by-value argument its callee preserves is held by the task alone, until the wait: its copy
             # in the join's scope - not where the callee's result would live, a frame's or the program's, one a turn
             # for the run - and never in a region a let-go may release (free.taskCopy)
